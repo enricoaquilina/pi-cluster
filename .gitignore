@@ -1,0 +1,8 @@
+# Ansible
+ansible/secrets/
+ansible/logs/
+*.retry
+
+# General
+.env
+*.tmp

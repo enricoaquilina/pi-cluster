@@ -1,0 +1,104 @@
+{
+  "name": "Polybot Scheduled Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 0
+            },
+            {
+              "triggerAtHour": 6
+            },
+            {
+              "triggerAtHour": 12
+            },
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst DATA_DIR = '/polybot-data';\n\nfunction loadJson(name) {\n  try { return JSON.parse(fs.readFileSync(`${DATA_DIR}/${name}`, 'utf8')); }\n  catch { return null; }\n}\n\nfunction fmtUsd(v) { return `$${(v||0).toFixed(2)}`; }\n\nconst ctrl = loadJson('control.json');\nconst positions = loadJson('positions.json') || [];\nconst trades = loadJson('paper_trades.json') || [];\nconst spreadCtrl = loadJson('spread_control.json');\nconst spreadTrades = loadJson('spread_trades.json') || [];\n\nconst openPos = positions.filter(p => !p.resolved);\nconst resolved = positions.filter(p => p.resolved);\n\nlet msg = '\ud83d\udcca **Polybot 6h Report**\\n\\n';\n\nif (ctrl) {\n  msg += `Mode: **${ctrl.mode}** | Budget: ${fmtUsd(ctrl.daily_spent_usd)}/${fmtUsd(ctrl.daily_budget_usd)}\\n`;\n  msg += `Traders: ${(ctrl.enabled_traders||[]).join(', ')}\\n`;\n}\n\nmsg += `Open: ${openPos.length} positions`;\nif (openPos.length) {\n  const unreal = openPos.reduce((s,p) => s + (p.current_price-p.entry_price)*p.size, 0);\n  msg += ` (${fmtUsd(unreal)} unrealised)`;\n}\nmsg += '\\n';\n\nif (resolved.length) {\n  const pnl = resolved.reduce((s,p) => s + (p.pnl||0), 0);\n  const wins = resolved.filter(p => (p.pnl||0) > 0).length;\n  msg += `Resolved: ${resolved.length} (${wins}W/${resolved.length-wins}L) PnL: ${fmtUsd(pnl)}\\n`;\n}\n\nconst now = new Date().toISOString().slice(0,10);\nconst todayTrades = trades.filter(t => (t.detected_at||'').startsWith(now));\nmsg += `Today: ${todayTrades.filter(t=>t.executed).length} executed, ${todayTrades.filter(t=>!t.executed).length} rejected\\n`;\n\nif (spreadCtrl) {\n  msg += `\\nSpreadbot: ${spreadCtrl.mode} | ${fmtUsd(spreadCtrl.daily_spent_usd||0)}/${fmtUsd(spreadCtrl.daily_budget_usd||0)}`;\n  if (spreadTrades.length) {\n    const spnl = spreadTrades.reduce((s,t) => s + (t.pnl||0), 0);\n    msg += ` | PnL: ${fmtUsd(spnl)}`;\n  }\n  msg += '\\n';\n}\n\nreturn [{ json: { message: msg } }];"
+      },
+      "id": "build-report",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:18789/api/sessions/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OPENCLAW_GATEWAY_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.message }) }}"
+      },
+      "id": "send-to-maxwell",
+      "name": "Send via Maxwell",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        690,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every 6h": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Send via Maxwell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Malta"
+  }
+}

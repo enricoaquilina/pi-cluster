@@ -12,4 +12,8 @@ RUN python3 -m ensurepip 2>/dev/null || \
       requests && \
     rm -rf /root/.cache/pip /tmp/*
 
+# Fix stale skill snapshots on startup
+COPY fix-snapshots.sh /usr/local/bin/fix-snapshots.sh
+RUN chmod +x /usr/local/bin/fix-snapshots.sh
+
 USER node

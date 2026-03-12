@@ -1,0 +1,96 @@
+{
+  "name": "Polybot Circuit Breaker Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-5min",
+      "name": "Every 5 min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\n\nconst DATA_DIR = '/polybot-data';\n\nfunction loadJson(name) {\n  try { return JSON.parse(fs.readFileSync(`${DATA_DIR}/${name}`, 'utf8')); }\n  catch { return null; }\n}\n\nfunction fmtUsd(v) { return `$${(v||0).toFixed(2)}`; }\n\nconst ctrl = loadJson('control.json');\nif (!ctrl) return [];\n\nconst alerts = [];\n\n// Budget threshold (95%)\nconst budgetPct = ctrl.daily_spent_usd / ctrl.daily_budget_usd;\nif (budgetPct >= 0.95) {\n  alerts.push(`\ud83d\udea8 **Budget nearly exhausted**: ${fmtUsd(ctrl.daily_spent_usd)} / ${fmtUsd(ctrl.daily_budget_usd)} (${(budgetPct*100).toFixed(0)}%)`);\n}\n\n// Stop loss proximity (within 10%)\nif (ctrl.initial_balance_usd) {\n  const currentBalance = ctrl.initial_balance_usd - ctrl.daily_spent_usd;\n  const stopLossDistance = currentBalance - ctrl.stop_loss_balance_usd;\n  const stopLossPct = stopLossDistance / currentBalance;\n  if (stopLossPct <= 0.10 && stopLossPct > 0) {\n    alerts.push(`\u26a0\ufe0f **Near stop-loss**: Balance ~${fmtUsd(currentBalance)}, stop-loss at ${fmtUsd(ctrl.stop_loss_balance_usd)}`);\n  } else if (stopLossPct <= 0) {\n    alerts.push(`\ud83d\uded1 **STOP-LOSS HIT**: Balance ~${fmtUsd(currentBalance)} below ${fmtUsd(ctrl.stop_loss_balance_usd)}`);\n  }\n}\n\n// No traders enabled\nif (!ctrl.enabled_traders || ctrl.enabled_traders.length === 0) {\n  alerts.push('\u23f8\ufe0f **No traders enabled** \u2014 bot is effectively paused.');\n}\n\n// Spreadbot check\nconst spreadCtrl = loadJson('spread_control.json');\nif (spreadCtrl) {\n  const spreadBudgetPct = (spreadCtrl.daily_spent_usd||0) / (spreadCtrl.daily_budget_usd||1);\n  if (spreadBudgetPct >= 0.95) {\n    alerts.push(`\ud83d\udea8 **Spreadbot budget exhausted**: ${fmtUsd(spreadCtrl.daily_spent_usd)} / ${fmtUsd(spreadCtrl.daily_budget_usd)}`);\n  }\n}\n\nif (alerts.length === 0) return [];\n\nconst message = '\ud83d\udd14 **Circuit Breaker Alert**\\n\\n' + alerts.join('\\n');\nreturn [{ json: { message, alertCount: alerts.length } }];"
+      },
+      "id": "check-thresholds",
+      "name": "Check Thresholds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        470,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:18789/api/sessions/send",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env.OPENCLAW_GATEWAY_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.message }) }}"
+      },
+      "id": "alert-maxwell",
+      "name": "Alert via Maxwell",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        690,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every 5 min": {
+      "main": [
+        [
+          {
+            "node": "Check Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Alert via Maxwell",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Malta"
+  }
+}
