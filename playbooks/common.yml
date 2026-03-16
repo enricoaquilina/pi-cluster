@@ -1,0 +1,26 @@
+---
+- name: Common baseline configuration
+  hosts: cluster
+  become: true
+  tasks:
+    - name: Set timezone to Europe/Malta
+      community.general.timezone:
+        name: Europe/Malta
+
+    - name: Ensure common packages are installed
+      apt:
+        name:
+          - vim
+          - htop
+          - curl
+          - dnsutils
+          - git
+          - rsync
+        state: present
+        cache_valid_time: 3600
+
+    - name: Ensure NTP is enabled
+      systemd:
+        name: systemd-timesyncd
+        enabled: true
+        state: started
