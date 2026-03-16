@@ -1,0 +1,10 @@
+[Interface]
+PrivateKey = {{ keepsolid_private_key }}
+Address = {{ keepsolid_client_ip }}/32
+Table = off
+
+[Peer]
+PublicKey = {{ keepsolid_server_pubkey }}
+Endpoint = {{ keepsolid_endpoint }}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25

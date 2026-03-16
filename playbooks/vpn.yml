@@ -1,0 +1,70 @@
+---
+- name: Deploy KeepSolid WireGuard VPN with Discord split-tunneling
+  hosts: vpn
+  become: true
+  vars_files:
+    - ../secrets/vpn.yml
+
+  tasks:
+    - name: Install wireguard-tools
+      apt:
+        name: wireguard-tools
+        state: present
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Deploy WireGuard config
+      template:
+        src: ../templates/keepsolid.conf.j2
+        dest: /etc/wireguard/keepsolid.conf
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Restart WireGuard
+
+    - name: Deploy split-tunnel routing script
+      copy:
+        src: ../files/discord-vpn-routes.sh
+        dest: /usr/local/bin/discord-vpn-routes.sh
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Restart discord-vpn-routes
+
+    - name: Deploy split-tunnel systemd service
+      copy:
+        src: ../files/discord-vpn-routes.service
+        dest: /etc/systemd/system/discord-vpn-routes.service
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Reload systemd
+        - Restart discord-vpn-routes
+
+    - name: Enable and start WireGuard tunnel
+      systemd:
+        name: wg-quick@keepsolid
+        enabled: yes
+        state: started
+
+    - name: Enable and start discord-vpn-routes
+      systemd:
+        name: discord-vpn-routes
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Reload systemd
+      systemd:
+        daemon_reload: yes
+
+    - name: Restart WireGuard
+      systemd:
+        name: wg-quick@keepsolid
+        state: restarted
+
+    - name: Restart discord-vpn-routes
+      systemd:
+        name: discord-vpn-routes
+        state: restarted

@@ -1,0 +1,17 @@
+---
+- name: Update all nodes
+  hosts: cluster
+  become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  tasks:
+    - name: Update apt cache and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+        dpkg_options: "force-confold,force-confdef"
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+        NEEDRESTART_MODE: a
+      timeout: 600

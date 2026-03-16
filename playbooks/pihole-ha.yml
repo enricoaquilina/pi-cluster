@@ -1,0 +1,76 @@
+---
+- name: Configure Pi-hole HA (keepalived + Gravity Sync + whitelists)
+  hosts: pihole
+  become: true
+  vars_files:
+    - ../vars/pihole.yml
+    - ../secrets/pihole.yml
+
+  tasks:
+    - name: Deploy keepalived configuration
+      template:
+        src: ../templates/keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: restart keepalived
+
+    - name: Deploy Pi-hole health check script
+      template:
+        src: ../templates/check-pihole.sh.j2
+        dest: /usr/local/bin/check-pihole.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy keepalived notify script
+      template:
+        src: ../templates/keepalived-notify.sh.j2
+        dest: /usr/local/bin/keepalived-notify.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure keepalived is enabled and running
+      systemd:
+        name: keepalived
+        enabled: true
+        state: started
+
+    - name: Ensure Gravity Sync config directory exists
+      file:
+        path: /etc/gravity-sync
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Deploy Gravity Sync configuration
+      template:
+        src: ../templates/gravity-sync.conf.j2
+        dest: /etc/gravity-sync/gravity-sync.conf
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Ensure Gravity Sync timer is enabled
+      systemd:
+        name: gravity-sync.timer
+        enabled: true
+        state: started
+
+    - name: Whitelist work domains in Pi-hole
+      command: "pihole allow {{ item }}"
+      loop: "{{ pihole_whitelist }}"
+      register: whitelist_result
+      changed_when: "'Added' in whitelist_result.stdout"
+      failed_when:
+        - whitelist_result.rc != 0
+        - "'already in the specified list' not in whitelist_result.stdout"
+
+  handlers:
+    - name: restart keepalived
+      systemd:
+        name: keepalived
+        state: restarted

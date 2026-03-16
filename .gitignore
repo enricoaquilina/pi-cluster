@@ -6,3 +6,4 @@ ansible/logs/
 # General
 .env
 *.tmp
+.claude/
