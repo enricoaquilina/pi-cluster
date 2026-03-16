@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory logs docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common
 
 ping:
 	ansible all -m ping
@@ -35,3 +35,37 @@ pihole-whitelist:
 
 pihole-status:
 	ansible pihole -a "pihole status" --become
+
+pihole-update:
+	ansible pihole -a "pihole -up" --become
+
+common:
+	ansible-playbook playbooks/common.yml
+
+doctor:
+	@echo "=== Connectivity ==="
+	@ansible all -m ping
+	@echo ""
+	@echo "=== Uptime ==="
+	@ansible all -a "uptime"
+	@echo ""
+	@echo "=== Pi-hole Status ==="
+	@ansible pihole -a "pihole status" --become
+	@echo ""
+	@echo "=== Keepalived VIP ==="
+	@ansible pihole -m shell -a "ip addr show eth0 | grep 192.168.0.53 && echo 'VIP: ACTIVE' || echo 'VIP: not on this node'" --become
+	@echo ""
+	@echo "=== DNS Resolution via VIP ==="
+	@ansible pihole -m shell -a "dig @192.168.0.53 +short +time=3 google.com && echo 'DNS: OK' || echo 'DNS: FAILED'" --become
+	@echo ""
+	@echo "=== DNS Resolution per node ==="
+	@ansible pihole -m shell -a "dig @127.0.0.1 +short +time=3 google.com && echo 'Local DNS: OK' || echo 'Local DNS: FAILED'" --become
+	@echo ""
+	@echo "=== Gravity Sync Timers ==="
+	@ansible pihole -m shell -a "systemctl list-timers gravity-sync.timer --no-pager" --become
+	@echo ""
+	@echo "=== Disk Usage ==="
+	@ansible all -a "df -h /"
+	@echo ""
+	@echo "=== Memory ==="
+	@ansible all -a "free -h"
