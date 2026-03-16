@@ -1,0 +1,12 @@
+---
+# Pi-hole HA configuration
+
+pihole_vip: "192.168.0.53"
+
+# Work domains to whitelist (WIS affiliate platforms)
+pihole_whitelist:
+  - affiliates.netrefer.com
+  - myaccount.22betpartners.com
+  - 22betpartners.affiliates.netrefer.com
+
+gravity_sync_remote_user: enrico

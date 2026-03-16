@@ -1,0 +1,9 @@
+#!/bin/bash
+# Pi-hole health check for keepalived
+# Managed by Ansible - do not edit manually
+
+if dig @127.0.0.1 +short +time=2 +tries=1 google.com > /dev/null 2>&1; then
+    exit 0
+else
+    exit 1
+fi

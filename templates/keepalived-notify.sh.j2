@@ -1,0 +1,8 @@
+#!/bin/bash
+# Keepalived state change notification
+# Managed by Ansible - do not edit manually
+
+STATE=$1
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[$TIMESTAMP] Keepalived state changed to: $STATE" >> /var/log/keepalived-pihole.log
+logger -t keepalived "Pi-hole VIP state: $STATE"

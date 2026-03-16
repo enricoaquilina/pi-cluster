@@ -1,0 +1,13 @@
+[Unit]
+Description=Discord split-tunnel VPN routes (KeepSolid)
+After=wg-quick@keepsolid.service
+Requires=wg-quick@keepsolid.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/discord-vpn-routes.sh start
+ExecStop=/usr/local/bin/discord-vpn-routes.sh stop
+
+[Install]
+WantedBy=multi-user.target
