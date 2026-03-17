@@ -1,0 +1,58 @@
+---
+- name: Pi-hole log maintenance
+  hosts: pihole
+  become: true
+  tasks:
+    - name: Set FTL max database days to 7
+      lineinfile:
+        path: /etc/pihole/pihole-FTL.conf
+        regexp: '^MAXDBDAYS='
+        line: 'MAXDBDAYS=7'
+        create: true
+      notify: restart pihole-ftl
+
+    - name: Set FTL log level to warn only
+      lineinfile:
+        path: /etc/pihole/pihole-FTL.conf
+        regexp: '^LOGLEVEL='
+        line: 'LOGLEVEL=warn'
+        create: true
+      notify: restart pihole-ftl
+
+    - name: Deploy Pi-hole cleanup cron
+      copy:
+        dest: /etc/cron.weekly/pihole-cleanup
+        mode: "0755"
+        content: |
+          #!/bin/bash
+          # Weekly Pi-hole maintenance - managed by Ansible
+          
+          # Flush logs
+          pihole flush > /dev/null 2>&1
+          
+          # Remove old gravity backup
+          rm -f /etc/pihole/gravity_old.db
+          
+          # Log cleanup
+          find /var/log/pihole -name "*.log.*" -mtime +7 -delete 2>/dev/null
+          
+          logger -t pihole-cleanup "Weekly Pi-hole maintenance completed"
+
+    - name: Deploy keepalived log rotation
+      copy:
+        dest: /etc/logrotate.d/keepalived-pihole
+        mode: "0644"
+        content: |
+          /var/log/keepalived-pihole.log {
+              weekly
+              rotate 4
+              compress
+              missingok
+              notifempty
+          }
+
+  handlers:
+    - name: restart pihole-ftl
+      systemd:
+        name: pihole-FTL
+        state: restarted
