@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance
 
 ping:
 	ansible all -m ping
@@ -69,3 +69,6 @@ doctor:
 	@echo ""
 	@echo "=== Memory ==="
 	@ansible all -a "free -h"
+
+pihole-maintenance:
+	ansible-playbook playbooks/pihole-maintenance.yml
