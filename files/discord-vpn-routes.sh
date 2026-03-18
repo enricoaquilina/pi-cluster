@@ -53,6 +53,7 @@ start() {
 
   local gw
   gw=$(ip -4 addr show dev "$IFACE" | awk '/inet / {print $2}' | cut -d/ -f1)
+  echo "VPN interface address: $gw"
 
   # Add routing table entry if not in rt_tables
   if ! grep -q "^${TABLE} " /etc/iproute2/rt_tables 2>/dev/null; then

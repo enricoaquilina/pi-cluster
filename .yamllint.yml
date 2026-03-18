@@ -1,4 +1,3 @@
----
 extends: default
 
 rules:
@@ -10,10 +9,13 @@ rules:
     check-keys: false
   comments:
     min-spaces-from-content: 1
+  comments-indentation: false
   braces:
     max-spaces-inside: 1
-  document-start:
-    present: false
+  document-start: disable
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
 
 ignore:
   - .git/
