@@ -1,0 +1,69 @@
+# Test inventory for CI — uses localhost with local connection
+# Mirrors production structure but safe for dry-run validation
+all:
+  children:
+    masters:
+      hosts:
+        master:
+          ansible_host: 127.0.0.1
+          ansible_connection: local
+    slaves:
+      hosts:
+        slave0:
+          ansible_host: 127.0.0.1
+          ansible_connection: local
+        slave1:
+          ansible_host: 127.0.0.1
+          ansible_connection: local
+    vpn:
+      hosts:
+        master:
+          keepsolid_private_key: "test-key"
+          keepsolid_server_pubkey: "test-pubkey"
+          keepsolid_endpoint: "test-endpoint"
+          keepsolid_client_ip: "10.0.0.1"
+        slave0:
+          keepsolid_private_key: "test-key"
+          keepsolid_server_pubkey: "test-pubkey"
+          keepsolid_endpoint: "test-endpoint"
+          keepsolid_client_ip: "10.0.0.2"
+    pihole:
+      hosts:
+        slave0:
+          keepalived_state: MASTER
+          keepalived_priority: 150
+          gravity_sync_remote_host: "127.0.0.2"
+        slave1:
+          keepalived_state: BACKUP
+          keepalived_priority: 100
+          gravity_sync_remote_host: "127.0.0.1"
+    openclaw_nodes:
+      hosts:
+        slave0:
+          openclaw_node_name: build
+          openclaw_node_role: coding
+          openclaw_max_concurrent: 5
+          openclaw_exec_approvals:
+            - /usr/bin/git
+            - /usr/bin/python3
+            - /usr/bin/node
+            - /usr/bin/bash
+            - /usr/bin/npm
+            - /usr/bin/make
+        slave1:
+          openclaw_node_name: light
+          openclaw_node_role: research
+          openclaw_max_concurrent: 3
+          openclaw_exec_approvals:
+            - /usr/bin/git
+            - /usr/bin/bash
+            - /usr/bin/python3
+            - /usr/bin/cat
+            - /usr/bin/grep
+            - /usr/bin/find
+            - /usr/bin/ls
+            - /usr/bin/curl
+    cluster:
+      children:
+        masters:
+        slaves:

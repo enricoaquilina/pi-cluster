@@ -1,0 +1,90 @@
+---
+name: Validate
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  ANSIBLE_VAULT_PASSWORD_FILE: tests/vault-password.txt
+
+jobs:
+  syntax-check:
+    name: Ansible Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible-core
+
+      - name: Symlink test secrets for vault playbooks
+        run: |
+          ln -sf "$(pwd)/tests/secrets/vpn.yml" secrets/vpn.yml
+          ln -sf "$(pwd)/tests/secrets/pihole.yml" secrets/pihole.yml
+
+      - name: Syntax check all playbooks
+        run: |
+          for playbook in playbooks/*.yml; do
+            echo "--- Checking $playbook ---"
+            ansible-playbook --syntax-check -i tests/inventory.yml "$playbook"
+          done
+
+  template-render:
+    name: Template Rendering
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install jinja2 ansible-core
+
+      - name: Render and validate templates
+        run: python tests/test_templates.py
+
+  dry-run:
+    name: Ansible Dry Run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: pip install ansible-core
+
+      - name: Symlink test secrets
+        run: |
+          ln -sf "$(pwd)/tests/secrets/vpn.yml" secrets/vpn.yml
+          ln -sf "$(pwd)/tests/secrets/pihole.yml" secrets/pihole.yml
+
+      - name: Dry-run openclaw-nodes playbook
+        run: >
+          ansible-playbook playbooks/openclaw-nodes.yml
+          -i tests/inventory.yml
+          --check --diff
+          --connection local
+        continue-on-error: true
+
+      - name: Dry-run openclaw-monitoring playbook
+        run: >
+          ansible-playbook playbooks/openclaw-monitoring.yml
+          -i tests/inventory.yml
+          --check --diff
+          --connection local
+        continue-on-error: true
