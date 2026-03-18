@@ -11,3 +11,7 @@ ansible/logs/
 # OpenClaw runtime
 *.sqlite
 *.bak
+
+# Python virtual environments
+.venv/
+__pycache__/

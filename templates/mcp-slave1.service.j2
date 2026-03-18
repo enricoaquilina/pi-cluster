@@ -1,0 +1,15 @@
+[Unit]
+Description=MCP Server - slave1 SSH proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enrico
+ExecStart=/home/enrico/homelab/openclaw/mcp-slave1/.venv/bin/python /home/enrico/homelab/openclaw/mcp-slave1/server.py
+Restart=always
+RestartSec=10
+Environment=HOME=/home/enrico
+
+[Install]
+WantedBy=multi-user.target
