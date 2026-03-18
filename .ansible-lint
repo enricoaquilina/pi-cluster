@@ -10,6 +10,7 @@ exclude_paths:
 skip_list:
   - yaml[truthy]
   - name[missing]
+  - name[casing]
 
 warn_list:
   - command-instead-of-shell

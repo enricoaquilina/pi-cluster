@@ -26,16 +26,16 @@
         content: |
           #!/bin/bash
           # Weekly Pi-hole maintenance - managed by Ansible
-          
+
           # Flush logs
           pihole flush > /dev/null 2>&1
-          
+
           # Remove old gravity backup
           rm -f /etc/pihole/gravity_old.db
-          
+
           # Log cleanup
           find /var/log/pihole -name "*.log.*" -mtime +7 -delete 2>/dev/null
-          
+
           logger -t pihole-cleanup "Weekly Pi-hole maintenance completed"
 
     - name: Deploy keepalived log rotation
