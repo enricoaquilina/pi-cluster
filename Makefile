@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery
 
 ping:
 	ansible all -m ping
@@ -72,3 +72,30 @@ doctor:
 
 pihole-maintenance:
 	ansible-playbook playbooks/pihole-maintenance.yml
+
+# OpenClaw Distributed Agent Cluster
+openclaw-nodes:
+	ansible-playbook playbooks/openclaw-nodes.yml
+
+openclaw-nfs:
+	ansible-playbook playbooks/openclaw-nfs.yml
+
+openclaw-monitoring:
+	ansible-playbook playbooks/openclaw-monitoring.yml
+
+openclaw-recovery:
+	ansible-playbook playbooks/openclaw-recovery.yml
+
+openclaw-status:
+	@echo "=== OpenClaw Nodes ==="
+	@openclaw nodes status 2>/dev/null || echo "Gateway not running or openclaw not available"
+	@echo ""
+	@echo "=== Subagents ==="
+	@openclaw subagents list 2>/dev/null || echo "No active subagents"
+
+openclaw-health:
+	@bash scripts/openclaw-health.sh
+
+openclaw-doctor: doctor openclaw-health
+	@echo ""
+	@echo "=== Full Cluster Health Complete ==="

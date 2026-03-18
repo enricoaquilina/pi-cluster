@@ -1,0 +1,79 @@
+---
+# Configure NFS server on master and NFS clients on slave nodes
+# Usage: make openclaw-nfs
+- name: Configure NFS server on master
+  hosts: masters
+  become: true
+  vars_files:
+    - ../vars/openclaw-nodes.yml
+
+  tasks:
+    - name: Install NFS server
+      ansible.builtin.apt:
+        name: nfs-kernel-server
+        state: present
+        update_cache: true
+
+    - name: Deploy NFS exports
+      ansible.builtin.template:
+        src: ../templates/nfs-exports.j2
+        dest: /etc/exports.d/openclaw.exports
+        mode: "0644"
+      notify: Re-export NFS
+
+    - name: Ensure exports.d directory exists
+      ansible.builtin.file:
+        path: /etc/exports.d
+        state: directory
+        mode: "0755"
+
+    - name: Create workspace symlink for path consistency
+      ansible.builtin.file:
+        src: /home/enrico/homelab
+        dest: /opt/workspace
+        state: link
+
+  handlers:
+    - name: Re-export NFS
+      ansible.builtin.command: exportfs -ra
+      changed_when: true
+
+- name: Configure NFS clients on slave nodes
+  hosts: openclaw_nodes
+  become: true
+  vars_files:
+    - ../vars/openclaw-nodes.yml
+
+  tasks:
+    - name: Install NFS client
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present
+        update_cache: true
+
+    - name: Create mount directories
+      ansible.builtin.file:
+        path: "{{ item.mount }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ nfs_exports }}"
+
+    - name: Configure NFS mounts in fstab
+      ansible.posix.mount:
+        path: "{{ item.mount }}"
+        src: "{{ nfs_server }}:{{ item.path }}"
+        fstype: nfs
+        opts: "{{ nfs_options }}"
+        state: mounted
+      loop: "{{ nfs_exports }}"
+
+    - name: Verify NFS mounts
+      ansible.builtin.command: "mountpoint -q {{ item.mount }}"
+      loop: "{{ nfs_exports }}"
+      changed_when: false
+      register: nfs_check
+
+    - name: Display NFS mount status
+      ansible.builtin.debug:
+        msg: "{{ item.item.mount }}: {{ 'MOUNTED' if item.rc == 0 else 'FAILED' }}"
+      loop: "{{ nfs_check.results }}"

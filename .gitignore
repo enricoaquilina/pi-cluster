@@ -7,3 +7,7 @@ ansible/logs/
 .env
 *.tmp
 .claude/
+
+# OpenClaw runtime
+*.sqlite
+*.bak

@@ -1,0 +1,46 @@
+// OpenClaw Agent → Node Bindings Reference
+// Source of truth is openclaw.json — this file documents the intended configuration.
+// Apply changes via: openclaw config set or Ansible playbook
+{
+  "agents": {
+    "defaults": {
+      "subagents": {
+        "maxConcurrent": 10,
+        "maxChildrenPerAgent": 5,
+        "maxSpawnDepth": 2,
+        "model": "openrouter/google/gemini-2.5-flash",
+        "runTimeoutSeconds": 300,
+        "archiveAfterMinutes": 30
+      }
+    }
+  },
+
+  // Agent → Node bindings
+  // Convention: read/analysis agents → light (slave1), write/exec agents → build (slave0)
+  "bindings": {
+    // Bug-fix pipeline
+    "bug-fix_triager":       { "node": "light",  "access": "read" },
+    "bug-fix_investigator":  { "node": "light",  "access": "read" },
+    "bug-fix_setup":         { "node": "build",  "access": "write" },
+    "bug-fix_fixer":         { "node": "build",  "access": "write" },
+    "bug-fix_verifier":      { "node": "light",  "access": "read" },
+    "bug-fix_pr":            { "node": "build",  "access": "write" },
+
+    // Feature-dev pipeline
+    "feature-dev_planner":   { "node": "light",  "access": "read" },
+    "feature-dev_setup":     { "node": "build",  "access": "write" },
+    "feature-dev_developer": { "node": "build",  "access": "write" },
+    "feature-dev_verifier":  { "node": "light",  "access": "read" },
+    "feature-dev_tester":    { "node": "build",  "access": "exec" },
+    "feature-dev_reviewer":  { "node": "light",  "access": "read" },
+
+    // Security-audit pipeline
+    "security-audit_scanner":     { "node": "light",  "access": "read" },
+    "security-audit_prioritizer": { "node": "light",  "access": "read" },
+    "security-audit_setup":       { "node": "build",  "access": "write" },
+    "security-audit_fixer":       { "node": "build",  "access": "write" },
+    "security-audit_verifier":    { "node": "light",  "access": "read" },
+    "security-audit_tester":      { "node": "build",  "access": "exec" },
+    "security-audit_pr":          { "node": "build",  "access": "write" }
+  }
+}

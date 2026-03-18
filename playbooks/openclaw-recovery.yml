@@ -1,0 +1,93 @@
+---
+# Disaster recovery: rebuild the OpenClaw agent cluster from scratch
+# Usage: make openclaw-recovery
+#
+# Prerequisites:
+#   - zeroclaw installed on all slave nodes
+#   - SSH access to all nodes
+#   - Master gateway running
+#
+# This playbook:
+#   1. Re-deploys zeroclaw node services
+#   2. Re-mounts NFS
+#   3. Re-deploys monitoring
+#   4. Outputs exec approval commands to run on master
+
+- name: "Recovery Step 1: Verify master gateway is running"
+  hosts: masters
+  become: false
+
+  tasks:
+    - name: Check gateway process
+      ansible.builtin.shell: "docker ps --filter name=openclaw --format '{{ '{{' }}.Names{{ '}}' }}' | head -5"
+      register: gateway_check
+      changed_when: false
+
+    - name: Display gateway status
+      ansible.builtin.debug:
+        msg: "Gateway containers: {{ gateway_check.stdout_lines | default(['NONE FOUND']) }}"
+
+    - name: Warn if gateway not running
+      ansible.builtin.debug:
+        msg: "WARNING: No OpenClaw gateway containers found. Start the gateway before proceeding."
+      when: gateway_check.stdout | length == 0
+
+- name: "Recovery Step 2: Re-deploy node hosts"
+  ansible.builtin.import_playbook: openclaw-nodes.yml
+
+- name: "Recovery Step 3: Re-mount NFS"
+  ansible.builtin.import_playbook: openclaw-nfs.yml
+
+- name: "Recovery Step 4: Re-deploy monitoring"
+  ansible.builtin.import_playbook: openclaw-monitoring.yml
+
+- name: "Recovery Step 5: Post-recovery verification"
+  hosts: openclaw_nodes
+  become: false
+  vars_files:
+    - ../vars/openclaw-nodes.yml
+
+  tasks:
+    - name: Verify zeroclaw node service is running
+      ansible.builtin.systemd:
+        name: zeroclaw-node
+      register: node_service
+      changed_when: false
+
+    - name: Display node service status
+      ansible.builtin.debug:
+        msg: "zeroclaw-node on {{ inventory_hostname }}: {{ node_service.status.ActiveState | default('unknown') }}"
+
+    - name: Verify NFS mounts
+      ansible.builtin.command: "mountpoint -q {{ item.mount }}"
+      loop: "{{ nfs_exports }}"
+      changed_when: false
+      failed_when: false
+      register: nfs_verify
+
+    - name: Display NFS status
+      ansible.builtin.debug:
+        msg: "{{ item.item.mount }}: {{ 'MOUNTED' if item.rc == 0 else 'NOT MOUNTED' }}"
+      loop: "{{ nfs_verify.results }}"
+
+- name: "Recovery Step 6: Remind about manual steps"
+  hosts: masters
+  become: false
+
+  tasks:
+    - name: Display manual steps
+      ansible.builtin.debug:
+        msg:
+          - "=== Manual Steps Required ==="
+          - "1. Approve nodes on master:"
+          - "   openclaw devices list"
+          - "   openclaw devices approve <id>  # for each node"
+          - ""
+          - "2. Verify nodes connected:"
+          - "   openclaw nodes status"
+          - ""
+          - "3. Re-apply exec approvals (see generated JSON on each node at /opt/openclaw-exec-approvals.json)"
+          - ""
+          - "4. Test execution:"
+          - "   openclaw exec --node build 'echo hello'"
+          - "   openclaw exec --node light 'echo hello'"

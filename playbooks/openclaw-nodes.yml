@@ -1,0 +1,61 @@
+---
+# Deploy and configure OpenClaw node hosts on slave nodes
+# Usage: make openclaw-nodes
+- name: Deploy OpenClaw node hosts
+  hosts: openclaw_nodes
+  become: true
+  vars_files:
+    - ../vars/openclaw-nodes.yml
+
+  tasks:
+    - name: Check if zeroclaw is installed
+      ansible.builtin.command: zeroclaw --version
+      register: zeroclaw_version
+      changed_when: false
+      failed_when: false
+
+    - name: Display zeroclaw version
+      ansible.builtin.debug:
+        msg: "zeroclaw version: {{ zeroclaw_version.stdout | default('NOT INSTALLED') }}"
+
+    - name: Fail if zeroclaw is not installed
+      ansible.builtin.fail:
+        msg: >
+          zeroclaw is not installed on {{ inventory_hostname }}.
+          Install it manually: curl -fsSL https://get.openclaw.ai | bash
+      when: zeroclaw_version.rc != 0
+
+    - name: Deploy zeroclaw node systemd service
+      ansible.builtin.template:
+        src: ../templates/zeroclaw-node.service.j2
+        dest: /etc/systemd/system/zeroclaw-node.service
+        mode: "0644"
+      notify: Restart zeroclaw node
+
+    - name: Enable and start zeroclaw node service
+      ansible.builtin.systemd:
+        name: zeroclaw-node
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Generate exec approvals reference
+      ansible.builtin.template:
+        src: ../templates/exec-approvals.json.j2
+        dest: /opt/openclaw-exec-approvals.json
+        mode: "0644"
+
+    - name: Display exec approval commands
+      ansible.builtin.debug:
+        msg: >
+          Run on master to configure exec approvals for {{ openclaw_node_name }}:
+          {% for cmd in openclaw_exec_approvals %}
+          openclaw approvals allowlist add --node {{ openclaw_node_name }} "{{ cmd }}"
+          {% endfor %}
+
+  handlers:
+    - name: Restart zeroclaw node
+      ansible.builtin.systemd:
+        name: zeroclaw-node
+        state: restarted
+        daemon_reload: true
