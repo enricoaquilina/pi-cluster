@@ -1,0 +1,16 @@
+---
+profile: basic
+
+exclude_paths:
+  - .git/
+  - .claude/
+  - ansible/
+  - secrets/
+
+skip_list:
+  - yaml[truthy]
+  - name[missing]
+
+warn_list:
+  - command-instead-of-shell
+  - no-changed-when

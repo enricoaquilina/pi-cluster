@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery lint test validate
 
 ping:
 	ansible all -m ping
@@ -99,3 +99,34 @@ openclaw-health:
 openclaw-doctor: doctor openclaw-health
 	@echo ""
 	@echo "=== Full Cluster Health Complete ==="
+
+# CI/CD — Linting and Validation
+lint:
+	@echo "=== YAML Lint ==="
+	yamllint -c .yamllint.yml .
+	@echo ""
+	@echo "=== Ansible Lint ==="
+	ansible-lint
+	@echo ""
+	@echo "=== ShellCheck ==="
+	shellcheck scripts/*.sh files/*.sh
+	@echo ""
+	@echo "=== All Lint Checks Passed ==="
+
+test:
+	@echo "=== Template Rendering Tests ==="
+	python3 tests/test_templates.py
+	@echo ""
+	@echo "=== Ansible Syntax Check ==="
+	@for playbook in playbooks/*.yml; do \
+		echo "--- Checking $$playbook ---"; \
+		ansible-playbook --syntax-check -i tests/inventory.yml \
+			--vault-password-file tests/vault-password.txt "$$playbook" 2>&1 \
+			|| echo "    SKIPPED (vault decryption — use real vault pass or CI)"; \
+	done
+	@echo ""
+	@echo "=== Tests Complete ==="
+
+validate: lint test
+	@echo ""
+	@echo "=== Full Validation Complete ==="

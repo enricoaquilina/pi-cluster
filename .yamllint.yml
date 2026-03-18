@@ -1,0 +1,23 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 200
+    level: warning
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
+    check-keys: false
+  comments:
+    min-spaces-from-content: 1
+  braces:
+    max-spaces-inside: 1
+  document-start:
+    present: false
+
+ignore:
+  - .git/
+  - .claude/
+  - ansible/
+  - openclaw/n8n-workflows/
+  - secrets/
