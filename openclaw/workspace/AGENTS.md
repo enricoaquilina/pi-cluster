@@ -7,8 +7,20 @@ You coordinate work across a 3-node cluster via paired execution nodes.
 | Node | Hardware | Available RAM | Max Concurrent | Capabilities |
 |------|----------|---------------|----------------|-------------|
 | master (local) | Pi 5 8GB | ~5GB | 2-3 | Gateway, n8n, polybot, orchestration |
-| build (slave0) | Pi 5 4GB | ~3.1GB | 4-6 | Code changes, testing, PRs, full r/w |
-| light (slave1) | Pi 4 2GB | ~1.7GB | 3-4 | Research, triage, scanning, analysis |
+| build (slave0) | Pi 5 4GB | ~3.5GB | 4-6 | Code changes, testing, PRs, full r/w (OpenClaw node host) |
+| light (slave1) | Pi 4 2GB | ~1.7GB | 2-3 | Research, triage, scanning (SSH proxy — no node host) |
+
+## slave1 SSH Proxy API
+slave1 cannot run OpenClaw node host (OOM on 2GB RAM). Instead, a lightweight
+HTTP API on master (port 8510) proxies commands to slave1 via SSH.
+
+To execute on slave1, use HTTP fetch:
+- `POST http://172.17.0.1:8510/exec` — body: `{"command": "...", "cwd": "..."}`
+- `POST http://172.17.0.1:8510/read` — body: `{"path": "/absolute/path"}`
+- `GET http://172.17.0.1:8510/status` — system info (RAM, disk, load, services)
+- `GET http://172.17.0.1:8510/health` — quick health check
+
+When gateway is upgraded to support mcpServers, this will be converted to native MCP.
 
 ## Task Types & Delegation
 
