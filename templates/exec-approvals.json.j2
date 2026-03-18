@@ -1,0 +1,10 @@
+{
+  "node": "{{ openclaw_node_name }}",
+  "role": "{{ openclaw_node_role }}",
+  "allowlist": [
+{% for cmd in openclaw_exec_approvals %}
+    "{{ cmd }}"{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ]
+}

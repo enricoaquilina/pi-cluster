@@ -1,0 +1,16 @@
+#!/bin/bash
+# OpenClaw NFS mount watchdog for {{ inventory_hostname }}
+# Managed by Ansible — do not edit manually
+
+{% for export in nfs_exports %}
+if ! mountpoint -q {{ export.mount }}; then
+    logger -t openclaw-watchdog "NFS mount {{ export.mount }} LOST — attempting remount"
+    mount -a
+    sleep 5
+    if ! mountpoint -q {{ export.mount }}; then
+        logger -t openclaw-watchdog "NFS remount {{ export.mount }} FAILED"
+    else
+        logger -t openclaw-watchdog "NFS mount {{ export.mount }} restored"
+    fi
+fi
+{% endfor %}

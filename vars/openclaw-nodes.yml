@@ -1,0 +1,30 @@
+# OpenClaw distributed agent cluster variables
+
+# Master gateway configuration
+openclaw_gateway_host: "{{ hostvars['master']['ansible_host'] }}"
+openclaw_gateway_port: 18789
+
+# NFS configuration
+nfs_server: 192.168.0.1
+nfs_exports:
+  - path: /home/enrico/homelab
+    mount: /opt/workspace
+  - path: /mnt/external
+    mount: /mnt/external
+nfs_options: "defaults,soft,timeo=10,_netdev"
+
+# Workspace path (consistent across all nodes)
+openclaw_workspace: /opt/workspace
+
+# Monitoring
+openclaw_health_threshold_ram: 85
+openclaw_health_check_interval: "*/15"
+openclaw_watchdog_interval: 120
+
+# Subagent defaults
+openclaw_max_concurrent_global: 10
+openclaw_max_children_per_agent: 5
+openclaw_max_spawn_depth: 2
+openclaw_subagent_model: "openrouter/google/gemini-2.5-flash"
+openclaw_subagent_timeout: 300
+openclaw_subagent_archive_after: 30

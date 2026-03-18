@@ -1,0 +1,92 @@
+---
+# Deploy OpenClaw cluster monitoring: health checks, watchdogs, cron
+# Usage: make openclaw-monitoring
+- name: Deploy health check script on master
+  hosts: masters
+  become: true
+  vars_files:
+    - ../vars/openclaw-nodes.yml
+
+  tasks:
+    - name: Deploy cluster health check script
+      ansible.builtin.copy:
+        src: ../scripts/openclaw-health.sh
+        dest: /home/enrico/homelab/scripts/openclaw-health.sh
+        mode: "0755"
+        owner: enrico
+        group: enrico
+
+    - name: Deploy health check cron job
+      ansible.builtin.cron:
+        name: "openclaw cluster health check"
+        minute: "{{ openclaw_health_check_interval }}"
+        user: enrico
+        job: "/home/enrico/homelab/scripts/openclaw-health.sh >> /var/log/openclaw-health.log 2>&1"
+        cron_file: openclaw-health
+
+    - name: Deploy openclaw.json backup cron
+      ansible.builtin.cron:
+        name: "openclaw config backup"
+        minute: "0"
+        hour: "3"
+        user: enrico
+        job: "cp /home/enrico/.openclaw/openclaw.json /home/enrico/.openclaw/openclaw.json.bak.$(date +\\%Y\\%m\\%d)"
+        cron_file: openclaw-backup
+
+    - name: Deploy old backup cleanup cron
+      ansible.builtin.cron:
+        name: "openclaw backup cleanup"
+        minute: "0"
+        hour: "4"
+        user: enrico
+        job: "find /home/enrico/.openclaw/ -name 'openclaw.json.bak.*' -mtime +7 -delete"
+        cron_file: openclaw-backup
+
+- name: Deploy NFS watchdog on slave nodes
+  hosts: openclaw_nodes
+  become: true
+  vars_files:
+    - ../vars/openclaw-nodes.yml
+
+  tasks:
+    - name: Deploy NFS watchdog script
+      ansible.builtin.template:
+        src: ../templates/openclaw-watchdog.sh.j2
+        dest: /usr/local/bin/openclaw-watchdog.sh
+        mode: "0755"
+
+    - name: Deploy watchdog systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/openclaw-watchdog.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=OpenClaw NFS Mount Watchdog
+          After=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/bin/openclaw-watchdog.sh
+
+    - name: Deploy watchdog systemd timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/openclaw-watchdog.timer
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Run OpenClaw NFS watchdog every 2 minutes
+
+          [Timer]
+          OnBootSec=60
+          OnUnitActiveSec={{ openclaw_watchdog_interval }}
+          AccuracySec=30
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable watchdog timer
+      ansible.builtin.systemd:
+        name: openclaw-watchdog.timer
+        enabled: true
+        state: started
+        daemon_reload: true
