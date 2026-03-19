@@ -14,18 +14,18 @@
         state: present
         update_cache: true
 
+    - name: Ensure exports.d directory exists
+      ansible.builtin.file:
+        path: /etc/exports.d
+        state: directory
+        mode: "0755"
+
     - name: Deploy NFS exports
       ansible.builtin.template:
         src: ../templates/nfs-exports.j2
         dest: /etc/exports.d/openclaw.exports
         mode: "0644"
       notify: Re-export NFS
-
-    - name: Ensure exports.d directory exists
-      ansible.builtin.file:
-        path: /etc/exports.d
-        state: directory
-        mode: "0755"
 
     - name: Create workspace symlink for path consistency
       ansible.builtin.file:
