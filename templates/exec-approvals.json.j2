@@ -1,10 +1,34 @@
 {
-  "node": "{{ openclaw_node_name }}",
-  "role": "{{ openclaw_node_role }}",
-  "allowlist": [
-{% for cmd in openclaw_exec_approvals %}
-    "{{ cmd }}"{% if not loop.last %},{% endif %}
-
-{% endfor %}
-  ]
+  "version": 1,
+  "socket": {
+    "path": "/home/enrico/.openclaw/exec-approvals.sock",
+    "token": "{{ openclaw_exec_approvals_token | default('auto-approve') }}"
+  },
+  "defaults": {
+    "security": "full",
+    "ask": "off",
+    "autoAllowSkills": true
+  },
+  "agents": {
+    "main": {
+      "security": "full",
+      "ask": "off",
+      "allowlist": [
+        {
+          "pattern": "**",
+          "id": "auto-allow-all"
+        }
+      ]
+    },
+    "*": {
+      "security": "full",
+      "ask": "off",
+      "allowlist": [
+        {
+          "pattern": "**",
+          "id": "auto-allow-wildcard"
+        }
+      ]
+    }
+  }
 }

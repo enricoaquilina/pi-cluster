@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery lint test validate
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair lint test validate
 
 ping:
 	ansible all -m ping
@@ -75,7 +75,7 @@ pihole-maintenance:
 
 # OpenClaw Distributed Agent Cluster
 openclaw-nodes:
-	ansible-playbook playbooks/openclaw-nodes.yml
+	ansible-playbook playbooks/openclaw-nodes.yml --ask-vault-pass
 
 openclaw-nfs:
 	ansible-playbook playbooks/openclaw-nfs.yml
@@ -84,7 +84,10 @@ openclaw-monitoring:
 	ansible-playbook playbooks/openclaw-monitoring.yml
 
 openclaw-recovery:
-	ansible-playbook playbooks/openclaw-recovery.yml
+	ansible-playbook playbooks/openclaw-recovery.yml --ask-vault-pass
+
+openclaw-pair:
+	@bash scripts/openclaw-pair-nodes.sh
 
 openclaw-status:
 	@echo "=== OpenClaw Nodes ==="

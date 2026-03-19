@@ -1,11 +1,12 @@
 # OpenClaw distributed agent cluster variables
 
 # Master gateway configuration
-openclaw_gateway_host: "{{ hostvars['master']['ansible_host'] }}"
+openclaw_gateway_host: 192.168.0.22
 openclaw_gateway_port: 18789
+openclaw_gateway_token: "{{ vault_openclaw_gateway_token }}"
 
 # NFS configuration
-nfs_server: 192.168.0.1
+nfs_server: 192.168.0.22
 nfs_exports:
   - path: /home/enrico/homelab
     mount: /opt/workspace

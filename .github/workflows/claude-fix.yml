@@ -1,0 +1,51 @@
+---
+name: Claude Code Fix
+
+on:
+  # Trigger when PR review comments are posted (by PR-Agent or humans)
+  pull_request_review_comment:
+    types: [created]
+  # Also trigger on issue/PR comments with @claude mention
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  claude-fix:
+    name: Claude Auto-Fix
+    # Only run when:
+    # 1. PR-Agent posts a review comment (bot account), OR
+    # 2. Someone mentions @claude in a comment
+    if: |
+      (github.event_name == 'pull_request_review_comment' &&
+       github.event.comment.user.type == 'Bot') ||
+      (github.event_name == 'issue_comment' &&
+       contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: "claude-sonnet-4-20250514"
+          trigger_phrase: "@claude"
+          timeout_minutes: 30
+          direct_prompt: |
+            Review the PR review comments posted by the automated reviewer.
+            For each issue raised:
+            1. Determine if the issue is valid and worth fixing
+            2. If valid, make the fix directly in the code
+            3. If not valid (false positive), reply explaining why
+
+            Focus on: security fixes, Ansible best practices,
+            shell script safety, and systemd service correctness.
+            Do NOT make cosmetic-only changes.
+            Commit fixes with clear messages.

@@ -1,0 +1,67 @@
+---
+name: Auto-Merge
+
+on:
+  # Run after all CI checks complete on a PR
+  check_suite:
+    types: [completed]
+  # Also run when PR review status changes
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Merge if all checks pass
+    runs-on: ubuntu-latest
+    # Only run on PRs targeting master
+    if: |
+      github.event.pull_request != null ||
+      github.event.check_suite.pull_requests[0] != null
+    steps:
+      - name: Get PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.check_suite.pull_requests[0].number }}" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check and merge PR
+        if: steps.pr.outputs.number != ''
+        run: |
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          echo "Checking PR #${PR_NUMBER}..."
+
+          # Check if all CI checks pass
+          FAILED=$(gh pr checks "$PR_NUMBER" -R "${{ github.repository }}" 2>&1 | grep -c "fail" || true)
+          PENDING=$(gh pr checks "$PR_NUMBER" -R "${{ github.repository }}" 2>&1 | grep -c "pending" || true)
+
+          if [ "$FAILED" -gt 0 ]; then
+            echo "PR has failing checks, skipping merge"
+            exit 0
+          fi
+
+          if [ "$PENDING" -gt 0 ]; then
+            echo "PR still has pending checks, skipping merge"
+            exit 0
+          fi
+
+          # Check no unresolved review comments requesting changes
+          CHANGES_REQUESTED=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" --json reviewDecision -q '.reviewDecision' 2>/dev/null)
+          if [ "$CHANGES_REQUESTED" = "CHANGES_REQUESTED" ]; then
+            echo "PR has changes requested, skipping merge"
+            exit 0
+          fi
+
+          echo "All checks passed, merging PR #${PR_NUMBER}..."
+          gh pr merge "$PR_NUMBER" -R "${{ github.repository }}" --squash --delete-branch || echo "Merge failed (may need admin approval or branch protection)"
+          echo "Done!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

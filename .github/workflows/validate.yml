@@ -31,6 +31,7 @@ jobs:
         run: |
           ln -sf "$(pwd)/tests/secrets/vpn.yml" secrets/vpn.yml
           ln -sf "$(pwd)/tests/secrets/pihole.yml" secrets/pihole.yml
+          ln -sf "$(pwd)/tests/secrets/openclaw.yml" secrets/openclaw.yml
 
       - name: Syntax check all playbooks
         run: |
@@ -80,6 +81,7 @@ jobs:
         run: |
           ln -sf "$(pwd)/tests/secrets/vpn.yml" secrets/vpn.yml
           ln -sf "$(pwd)/tests/secrets/pihole.yml" secrets/pihole.yml
+          ln -sf "$(pwd)/tests/secrets/openclaw.yml" secrets/openclaw.yml
 
       - name: Dry-run openclaw-nodes playbook
         run: >

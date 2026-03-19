@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenClaw Node Host ({{ openclaw_node_name }})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enrico
+Environment=HOME=/home/enrico
+Environment=OPENCLAW_GATEWAY_TOKEN={{ openclaw_gateway_token }}
+Environment=OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1
+ExecStart=/usr/bin/openclaw node run --host {{ openclaw_gateway_host }} --port {{ openclaw_gateway_port }} --display-name {{ openclaw_node_name }}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
