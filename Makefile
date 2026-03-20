@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair lint test validate
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route lint test validate
 
 ping:
 	ansible all -m ping
@@ -88,6 +88,12 @@ openclaw-recovery:
 
 openclaw-pair:
 	@bash scripts/openclaw-pair-nodes.sh
+
+openclaw-dispatch:
+	@bash scripts/openclaw-dispatch.sh $(filter-out $@,$(MAKECMDGOALS))
+
+openclaw-route:
+	@bash scripts/openclaw-router.sh $(or $(filter-out $@,$(MAKECMDGOALS)),any)
 
 openclaw-status:
 	@echo "=== OpenClaw Nodes ==="
