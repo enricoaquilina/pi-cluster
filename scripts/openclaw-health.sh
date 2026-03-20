@@ -42,7 +42,6 @@ for node_def in "${NODES[@]}"; do
     fi
 
     if [ -z "$stats" ]; then
-        ssh_status="unreachable"
         if $JSON_MODE; then
             json_nodes+=("{\"name\":\"$name\",\"host\":\"$ssh_host\",\"ssh\":\"unreachable\",\"connected\":$connected}")
         else

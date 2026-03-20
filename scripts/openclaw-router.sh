@@ -18,7 +18,6 @@
 set -euo pipefail
 
 TASK_TYPE="${1:-any}"
-RAM_THRESHOLD=85
 CONNECT_TIMEOUT=3
 
 # Node definitions: name:ssh_host:role:max_ram_pct
@@ -87,7 +86,7 @@ for candidate in $candidates; do
             continue
         fi
 
-        read -r ram_pct load avail_mb <<< "$stats"
+        read -r ram_pct load _avail_mb <<< "$stats"
 
         # Skip if over threshold
         if [ "${ram_pct:-100}" -gt "${max_ram:-85}" ]; then
