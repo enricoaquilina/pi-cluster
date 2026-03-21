@@ -6,6 +6,7 @@
   become: true
   vars_files:
     - ../vars/openclaw-nodes.yml
+    - ../secrets/monitoring.yml
 
   tasks:
     - name: Deploy cluster health check script
@@ -73,6 +74,14 @@
         enabled: true
         state: started
         daemon_reload: true
+
+    - name: Deploy cluster watchdog script
+      ansible.builtin.template:
+        src: ../templates/openclaw-watchdog-cluster.sh.j2
+        dest: /home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh
+        mode: "0755"
+        owner: enrico
+        group: enrico
 
     - name: Deploy cluster watchdog service
       ansible.builtin.template:
