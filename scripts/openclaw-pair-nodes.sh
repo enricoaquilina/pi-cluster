@@ -15,7 +15,7 @@ set -euo pipefail
 
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 PAIRED_JSON="/home/node/.openclaw/devices/paired.json"
-NODES=("slave0:build:192.168.0.3" "slave1:light:192.168.0.4" "heavy:heavy:100.85.234.128")
+NODES=("master:control:192.168.0.22" "slave0:build:192.168.0.3" "slave1:light:192.168.0.4" "heavy:heavy:100.85.234.128")
 
 echo "=== OpenClaw Node Pairing ==="
 
@@ -34,8 +34,23 @@ paired_path = '$PAIRED_JSON'
 with open(paired_path) as f:
     paired = json.load(f)
 
-# Remove existing node entries
+# Remove existing node entries (keep operator)
 paired = {k:v for k,v in paired.items() if v.get('clientMode') != 'node'}
+
+# Ensure operator entry exists
+if not any(v.get('clientMode') == 'cli' for v in paired.values()):
+    paired['88addb6edd52adebc9ec133d2d0ae0061b0003747d9a3ec45383c49bc1aeb08b'] = {
+        'deviceId': '88addb6edd52adebc9ec133d2d0ae0061b0003747d9a3ec45383c49bc1aeb08b',
+        'publicKey': 'aNm5EGV2PYsb0gSlrVXtkXeHGKbVqinFnbV8tbFtcus',
+        'platform': 'linux', 'clientId': 'cli', 'clientMode': 'cli',
+        'role': 'operator', 'roles': ['operator'],
+        'scopes': ['operator.admin','operator.approvals','operator.pairing','operator.read','operator.write'],
+        'tokens': {'operator': {'token': 'c7b124bdc9454c238e7858a52bde6619', 'role': 'operator',
+            'scopes': ['operator.admin','operator.approvals','operator.pairing'],
+            'createdAtMs': 1772820662994}},
+        'createdAtMs': 1772820662994, 'approvedAtMs': 1772820662994
+    }
+    print('  Restored operator entry')
 
 now_ms = int(time.time() * 1000)
 nodes = json.loads(sys.stdin.read())
@@ -81,7 +96,8 @@ first=true
 for entry in "${NODES[@]}"; do
     IFS=: read -r host display_name remote_ip <<< "$entry"
 
-    identity=$(ssh "$host" "cat /home/enrico/.openclaw/identity/device.json 2>/dev/null" || echo "")
+    # Master uses separate .openclaw-node dir (node host + CLI share same machine)
+    identity=$(ssh "$host" "cat /home/enrico/.openclaw-node/.openclaw/identity/device.json 2>/dev/null || cat /home/enrico/.openclaw/identity/device.json 2>/dev/null" || echo "")
     if [ -z "$identity" ]; then
         echo "  WARNING: No identity on $host — node may need to run once first"
         continue

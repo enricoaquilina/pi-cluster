@@ -21,7 +21,7 @@ LOG_FILE="/var/log/openclaw-watchdog.log"
 TELEGRAM_BOT_TOKEN="8799078317:AAGGtKj6ZXH0C3Zwyob5EgjMIEPmgA36CjA"
 TELEGRAM_CHAT_ID="1630148884"
 
-EXPECTED_NODES=("build" "light" "heavy")
+EXPECTED_NODES=("control" "build" "light" "heavy")
 
 log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"
