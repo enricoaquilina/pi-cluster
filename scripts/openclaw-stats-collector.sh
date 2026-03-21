@@ -14,7 +14,7 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Node definitions: name:ssh_host:mc_name
-NODES=("build:slave0:slave0" "light:slave1:slave1" "heavy:heavy:heavy")
+NODES=("master:master:master" "build:slave0:slave0" "light:slave1:slave1" "heavy:heavy:heavy")
 
 # Get connected nodes from gateway (one call, cached for this run)
 connected_raw=$(docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
