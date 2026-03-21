@@ -40,7 +40,9 @@ for node_def in "${NODES[@]}"; do
         DISK_USED=$(df -BM / | tail -1 | awk "{print \$3}" | tr -d "M")
         DISK_AVAIL=$(df -BM / | tail -1 | awk "{print \$4}" | tr -d "M")
         DISK_PCT=$(df / | tail -1 | awk "{print \$5}" | tr -d "%")
-        TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk "{printf \"%.0f\", \$1/1000}" || echo "0")
+        TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk "{printf \"%.0f\", \$1/1000}" || echo "")
+        [ -z "$TEMP" ] && TEMP=$(cat /sys/class/hwmon/hwmon1/temp1_input 2>/dev/null | awk "{printf \"%.0f\", \$1/1000}" || echo "")
+        [ -z "$TEMP" ] && TEMP=$(find /sys/class/hwmon -name "temp1_input" -exec cat {} \; 2>/dev/null | head -1 | awk "{printf \"%.0f\", \$1/1000}" || echo "0")
         [ -z "$TEMP" ] && TEMP=0
         UPTIME_S=$(awk "{printf \"%.0f\", \$1}" /proc/uptime 2>/dev/null || echo "0")
         [ -z "$UPTIME_S" ] && UPTIME_S=0
