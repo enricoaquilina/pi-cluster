@@ -39,6 +39,16 @@
 
 **Prerequisite:** Phase 9 complete (services off master)
 
+### Phase 10.5: Mac SSH to Heavy
+**Goal:** SSH directly from Mac to heavy for Claude Code sessions.
+
+- [ ] 10.5.1 — Connect heavy via ethernet (same LAN as master)
+- [ ] 10.5.2 — Add heavy to Mac's `~/.ssh/config` (direct LAN IP, no ProxyJump needed)
+- [ ] 10.5.3 — Copy Mac SSH key to heavy (`ssh-copy-id enrico@heavy`)
+- [ ] 10.5.4 — Verify `ssh heavy` from Mac works
+
+**Prerequisite:** Ethernet cable (Phase 11)
+
 ### Phase 11: Ethernet for Heavy
 **Goal:** Replace WiFi/Tailscale with LAN for reliability and performance.
 
