@@ -27,7 +27,7 @@ def main():
             "name": mc_name,
             "hostname": n["host"],
             "framework": "OpenClaw",
-            "status": "healthy" if n.get("connected") else "degraded",
+            "status": "healthy" if (n.get("connected") or mc_name == "master") else "degraded",
             "ram_total_mb": n.get("ram_total_mb", 0),
             "ram_used_mb": n.get("ram_used_mb", 0),
             "cpu_percent": n.get("load", 0),
