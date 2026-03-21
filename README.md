@@ -56,7 +56,7 @@ If a preferred node is overloaded (>85% RAM), falls back to the next best availa
 | OpenClaw Gateway | master | 18789 | Agent gateway (WebSocket) |
 | Router API | master | 8520 | HTTP API for task routing |
 | Pi-hole VIP | 192.168.0.53 | 53 | HA DNS (keepalived failover) |
-| n8n | master | 5678 | Workflow automation |
+| n8n | heavy | 5678 | Workflow automation (migrated from master) |
 
 ## Make Targets
 
