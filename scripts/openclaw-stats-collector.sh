@@ -69,14 +69,21 @@ mv "$tmp_file" "$CACHE_FILE"
 chmod 644 "$CACHE_FILE"
 
 # Feed Mission Control dashboard (if API is reachable)
-MC_API="${MC_API:-http://192.168.0.22:8000/api}"
+MC_API="${MC_API:-http://127.0.0.1:8000/api}"
 MC_KEY="${MC_KEY:-860e75126051c283758226e6852fcb687b1423c2b7c0af51}"
 
 if curl -sf "$MC_API/health" > /dev/null 2>&1; then
+    export MC_API_URL="$MC_API"
+    export MC_API_KEY="$MC_KEY"
+    export MC_CACHE_FILE="$CACHE_FILE"
     python3 -c "
-import json, urllib.request
+import json, os, urllib.request
 
-with open('$CACHE_FILE') as f:
+MC_API = os.environ['MC_API_URL']
+MC_KEY = os.environ['MC_API_KEY']
+CACHE_FILE = os.environ['MC_CACHE_FILE']
+
+with open(CACHE_FILE) as f:
     data = json.load(f)
 
 for n in data.get('nodes', []):
@@ -109,8 +116,8 @@ for n in data.get('nodes', []):
         path = f'/nodes/{mc_name}' if method == 'PATCH' else '/nodes'
         try:
             req = urllib.request.Request(
-                '$MC_API' + path, data=payload, method=method,
-                headers={'Content-Type': 'application/json', 'X-Api-Key': '$MC_KEY'},
+                MC_API + path, data=payload, method=method,
+                headers={'Content-Type': 'application/json', 'X-Api-Key': MC_KEY},
             )
             urllib.request.urlopen(req, timeout=5)
             break
