@@ -57,3 +57,38 @@ tmp_file=$(mktemp)
 echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"nodes\":[$nodes_json]}" > "$tmp_file"
 mv "$tmp_file" "$CACHE_FILE"
 chmod 644 "$CACHE_FILE"
+
+# Feed Mission Control dashboard (if API is reachable)
+MC_API="${MC_API:-http://192.168.0.22:8000/api}"
+MC_KEY="${MC_KEY:-860e75126051c283758226e6852fcb687b1423c2b7c0af51}"
+
+if curl -sf "$MC_API/health" > /dev/null 2>&1; then
+    for node_json in $(python3 -c "
+import json
+with open('$CACHE_FILE') as f:
+    data = json.load(f)
+for n in data.get('nodes', []):
+    if not n.get('reachable'):
+        continue
+    print(json.dumps({
+        'name': n['name'],
+        'hostname': n['host'],
+        'framework': 'OpenClaw',
+        'status': 'healthy' if n.get('connected') else 'degraded',
+        'ram_total_mb': n.get('ram_avail_mb', 0) + int(n.get('ram_pct', 0) * n.get('ram_avail_mb', 0) / max(100 - n.get('ram_pct', 1), 1)),
+        'ram_used_mb': int(n.get('ram_pct', 0) * n.get('ram_avail_mb', 0) / max(100 - n.get('ram_pct', 1), 1)),
+        'cpu_percent': n.get('load', 0),
+        'metadata': {'arch': n.get('arch', ''), 'cpus': n.get('cpus', 0), 'ram_pct': n.get('ram_pct', 0)}
+    }))
+" 2>/dev/null); do
+        node_name=$(echo "$node_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['name'])")
+        curl -sf -X PATCH "$MC_API/nodes/$node_name" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: $MC_KEY" \
+            -d "$node_json" > /dev/null 2>&1 || \
+        curl -sf -X POST "$MC_API/nodes" \
+            -H "Content-Type: application/json" \
+            -H "X-Api-Key: $MC_KEY" \
+            -d "$node_json" > /dev/null 2>&1
+    done
+fi
