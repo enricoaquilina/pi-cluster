@@ -1,7 +1,7 @@
 #!/bin/bash
 # OpenClaw Node Stats Collector
 # Runs on a timer, caches node health to /tmp/openclaw-node-stats.json
-# Also feeds Mission Control dashboard via API.
+# Also feeds Mission Control dashboard via openclaw-mc-feed.py.
 #
 # Usage: runs via systemd timer every 30 seconds
 #   bash scripts/openclaw-stats-collector.sh
@@ -11,6 +11,7 @@ set -uo pipefail
 CACHE_FILE="/tmp/openclaw-node-stats.json"
 CONNECT_TIMEOUT=3
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Node definitions: name:ssh_host:mc_name
 NODES=("build:slave0:slave0" "light:slave1:slave1" "heavy:heavy:heavy")
@@ -55,7 +56,7 @@ for node_def in "${NODES[@]}"; do
     is_connected "$name" && connected="true"
 
     if [ -z "$stats" ]; then
-        json_nodes+=("{\"name\":\"$name\",\"host\":\"$ssh_host\",\"reachable\":false,\"connected\":$connected}")
+        json_nodes+=("{\"name\":\"$name\",\"mc_name\":\"$mc_name\",\"host\":\"$ssh_host\",\"reachable\":false,\"connected\":$connected}")
         continue
     fi
 
@@ -70,62 +71,5 @@ echo "{\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"nodes\":[$nodes_json]}
 mv "$tmp_file" "$CACHE_FILE"
 chmod 644 "$CACHE_FILE"
 
-# Feed Mission Control dashboard (if API is reachable)
-MC_API="${MC_API:-http://127.0.0.1:8000/api}"
-MC_KEY="${MC_KEY:-860e75126051c283758226e6852fcb687b1423c2b7c0af51}"
-
-if curl -sf "$MC_API/health" > /dev/null 2>&1; then
-    export MC_API_URL="$MC_API"
-    export MC_API_KEY="$MC_KEY"
-    export MC_CACHE_FILE="$CACHE_FILE"
-    python3 -c "
-import json, os, urllib.request
-
-MC_API = os.environ['MC_API_URL']
-MC_KEY = os.environ['MC_API_KEY']
-CACHE_FILE = os.environ['MC_CACHE_FILE']
-
-with open(CACHE_FILE) as f:
-    data = json.load(f)
-
-for n in data.get('nodes', []):
-    if not n.get('reachable'):
-        continue
-    mc_name = n.get('mc_name', n['name'])
-    payload = json.dumps({
-        'name': mc_name,
-        'hostname': n['host'],
-        'framework': 'OpenClaw',
-        'status': 'healthy' if n.get('connected') else 'degraded',
-        'ram_total_mb': n.get('ram_total_mb', 0),
-        'ram_used_mb': n.get('ram_used_mb', 0),
-        'cpu_percent': n.get('load', 0),
-        'metadata': {
-            'arch': n.get('arch', ''),
-            'cpus': n.get('cpus', 0),
-            'ram_pct': n.get('ram_pct', 0),
-            'disk_total_mb': n.get('disk_total_mb', 0),
-            'disk_used_mb': n.get('disk_used_mb', 0),
-            'disk_avail_mb': n.get('disk_avail_mb', 0),
-            'disk_pct': n.get('disk_pct', 0),
-            'temp_c': n.get('temp_c', 0),
-            'uptime_s': n.get('uptime_s', 0),
-            'swap_total_mb': n.get('swap_total_mb', 0),
-            'swap_used_mb': n.get('swap_used_mb', 0),
-            'connected': n.get('connected', False),
-        },
-    }).encode()
-
-    for method in ['PATCH', 'POST']:
-        path = f'/nodes/{mc_name}' if method == 'PATCH' else '/nodes'
-        try:
-            req = urllib.request.Request(
-                MC_API + path, data=payload, method=method,
-                headers={'Content-Type': 'application/json', 'X-Api-Key': MC_KEY},
-            )
-            urllib.request.urlopen(req, timeout=5)
-            break
-        except Exception:
-            continue
-" 2>/dev/null
-fi
+# Feed Mission Control dashboard
+python3 "$SCRIPT_DIR/openclaw-mc-feed.py" 2>/dev/null || true
