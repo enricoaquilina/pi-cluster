@@ -34,6 +34,24 @@
         job: "cp /home/enrico/.openclaw/openclaw.json /home/enrico/.openclaw/openclaw.json.bak.$(date +\\%Y\\%m\\%d)"
         cron_file: openclaw-backup
 
+    - name: Deploy budget check cron (every 6 hours)
+      ansible.builtin.cron:
+        name: "openclaw budget check"
+        minute: "0"
+        hour: "*/6"
+        user: enrico
+        job: "curl -sf http://127.0.0.1:8520/budget/check >> /var/log/openclaw-budget.log 2>&1"
+        cron_file: openclaw-budget
+
+    - name: Deploy daily digest cron (8pm)
+      ansible.builtin.cron:
+        name: "openclaw daily digest"
+        minute: "0"
+        hour: "20"
+        user: enrico
+        job: "curl -sf http://127.0.0.1:8520/budget/digest >> /var/log/openclaw-budget.log 2>&1"
+        cron_file: openclaw-budget
+
     - name: Deploy openclaw version check cron (nightly)
       ansible.builtin.cron:
         name: "openclaw version check"
