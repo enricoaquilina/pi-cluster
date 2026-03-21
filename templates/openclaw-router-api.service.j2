@@ -1,0 +1,15 @@
+[Unit]
+Description=OpenClaw Cluster Router API
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enrico
+ExecStart=/usr/bin/python3 /home/enrico/homelab/scripts/openclaw-mcp-router.py
+Restart=always
+RestartSec=5
+Environment=HOME=/home/enrico
+
+[Install]
+WantedBy=multi-user.target

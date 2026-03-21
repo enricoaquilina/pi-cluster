@@ -42,6 +42,38 @@
         job: "find /home/enrico/.openclaw/ -name 'openclaw.json.bak.*' -mtime +7 -delete"
         cron_file: openclaw-backup
 
+    - name: Deploy stats collector service
+      ansible.builtin.template:
+        src: ../templates/openclaw-stats-collector.service.j2
+        dest: /etc/systemd/system/openclaw-stats-collector.service
+        mode: "0644"
+
+    - name: Deploy stats collector timer
+      ansible.builtin.template:
+        src: ../templates/openclaw-stats-collector.timer.j2
+        dest: /etc/systemd/system/openclaw-stats-collector.timer
+        mode: "0644"
+
+    - name: Enable stats collector timer
+      ansible.builtin.systemd:
+        name: openclaw-stats-collector.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Deploy router API service
+      ansible.builtin.template:
+        src: ../templates/openclaw-router-api.service.j2
+        dest: /etc/systemd/system/openclaw-router-api.service
+        mode: "0644"
+
+    - name: Enable router API service
+      ansible.builtin.systemd:
+        name: openclaw-router-api
+        enabled: true
+        state: started
+        daemon_reload: true
+
 - name: Deploy NFS watchdog on slave nodes
   hosts: openclaw_nodes
   become: true
