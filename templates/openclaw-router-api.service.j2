@@ -1,12 +1,12 @@
 [Unit]
-Description=OpenClaw Cluster Router API
+Description=OpenClaw Cluster Service (FastAPI)
 After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=enrico
-ExecStart=/usr/bin/python3 /home/enrico/homelab/scripts/openclaw-mcp-router.py
+ExecStart=/usr/bin/python3 /home/enrico/homelab/scripts/openclaw-cluster-service.py
 Restart=always
 RestartSec=5
 Environment=HOME=/home/enrico
