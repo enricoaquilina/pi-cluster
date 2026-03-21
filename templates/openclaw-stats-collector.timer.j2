@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect OpenClaw node stats every 30 seconds
+
+[Timer]
+OnBootSec=15
+OnUnitActiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=timers.target
