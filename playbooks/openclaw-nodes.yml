@@ -11,20 +11,34 @@
   tasks:
     - name: Check if openclaw is installed
       ansible.builtin.command: openclaw --version
-      register: openclaw_version
+      register: openclaw_check
       changed_when: false
       failed_when: false
 
     - name: Display openclaw version
       ansible.builtin.debug:
-        msg: "openclaw version: {{ openclaw_version.stdout | default('NOT INSTALLED') }}"
+        msg: "openclaw version: {{ openclaw_check.stdout | default('NOT INSTALLED') }}"
 
     - name: Fail if openclaw is not installed
       ansible.builtin.fail:
         msg: >
           openclaw is not installed on {{ inventory_hostname }}.
-          Install it manually: sudo npm install -g openclaw
-      when: openclaw_version.rc != 0
+          Install it manually: sudo npm install -g openclaw@{{ openclaw_version }}
+      when: openclaw_check.rc != 0
+
+    - name: Check openclaw version matches pin
+      ansible.builtin.shell:
+        cmd: "openclaw --version | grep -oP '[0-9]+\\.[0-9]+\\.[0-9]+'"
+      register: openclaw_installed_ver
+      changed_when: false
+
+    - name: Warn if openclaw version mismatch
+      ansible.builtin.debug:
+        msg: >
+          WARNING: {{ inventory_hostname }} has openclaw {{ openclaw_installed_ver.stdout }}
+          but pinned version is {{ openclaw_version }}.
+          Run: sudo npm install -g openclaw@{{ openclaw_version }}
+      when: openclaw_installed_ver.stdout != openclaw_version
 
     - name: Deploy openclaw node systemd service
       ansible.builtin.template:
