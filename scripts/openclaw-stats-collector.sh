@@ -40,13 +40,15 @@ for node_def in "${NODES[@]}"; do
         DISK_USED=$(df -BM / | tail -1 | awk "{print \$3}" | tr -d "M")
         DISK_AVAIL=$(df -BM / | tail -1 | awk "{print \$4}" | tr -d "M")
         DISK_PCT=$(df / | tail -1 | awk "{print \$5}" | tr -d "%")
+        SWAP_TOTAL=$(free -m | awk "/^Swap:/ {print \$2}")
+        SWAP_USED=$(free -m | awk "/^Swap:/ {print \$3}")
         TEMP=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk "{printf \"%.0f\", \$1/1000}" || echo "")
         [ -z "$TEMP" ] && TEMP=$(cat /sys/class/hwmon/hwmon1/temp1_input 2>/dev/null | awk "{printf \"%.0f\", \$1/1000}" || echo "")
         [ -z "$TEMP" ] && TEMP=$(find /sys/class/hwmon -name "temp1_input" -exec cat {} \; 2>/dev/null | head -1 | awk "{printf \"%.0f\", \$1/1000}" || echo "0")
         [ -z "$TEMP" ] && TEMP=0
         UPTIME_S=$(awk "{printf \"%.0f\", \$1}" /proc/uptime 2>/dev/null || echo "0")
         [ -z "$UPTIME_S" ] && UPTIME_S=0
-        echo "$RAM_TOTAL $RAM_USED $RAM_AVAIL $RAM_PCT $LOAD $CPUS $ARCH $DISK_TOTAL $DISK_USED $DISK_AVAIL $DISK_PCT $TEMP $UPTIME_S"
+        echo "$RAM_TOTAL $RAM_USED $RAM_AVAIL $RAM_PCT $LOAD $CPUS $ARCH $DISK_TOTAL $DISK_USED $DISK_AVAIL $DISK_PCT $TEMP $UPTIME_S $SWAP_TOTAL $SWAP_USED"
     ' 2>/dev/null) || stats=""
 
     connected="false"
@@ -57,8 +59,8 @@ for node_def in "${NODES[@]}"; do
         continue
     fi
 
-    read -r ram_total ram_used ram_avail ram_pct load cpus arch disk_total disk_used disk_avail disk_pct temp uptime_s <<< "$stats"
-    json_nodes+=("{\"name\":\"$name\",\"mc_name\":\"$mc_name\",\"host\":\"$ssh_host\",\"reachable\":true,\"connected\":$connected,\"ram_total_mb\":$ram_total,\"ram_used_mb\":$ram_used,\"ram_avail_mb\":$ram_avail,\"ram_pct\":$ram_pct,\"load\":$load,\"cpus\":$cpus,\"arch\":\"$arch\",\"disk_total_mb\":$disk_total,\"disk_used_mb\":$disk_used,\"disk_avail_mb\":$disk_avail,\"disk_pct\":$disk_pct,\"temp_c\":$temp,\"uptime_s\":$uptime_s}")
+    read -r ram_total ram_used ram_avail ram_pct load cpus arch disk_total disk_used disk_avail disk_pct temp uptime_s swap_total swap_used <<< "$stats"
+    json_nodes+=("{\"name\":\"$name\",\"mc_name\":\"$mc_name\",\"host\":\"$ssh_host\",\"reachable\":true,\"connected\":$connected,\"ram_total_mb\":$ram_total,\"ram_used_mb\":$ram_used,\"ram_avail_mb\":$ram_avail,\"ram_pct\":$ram_pct,\"load\":$load,\"cpus\":$cpus,\"arch\":\"$arch\",\"disk_total_mb\":$disk_total,\"disk_used_mb\":$disk_used,\"disk_avail_mb\":$disk_avail,\"disk_pct\":$disk_pct,\"temp_c\":$temp,\"uptime_s\":$uptime_s,\"swap_total_mb\":${swap_total:-0},\"swap_used_mb\":${swap_used:-0}}")
 done
 
 # Write cache atomically
@@ -108,6 +110,8 @@ for n in data.get('nodes', []):
             'disk_pct': n.get('disk_pct', 0),
             'temp_c': n.get('temp_c', 0),
             'uptime_s': n.get('uptime_s', 0),
+            'swap_total_mb': n.get('swap_total_mb', 0),
+            'swap_used_mb': n.get('swap_used_mb', 0),
             'connected': n.get('connected', False),
         },
     }).encode()
