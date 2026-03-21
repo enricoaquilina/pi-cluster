@@ -16,7 +16,7 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 NODES=("build:slave0" "light:slave1" "heavy:heavy")
 
 # Get connected nodes from gateway (one call, cached for this run)
-connected_raw=$(docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep "connected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
+connected_raw=$(docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
 
 is_connected() {
     local name="$1"

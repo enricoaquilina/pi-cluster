@@ -74,6 +74,25 @@
         state: started
         daemon_reload: true
 
+    - name: Deploy cluster watchdog service
+      ansible.builtin.template:
+        src: ../templates/openclaw-watchdog-cluster.service.j2
+        dest: /etc/systemd/system/openclaw-watchdog-cluster.service
+        mode: "0644"
+
+    - name: Deploy cluster watchdog timer
+      ansible.builtin.template:
+        src: ../templates/openclaw-watchdog-cluster.timer.j2
+        dest: /etc/systemd/system/openclaw-watchdog-cluster.timer
+        mode: "0644"
+
+    - name: Enable cluster watchdog timer
+      ansible.builtin.systemd:
+        name: openclaw-watchdog-cluster.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
 - name: Deploy NFS watchdog on slave nodes
   hosts: openclaw_nodes
   become: true
