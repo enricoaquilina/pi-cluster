@@ -42,6 +42,17 @@ LOG_DB = "/tmp/openclaw-dispatch-log.db"
 GATEWAY_CONTAINER = "openclaw-openclaw-gateway-1"
 MC_API = "http://127.0.0.1:8000/api"
 MC_KEY = "860e75126051c283758226e6852fcb687b1423c2b7c0af51"
+OPENROUTER_API_KEY = "REDACTED_OPENROUTER_API_KEY"
+
+# Budget limits (USD)
+BUDGET_DAILY = 5.00
+BUDGET_WEEKLY = 25.00
+BUDGET_MONTHLY = 75.00
+BUDGET_ALERT_THRESHOLD = 0.80  # Alert at 80%
+
+# Telegram alerting
+TELEGRAM_BOT_TOKEN = ""  # Read from watchdog script at startup
+TELEGRAM_CHAT_ID = "1630148884"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("cluster")
@@ -436,6 +447,162 @@ async def get_dispatch_stats():
             "SELECT task_type, COUNT(*) c, SUM(success) ok FROM dispatch_log GROUP BY task_type")
         stats["by_task_type"] = {r["task_type"]: {"count": r["c"], "success_rate": round(r["ok"] / r["c"] * 100, 1)} for r in rows}
         return stats
+
+
+# ── Budget Tracking ──────────────────────────────────────────────────────────
+
+# Model costs per 1M tokens (input/output) from OpenRouter
+MODEL_COSTS = {
+    "openrouter/anthropic/claude-sonnet-4.6": {"input": 3.00, "output": 15.00},
+    "openrouter/anthropic/claude-opus-4.6": {"input": 5.00, "output": 25.00},
+    "openrouter/openai/gpt-5.4": {"input": 2.50, "output": 15.00},
+    "openrouter/z-ai/glm-5": {"input": 0.72, "output": 2.30},
+    "openrouter/qwen/qwen3.5-plus-02-15": {"input": 0.26, "output": 1.56},
+    "openrouter/minimax/minimax-m2.7": {"input": 0.30, "output": 1.20},
+    "openrouter/google/gemini-2.5-flash": {"input": 0.30, "output": 2.50},
+    "openrouter/google/gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
+    "openrouter/deepseek/deepseek-v3.2": {"input": 0.26, "output": 0.38},
+}
+
+
+def get_openrouter_usage() -> dict:
+    """Fetch real usage data from OpenRouter API."""
+    try:
+        req = Request(
+            "https://openrouter.ai/api/v1/auth/key",
+            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
+        )
+        resp = urlopen(req, timeout=10)
+        data = json.loads(resp.read().decode())["data"]
+        return {
+            "daily_usd": data.get("usage_daily", 0),
+            "weekly_usd": data.get("usage_weekly", 0),
+            "monthly_usd": data.get("usage_monthly", 0),
+            "total_usd": data.get("usage", 0),
+        }
+    except Exception as e:
+        log.error(f"OpenRouter usage fetch failed: {e}")
+        return {"error": str(e)}
+
+
+def _load_telegram_token():
+    """Load Telegram bot token from watchdog script."""
+    global TELEGRAM_BOT_TOKEN
+    if TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        import re
+        with open("/home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh") as f:
+            match = re.search(r'TELEGRAM_BOT_TOKEN="([^"]+)"', f.read())
+        if match:
+            TELEGRAM_BOT_TOKEN = match.group(1)
+    except Exception:
+        pass
+
+
+def send_telegram(message: str):
+    """Send a Telegram alert (best-effort)."""
+    _load_telegram_token()
+    if not TELEGRAM_BOT_TOKEN:
+        return
+    try:
+        payload = json.dumps({
+            "chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"
+        }).encode()
+        req = Request(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            data=payload, method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        urlopen(req, timeout=10)
+    except Exception:
+        pass
+
+
+@app.get("/budget")
+def get_budget():
+    """Current OpenRouter spend vs budget limits."""
+    usage = get_openrouter_usage()
+    if "error" in usage:
+        raise HTTPException(503, detail=usage["error"])
+
+    return {
+        "usage": usage,
+        "limits": {
+            "daily": BUDGET_DAILY,
+            "weekly": BUDGET_WEEKLY,
+            "monthly": BUDGET_MONTHLY,
+        },
+        "remaining": {
+            "daily": round(BUDGET_DAILY - usage["daily_usd"], 2),
+            "weekly": round(BUDGET_WEEKLY - usage["weekly_usd"], 2),
+            "monthly": round(BUDGET_MONTHLY - usage["monthly_usd"], 2),
+        },
+        "alerts": {
+            "daily": usage["daily_usd"] >= BUDGET_DAILY * BUDGET_ALERT_THRESHOLD,
+            "weekly": usage["weekly_usd"] >= BUDGET_WEEKLY * BUDGET_ALERT_THRESHOLD,
+            "monthly": usage["monthly_usd"] >= BUDGET_MONTHLY * BUDGET_ALERT_THRESHOLD,
+        },
+        "model_costs": MODEL_COSTS,
+    }
+
+
+@app.get("/budget/check")
+def check_budget_alerts():
+    """Check budget and send Telegram alert if threshold reached."""
+    usage = get_openrouter_usage()
+    if "error" in usage:
+        return {"error": usage["error"]}
+
+    alerts = []
+    if usage["daily_usd"] >= BUDGET_DAILY * BUDGET_ALERT_THRESHOLD:
+        alerts.append(f"Daily: ${usage['daily_usd']:.2f} / ${BUDGET_DAILY:.2f}")
+    if usage["weekly_usd"] >= BUDGET_WEEKLY * BUDGET_ALERT_THRESHOLD:
+        alerts.append(f"Weekly: ${usage['weekly_usd']:.2f} / ${BUDGET_WEEKLY:.2f}")
+    if usage["monthly_usd"] >= BUDGET_MONTHLY * BUDGET_ALERT_THRESHOLD:
+        alerts.append(f"Monthly: ${usage['monthly_usd']:.2f} / ${BUDGET_MONTHLY:.2f}")
+
+    if alerts:
+        msg = f"*OpenRouter Budget Alert*\n" + "\n".join(alerts)
+        send_telegram(msg)
+        return {"alerted": True, "alerts": alerts}
+
+    return {"alerted": False, "usage": usage}
+
+
+@app.get("/budget/digest")
+async def get_daily_digest():
+    """Daily digest: dispatches, success rate, spend, busiest node."""
+    usage = get_openrouter_usage()
+    stats = await get_dispatch_stats()
+
+    digest = {
+        "spend": usage,
+        "dispatches": stats,
+        "budget_remaining": {
+            "daily": round(BUDGET_DAILY - usage.get("daily_usd", 0), 2),
+            "monthly": round(BUDGET_MONTHLY - usage.get("monthly_usd", 0), 2),
+        },
+    }
+
+    # Build Telegram message
+    total = stats.get("total", 0)
+    rate = stats.get("success_rate", 0)
+    daily = usage.get("daily_usd", 0)
+    monthly = usage.get("monthly_usd", 0)
+    busiest = max(stats.get("by_node", {}).items(), key=lambda x: x[1]["count"], default=("none", {"count": 0}))
+
+    msg = (
+        f"*Daily Cluster Digest*\n"
+        f"Dispatches: {total} ({rate}% success)\n"
+        f"Busiest: {busiest[0]} ({busiest[1]['count']} tasks)\n"
+        f"Spend today: ${daily:.2f} / ${BUDGET_DAILY:.2f}\n"
+        f"Spend month: ${monthly:.2f} / ${BUDGET_MONTHLY:.2f}"
+    )
+    send_telegram(msg)
+
+    digest["telegram_sent"] = True
+    return digest
 
 
 if __name__ == "__main__":
