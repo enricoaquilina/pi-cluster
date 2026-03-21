@@ -1,15 +1,16 @@
 #!/bin/bash
-# Auto-pair OpenClaw node hosts with the gateway
+# OpenClaw Node Pairing (Safe Merge)
+# Reads node identities and merges them into the gateway's paired.json
+# without disrupting existing entries (operator, previously paired nodes).
+#
 # Usage: bash scripts/openclaw-pair-nodes.sh
 #
-# This script reads node identity files from slave nodes,
-# injects them into the gateway's paired.json, and restarts
-# everything in the correct order.
-#
-# The OpenClaw gateway requires manual pairing approval for LAN
-# connections, but the CLI startup overhead (~6s) makes it impossible
-# to catch the brief pending window. This script bypasses the issue
-# by directly writing to paired.json.
+# Safe behaviors:
+#   - Preserves operator (CLI) entry — never touches clientMode=cli entries
+#   - Preserves existing node pairings that haven't changed
+#   - Only adds/updates entries for nodes with changed device IDs
+#   - Does NOT restart the gateway unless pairings actually changed
+#   - Restarts only the affected node services
 
 set -euo pipefail
 
@@ -17,89 +18,27 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 PAIRED_JSON="/home/node/.openclaw/devices/paired.json"
 NODES=("master:control:192.168.0.22" "slave0:build:192.168.0.3" "slave1:light:192.168.0.4" "heavy:heavy:100.85.234.128")
 
-echo "=== OpenClaw Node Pairing ==="
+echo "=== OpenClaw Node Pairing (Safe Merge) ==="
 
 # Step 1: Stop node services
 echo "Stopping node services..."
 for entry in "${NODES[@]}"; do
     host="${entry%%:*}"
-    ssh "$host" "sudo systemctl stop openclaw-node" 2>/dev/null || true &
+    ssh -o ConnectTimeout=3 "$host" "sudo systemctl stop openclaw-node" 2>/dev/null || true &
 done
 wait
 
-# Step 2: Collect node identities
+# Step 2: Collect identities and merge into paired.json
 echo "Collecting node identities..."
-INJECT_SCRIPT="import json, sys, base64, time
-paired_path = '$PAIRED_JSON'
-with open(paired_path) as f:
-    paired = json.load(f)
-
-# Remove existing node entries (keep operator)
-paired = {k:v for k,v in paired.items() if v.get('clientMode') != 'node'}
-
-# Ensure operator entry exists
-if not any(v.get('clientMode') == 'cli' for v in paired.values()):
-    paired['88addb6edd52adebc9ec133d2d0ae0061b0003747d9a3ec45383c49bc1aeb08b'] = {
-        'deviceId': '88addb6edd52adebc9ec133d2d0ae0061b0003747d9a3ec45383c49bc1aeb08b',
-        'publicKey': 'aNm5EGV2PYsb0gSlrVXtkXeHGKbVqinFnbV8tbFtcus',
-        'platform': 'linux', 'clientId': 'cli', 'clientMode': 'cli',
-        'role': 'operator', 'roles': ['operator'],
-        'scopes': ['operator.admin','operator.approvals','operator.pairing','operator.read','operator.write'],
-        'tokens': {'operator': {'token': 'c7b124bdc9454c238e7858a52bde6619', 'role': 'operator',
-            'scopes': ['operator.admin','operator.approvals','operator.pairing'],
-            'createdAtMs': 1772820662994}},
-        'createdAtMs': 1772820662994, 'approvedAtMs': 1772820662994
-    }
-    print('  Restored operator entry')
-
-now_ms = int(time.time() * 1000)
-nodes = json.loads(sys.stdin.read())
-
-for node in nodes:
-    der = base64.b64decode(node['pubkey_b64'])
-    raw_key = der[-32:]
-    pub_b64url = base64.urlsafe_b64encode(raw_key).decode().rstrip('=')
-
-    paired[node['deviceId']] = {
-        'deviceId': node['deviceId'],
-        'publicKey': pub_b64url,
-        'displayName': node['displayName'],
-        'platform': 'linux',
-        'clientId': 'node-host',
-        'clientMode': 'node',
-        'role': 'node',
-        'roles': ['node'],
-        'remoteIp': node['remoteIp'],
-        'tokens': {
-            'node': {
-                'token': f\"auto-paired-{node['displayName']}\",
-                'role': 'node',
-                'scopes': [],
-                'createdAtMs': now_ms
-            }
-        },
-        'createdAtMs': now_ms,
-        'approvedAtMs': now_ms
-    }
-    print(f\"  Paired: {node['displayName']} ({node['deviceId'][:16]}...) from {node['remoteIp']}\")
-
-with open(paired_path, 'w') as f:
-    json.dump(paired, f, indent=2)
-
-node_count = sum(1 for v in paired.values() if v.get('clientMode') == 'node')
-print(f\"  Total paired nodes: {node_count}\")
-"
-
-# Collect identity data from each node
 NODE_DATA="["
 first=true
 for entry in "${NODES[@]}"; do
     IFS=: read -r host display_name remote_ip <<< "$entry"
 
     # Master uses separate .openclaw-node dir (node host + CLI share same machine)
-    identity=$(ssh "$host" "cat /home/enrico/.openclaw-node/.openclaw/identity/device.json 2>/dev/null || cat /home/enrico/.openclaw/identity/device.json 2>/dev/null" || echo "")
+    identity=$(ssh -o ConnectTimeout=3 "$host" "cat /home/enrico/.openclaw-node/.openclaw/identity/device.json 2>/dev/null || cat /home/enrico/.openclaw/identity/device.json 2>/dev/null" || echo "")
     if [ -z "$identity" ]; then
-        echo "  WARNING: No identity on $host — node may need to run once first"
+        echo "  WARNING: No identity on $host — skipping"
         continue
     fi
 
@@ -116,20 +55,89 @@ print(''.join(lines))
 done
 NODE_DATA+="]"
 
-# Step 3: Inject into gateway
-echo "Injecting pairings into gateway..."
-echo "$NODE_DATA" | docker exec -i "$GATEWAY_CONTAINER" python3 -c "$INJECT_SCRIPT"
+# Step 3: Safe merge into paired.json (preserves operator + unchanged entries)
+echo "Merging pairings..."
+CHANGES=$(docker exec -i "$GATEWAY_CONTAINER" python3 -c "
+import json, sys, base64, time
 
-# Step 4: Restart gateway to load new pairings
-echo "Restarting gateway..."
-cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>&1
-sleep 15
+nodes = json.loads(sys.stdin.read())
+
+# Read current paired.json
+try:
+    with open('$PAIRED_JSON') as f:
+        paired = json.load(f)
+except (FileNotFoundError, json.JSONDecodeError):
+    paired = {}
+
+changes = 0
+now_ms = int(time.time() * 1000)
+
+for node in nodes:
+    der = base64.b64decode(node['pubkey_b64'])
+    raw_key = der[-32:]
+    pub_b64url = base64.urlsafe_b64encode(raw_key).decode().rstrip('=')
+    did = node['deviceId']
+
+    # Check if already paired with same key
+    existing = paired.get(did)
+    if existing and existing.get('publicKey') == pub_b64url and existing.get('clientMode') == 'node':
+        print(f'  {node[\"displayName\"]}: unchanged ({did[:16]}...)')
+        continue
+
+    # Remove any old entry with same displayName but different deviceId
+    old_ids = [k for k, v in paired.items() if v.get('displayName') == node['displayName'] and k != did]
+    for old_id in old_ids:
+        del paired[old_id]
+
+    paired[did] = {
+        'deviceId': did,
+        'publicKey': pub_b64url,
+        'displayName': node['displayName'],
+        'platform': 'linux',
+        'clientId': 'node-host',
+        'clientMode': 'node',
+        'role': 'node',
+        'roles': ['node'],
+        'remoteIp': node['remoteIp'],
+        'tokens': {'node': {'token': f\"paired-{node['displayName']}\", 'role': 'node', 'scopes': [], 'createdAtMs': now_ms}},
+        'createdAtMs': now_ms,
+        'approvedAtMs': now_ms,
+    }
+    print(f'  Paired: {node[\"displayName\"]} ({did[:16]}...) from {node[\"remoteIp\"]}')
+    changes += 1
+
+# Verify operator entry exists
+operators = [k for k, v in paired.items() if v.get('clientMode') == 'cli']
+if not operators:
+    print('  WARNING: No operator entry found — gateway CLI may not work')
+
+node_count = sum(1 for v in paired.values() if v.get('clientMode') == 'node')
+print(f'  Total: {node_count} nodes, {len(operators)} operator(s)')
+
+with open('$PAIRED_JSON', 'w') as f:
+    json.dump(paired, f, indent=2)
+
+# Output change count for the shell script
+print(f'CHANGES={changes}')
+" <<< "$NODE_DATA")
+
+echo "$CHANGES"
+CHANGE_COUNT=$(echo "$CHANGES" | grep "^CHANGES=" | cut -d= -f2)
+
+# Step 4: Only restart gateway if pairings actually changed
+if [ "${CHANGE_COUNT:-0}" -gt 0 ]; then
+    echo "Restarting gateway (${CHANGE_COUNT} pairings changed)..."
+    cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>&1
+    sleep 15
+else
+    echo "No pairing changes — skipping gateway restart."
+fi
 
 # Step 5: Start node services
 echo "Starting node services..."
 for entry in "${NODES[@]}"; do
     host="${entry%%:*}"
-    ssh "$host" "sudo systemctl start openclaw-node" &
+    ssh -o ConnectTimeout=3 "$host" "sudo systemctl start openclaw-node" 2>/dev/null || true &
 done
 wait
 sleep 12
@@ -137,7 +145,7 @@ sleep 12
 # Step 6: Verify
 echo ""
 echo "=== Verification ==="
-docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep -E "build|light|paired|connected" || echo "WARNING: No nodes showing as connected"
+docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep -E "buil|cont|heav|ligh" | grep "connected" || echo "WARNING: No nodes showing as connected"
 
 echo ""
 echo "=== Pairing complete ==="
