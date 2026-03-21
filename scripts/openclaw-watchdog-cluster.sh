@@ -133,16 +133,12 @@ print('false')
 
         if [ ${#still_disconnected[@]} -eq 0 ]; then
             log "Recovery successful: all nodes reconnected"
-            # Clear any previous alert state
             save_state '{"gateway_alert":"false","node_alert":"false"}'
 
-            # Notify recovery
-            prev_state=$(load_state)
-            was_alerted=$(echo "$prev_state" | python3 -c "import json,sys; print(json.load(sys.stdin).get('node_alert','false'))" 2>/dev/null || echo "false")
-            if [ "$was_alerted" = "true" ]; then
-                send_telegram "🟢 *OpenClaw Cluster Recovered*
-All nodes reconnected: ${connected[*]} ${disconnected[*]}"
-            fi
+            # Always notify on auto-recovery so you know it happened
+            send_telegram "🔄 *OpenClaw Auto-Recovery*
+Detected disconnected: ${disconnected[*]}
+Auto-repaired successfully — all nodes back online."
         else
             log "Recovery partial: still disconnected: ${still_disconnected[*]}"
             prev_state=$(load_state)
