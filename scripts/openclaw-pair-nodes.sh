@@ -16,7 +16,7 @@ set -euo pipefail
 
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 PAIRED_JSON="/home/node/.openclaw/devices/paired.json"
-NODES=("master:control:192.168.0.22" "slave0:build:192.168.0.3" "slave1:light:192.168.0.4" "heavy:heavy:192.168.4.100")
+NODES=("master:control:192.168.0.22" "slave0:build:192.168.0.3" "slave1:light:192.168.0.4" "heavy:heavy:192.168.0.5")
 
 echo "=== OpenClaw Node Pairing (Safe Merge) ==="
 
