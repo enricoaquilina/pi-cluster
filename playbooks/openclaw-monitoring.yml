@@ -34,6 +34,15 @@
         job: "cp /home/enrico/.openclaw/openclaw.json /home/enrico/.openclaw/openclaw.json.bak.$(date +\\%Y\\%m\\%d)"
         cron_file: openclaw-backup
 
+    - name: Deploy openclaw version check cron (nightly)
+      ansible.builtin.cron:
+        name: "openclaw version check"
+        minute: "0"
+        hour: "2"
+        user: enrico
+        job: "/home/enrico/homelab/scripts/openclaw-version-check.sh --upgrade >> /var/log/openclaw-version.log 2>&1"
+        cron_file: openclaw-version
+
     - name: Deploy old backup cleanup cron
       ansible.builtin.cron:
         name: "openclaw backup cleanup"

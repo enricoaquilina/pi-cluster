@@ -19,9 +19,9 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODES=("slave0" "slave1" "heavy")
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 
-# Telegram alert (uses templated watchdog's env or falls back)
-TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+# Telegram config (read from watchdog script if available)
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-$(grep -oP 'TELEGRAM_BOT_TOKEN="\K[^"]+' /home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh 2>/dev/null || echo "")}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-$(grep -oP 'TELEGRAM_CHAT_ID="\K[^"]+' /home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh 2>/dev/null || echo "")}"
 
 send_telegram() {
     if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
