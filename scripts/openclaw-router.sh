@@ -32,14 +32,15 @@ best_node=$(python3 -c "
 import json
 
 task_type = '$TASK_TYPE'
-max_ram = {'build': 85, 'light': 80, 'heavy': 90}
+max_ram = {'control': 70, 'build': 85, 'light': 80, 'heavy': 90}
 affinity = {
-    'coding': ['build', 'heavy', 'light'],
-    'research': ['light', 'build', 'heavy'],
-    'compute': ['heavy', 'build', 'light'],
-    'any': ['heavy', 'build', 'light'],
+    'coding': ['build', 'control', 'heavy', 'light'],
+    'research': ['light', 'control', 'build', 'heavy'],
+    'compute': ['heavy', 'build', 'control', 'light'],
+    'orchestrator': ['control', 'heavy', 'build', 'light'],
+    'any': ['heavy', 'control', 'build', 'light'],
 }
-roles = {'build': 'coding', 'light': 'research', 'heavy': 'compute'}
+roles = {'control': 'orchestrator', 'build': 'coding', 'light': 'research', 'heavy': 'compute'}
 
 try:
     with open('$CACHE_FILE') as f:
