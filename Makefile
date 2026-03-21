@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade lint test validate
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test lint test validate
 
 ping:
 	ansible all -m ping
@@ -107,6 +107,9 @@ openclaw-version:
 
 openclaw-upgrade:
 	@bash scripts/openclaw-version-check.sh --upgrade
+
+openclaw-test:
+	@bash scripts/openclaw-e2e-test.sh
 
 openclaw-health:
 	@bash scripts/openclaw-health.sh

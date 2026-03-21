@@ -16,13 +16,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 connected_raw=$(docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
 
 if [ -f "$CACHE_FILE" ]; then
+    export CONNECTED_RAW="$connected_raw"
     python3 -c "
-import json
+import json, os
 
 with open('$CACHE_FILE') as f:
     data = json.load(f)
 
-connected = set('$connected_raw'.split())
+connected = set(os.environ.get('CONNECTED_RAW', '').split())
 
 for n in data.get('nodes', []):
     name = n['name']
