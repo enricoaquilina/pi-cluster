@@ -1,0 +1,10 @@
+[Unit]
+Description=Run OpenClaw cluster watchdog every 2 minutes
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=120
+AccuracySec=15
+
+[Install]
+WantedBy=timers.target
