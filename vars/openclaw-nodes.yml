@@ -1,5 +1,8 @@
 # OpenClaw distributed agent cluster variables
 
+# OpenClaw version pin — v2026.3.13 has SYSTEM_RUN_DENIED regression (#47650)
+openclaw_version: "2026.3.11"
+
 # Master gateway configuration
 openclaw_gateway_host: 192.168.0.22
 openclaw_gateway_port: 18789
