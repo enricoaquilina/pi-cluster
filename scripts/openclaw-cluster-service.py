@@ -41,8 +41,8 @@ CACHE_FILE = "/tmp/openclaw-node-stats.json"
 LOG_DB = "/tmp/openclaw-dispatch-log.db"
 GATEWAY_CONTAINER = "openclaw-openclaw-gateway-1"
 MC_API = "http://127.0.0.1:8000/api"
-MC_KEY = "860e75126051c283758226e6852fcb687b1423c2b7c0af51"
-OPENROUTER_API_KEY = "REDACTED_OPENROUTER_API_KEY"
+MC_KEY = os.environ.get("MC_API_KEY", "860e75126051c283758226e6852fcb687b1423c2b7c0af51")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Budget limits (USD)
 BUDGET_DAILY = 5.00
@@ -52,7 +52,7 @@ BUDGET_ALERT_THRESHOLD = 0.80  # Alert at 80%
 
 # Telegram alerting
 TELEGRAM_BOT_TOKEN = ""  # Read from watchdog script at startup
-TELEGRAM_CHAT_ID = "1630148884"
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1630148884")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("cluster")

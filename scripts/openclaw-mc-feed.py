@@ -7,7 +7,7 @@ import urllib.request
 
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
 MC_API = "http://127.0.0.1:8000/api"
-MC_KEY = "860e75126051c283758226e6852fcb687b1423c2b7c0af51"
+MC_KEY = os.environ.get("MC_API_KEY", "860e75126051c283758226e6852fcb687b1423c2b7c0af51")
 
 
 def main():
