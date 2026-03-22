@@ -54,7 +54,17 @@ BUDGET_ALERT_THRESHOLD = 0.80  # Alert at 80%
 TELEGRAM_BOT_TOKEN = ""  # Read from watchdog script at startup
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1630148884")
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+LOG_FILE = "/var/log/openclaw-cluster-service.log"
+
+# Structured logging: stdout + file
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE, mode="a"),
+    ],
+)
 log = logging.getLogger("cluster")
 
 # ── Node Definitions ─────────────────────────────────────────────────────────
@@ -156,6 +166,7 @@ async def init_db():
 
 
 async def log_dispatch(entry: dict):
+    # Log to local SQLite
     try:
         async with aiosqlite.connect(LOG_DB) as db:
             await db.execute(
@@ -170,7 +181,29 @@ async def log_dispatch(entry: dict):
             )
             await db.commit()
     except Exception as e:
-        log.error(f"Log dispatch failed: {e}")
+        log.error(f"Log dispatch (sqlite) failed: {e}")
+
+    # Feed to Mission Control dispatch log
+    try:
+        payload = json.dumps({
+            "persona": entry.get("task_type", "unknown"),
+            "node": entry.get("node", "unknown"),
+            "delegate": entry.get("model", ""),
+            "fallback": False,
+            "prompt_preview": (entry.get("command") or "")[:500],
+            "response_preview": (entry.get("output") or "")[:500],
+            "elapsed_ms": entry.get("duration_ms", 0),
+            "status": "success" if entry.get("success") else "error",
+            "error_detail": entry.get("error"),
+        }).encode()
+        req = Request(
+            f"{MC_API}/dispatch/log",
+            data=payload, method="POST",
+            headers={"Content-Type": "application/json", "X-Api-Key": MC_KEY},
+        )
+        urlopen(req, timeout=5)
+    except Exception:
+        pass  # Best-effort, don't fail dispatch on MC logging error
 
 
 # ── Cache ────────────────────────────────────────────────────────────────────
@@ -280,19 +313,38 @@ def route_task(task_type: str) -> Optional[str]:
     return best
 
 
+# ── Task Queue ────────────────────────────────────────────────────────────────
+
+task_queue: asyncio.Queue = asyncio.Queue(maxsize=50)
+QUEUE_TIMEOUT = 30  # seconds to wait for a node to become available
+
+
 # ── Dispatch ─────────────────────────────────────────────────────────────────
 
 async def execute_dispatch(task_type: str, command: str, cwd: Optional[str] = None) -> dict:
     node = route_task(task_type)
     model = MODEL_CONFIG.get(task_type, MODEL_CONFIG["any"])
 
+    # If no node available, wait in queue
+    if not node:
+        log.info(f"QUEUE {task_type}: all nodes busy, waiting up to {QUEUE_TIMEOUT}s")
+        try:
+            for _ in range(QUEUE_TIMEOUT):
+                await asyncio.sleep(1)
+                node = route_task(task_type)
+                if node:
+                    log.info(f"DEQUEUE {task_type} -> {node}")
+                    break
+        except asyncio.CancelledError:
+            pass
+
     if not node:
         await log_dispatch({
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "task_type": task_type, "command": command,
-            "success": False, "error": "no suitable node",
+            "success": False, "error": "no suitable node (queue timeout)",
         })
-        return {"error": "no suitable node (all busy or overloaded)", "node": None}
+        return {"error": f"no suitable node after {QUEUE_TIMEOUT}s queue wait", "node": None}
 
     async with active_lock:
         active_tasks[node] = active_tasks.get(node, 0) + 1
@@ -397,8 +449,8 @@ def post_node_stats(stats: NodeStats):
 
 @app.get("/concurrency")
 def get_concurrency():
-    """Active task counts per node."""
-    return {"active_tasks": dict(active_tasks), "limits": MAX_CONCURRENT}
+    """Active task counts per node + queue config."""
+    return {"active_tasks": dict(active_tasks), "limits": MAX_CONCURRENT, "queue_timeout_s": QUEUE_TIMEOUT}
 
 
 @app.post("/task/start")
