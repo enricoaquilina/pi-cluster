@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=enrico
+EnvironmentFile=/home/enrico/homelab/scripts/.env.cluster
 ExecStart=/usr/bin/python3 /home/enrico/homelab/scripts/openclaw-cluster-service.py
 Restart=always
 RestartSec=5

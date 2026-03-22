@@ -15,3 +15,4 @@ ansible/logs/
 # Python virtual environments
 .venv/
 __pycache__/
+scripts/.env.cluster
