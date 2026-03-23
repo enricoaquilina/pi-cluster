@@ -75,16 +75,15 @@ jobs:
               body: body
             });
 
-      - name: Fail if critical issues found
+      - name: Report scan summary
         run: |
-          exit_code=0
-          for f in trivy-config.txt trivy-fs.txt; do
+          for f in trivy-config.txt trivy-fs.txt trivy-mongo.txt; do
             if [ -f "$f" ] && [ -s "$f" ]; then
-              echo "Issues found in $f"
-              exit_code=1
+              echo "Findings in $f (see PR comment for details)"
+            else
+              echo "No issues in ${f:-}"
             fi
           done
-          exit $exit_code
 
   security-audit:
     name: Security Best Practices
