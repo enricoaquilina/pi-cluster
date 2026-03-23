@@ -31,8 +31,19 @@ from pathlib import Path
 from typing import Optional
 from urllib.request import Request, urlopen
 
+# Auto-load .env.cluster if present (secrets, auth keys)
+_env_file = Path(__file__).resolve().parent / ".env.cluster"
+if _env_file.is_file():
+    with open(_env_file) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 import aiosqlite
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -41,7 +52,7 @@ CACHE_FILE = "/tmp/openclaw-node-stats.json"
 LOG_DB = "/tmp/openclaw-dispatch-log.db"
 GATEWAY_CONTAINER = "openclaw-openclaw-gateway-1"
 MC_API = "http://127.0.0.1:8000/api"
-MC_KEY = os.environ.get("MC_API_KEY", "860e75126051c283758226e6852fcb687b1423c2b7c0af51")
+MC_KEY = os.environ.get("MC_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Budget limits (USD)
@@ -53,6 +64,23 @@ BUDGET_ALERT_THRESHOLD = 0.80  # Alert at 80%
 # Telegram alerting
 TELEGRAM_BOT_TOKEN = ""  # Read from watchdog script at startup
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "1630148884")
+
+# API authentication
+CLUSTER_API_KEY = os.environ.get("CLUSTER_API_KEY", "")
+NODE_PUSH_SECRET = os.environ.get("NODE_PUSH_SECRET", "")
+
+_api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
+_node_secret_header = APIKeyHeader(name="X-Node-Secret", auto_error=False)
+
+
+async def require_api_key(key: str = Depends(_api_key_header)):
+    if not CLUSTER_API_KEY or key != CLUSTER_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+
+
+async def require_node_secret(key: str = Depends(_node_secret_header)):
+    if not NODE_PUSH_SECRET or key != NODE_PUSH_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid or missing node secret")
 
 LOG_FILE = "/var/log/openclaw-cluster-service.log"
 
@@ -428,7 +456,7 @@ def get_route(task_type: TaskType):
             "model": model["primary"], "fallbacks": model["fallbacks"], "tier": model["tier"]}
 
 
-@app.post("/dispatch")
+@app.post("/dispatch", dependencies=[Depends(require_api_key)])
 async def post_dispatch(req: DispatchRequest):
     """Execute command on the best node for the task type. Logged."""
     result = await execute_dispatch(req.task_type.value, req.command, req.cwd)
@@ -437,7 +465,7 @@ async def post_dispatch(req: DispatchRequest):
     return result
 
 
-@app.post("/node-stats")
+@app.post("/node-stats", dependencies=[Depends(require_node_secret)])
 def post_node_stats(stats: NodeStats):
     """Receive pushed stats from a node agent."""
     data = stats.model_dump()
@@ -453,7 +481,7 @@ def get_concurrency():
     return {"active_tasks": dict(active_tasks), "limits": MAX_CONCURRENT, "queue_timeout_s": QUEUE_TIMEOUT}
 
 
-@app.post("/task/start")
+@app.post("/task/start", dependencies=[Depends(require_api_key)])
 async def post_task_start(req: TaskNode):
     """Register a task start for concurrency tracking."""
     async with active_lock:
@@ -461,7 +489,7 @@ async def post_task_start(req: TaskNode):
     return {"ok": True, "active": active_tasks.get(req.node, 0)}
 
 
-@app.post("/task/end")
+@app.post("/task/end", dependencies=[Depends(require_api_key)])
 async def post_task_end(req: TaskNode):
     """Register a task end."""
     async with active_lock:
@@ -538,18 +566,11 @@ def get_openrouter_usage() -> dict:
 
 
 def _load_telegram_token():
-    """Load Telegram bot token from watchdog script."""
+    """Load Telegram bot token from environment (.env.cluster auto-loaded at startup)."""
     global TELEGRAM_BOT_TOKEN
     if TELEGRAM_BOT_TOKEN:
         return
-    try:
-        import re
-        with open("/home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh") as f:
-            match = re.search(r'TELEGRAM_BOT_TOKEN="([^"]+)"', f.read())
-        if match:
-            TELEGRAM_BOT_TOKEN = match.group(1)
-    except Exception:
-        pass
+    TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 
 def send_telegram(message: str):
@@ -599,7 +620,7 @@ def get_budget():
     }
 
 
-@app.get("/budget/check")
+@app.get("/budget/check", dependencies=[Depends(require_api_key)])
 def check_budget_alerts():
     """Check budget and send Telegram alert if threshold reached."""
     usage = get_openrouter_usage()
@@ -622,7 +643,7 @@ def check_budget_alerts():
     return {"alerted": False, "usage": usage}
 
 
-@app.get("/budget/digest")
+@app.get("/budget/digest", dependencies=[Depends(require_api_key)])
 async def get_daily_digest():
     """Daily digest: dispatches, success rate, spend, busiest node."""
     usage = get_openrouter_usage()

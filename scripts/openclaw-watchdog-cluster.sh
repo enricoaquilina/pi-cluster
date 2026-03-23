@@ -17,9 +17,14 @@ SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 LOG_FILE="/var/log/openclaw-watchdog.log"
 
-# Telegram config
-TELEGRAM_BOT_TOKEN="REDACTED_TELEGRAM_BOT_TOKEN"
-TELEGRAM_CHAT_ID="1630148884"
+# Telegram config — loaded from .env.cluster (not hardcoded)
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env.cluster"
+if [ -f "$ENV_FILE" ]; then
+    # shellcheck source=/dev/null
+    source "$ENV_FILE"
+fi
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 
 EXPECTED_NODES=("control" "build" "light" "heavy")
 

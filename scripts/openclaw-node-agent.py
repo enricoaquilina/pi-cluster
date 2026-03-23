@@ -20,6 +20,7 @@ import urllib.request
 
 NODE_NAME = os.environ.get("OPENCLAW_NODE_NAME", socket.gethostname())
 MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", "http://192.168.0.22:8520")
+NODE_PUSH_SECRET = os.environ.get("NODE_PUSH_SECRET", "")
 
 
 def collect_stats():
@@ -97,12 +98,15 @@ def collect_stats():
 def push_stats(stats):
     """Push stats to master's router API."""
     payload = json.dumps(stats).encode()
+    headers = {"Content-Type": "application/json"}
+    if NODE_PUSH_SECRET:
+        headers["X-Node-Secret"] = NODE_PUSH_SECRET
     try:
         req = urllib.request.Request(
             f"{MASTER_URL}/node-stats",
             data=payload,
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers=headers,
         )
         urllib.request.urlopen(req, timeout=5)
     except Exception as e:
