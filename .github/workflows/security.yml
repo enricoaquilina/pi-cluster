@@ -19,7 +19,7 @@ jobs:
             openclaw/
 
       - name: Run Trivy on built image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: openclaw-scan:local
           format: table
@@ -28,7 +28,7 @@ jobs:
           output: trivy-results.txt
 
       - name: Run Trivy on mongo:7
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: mongo:7
           format: table
