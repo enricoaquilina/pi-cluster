@@ -2,12 +2,13 @@
 """Push cached node stats to Mission Control API."""
 
 import json
+import os
 import sys
 import urllib.request
 
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
 MC_API = "http://127.0.0.1:8000/api"
-MC_KEY = os.environ.get("MC_API_KEY", "860e75126051c283758226e6852fcb687b1423c2b7c0af51")
+MC_KEY = os.environ.get("MC_API_KEY", "")
 
 
 def main():

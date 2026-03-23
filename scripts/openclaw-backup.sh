@@ -77,6 +77,19 @@ log "Cleaning old backups..."
 find "$BACKUP_ROOT" -name "backup-*.tar.gz" -mtime +"$RETENTION_DAYS" -delete 2>/dev/null
 BACKUP_COUNT=$(find "$BACKUP_ROOT" -name "backup-*.tar.gz" | wc -l)
 
+# Off-site backup to heavy node
+REMOTE_BACKUP_DIR="enrico@192.168.0.5:/home/enrico/backups"
+log "Syncing to off-site (heavy)..."
+ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "mkdir -p /home/enrico/backups" 2>/dev/null
+if rsync -az --timeout=30 "$BACKUP_ROOT/backup-$DATE.tar.gz" "$REMOTE_BACKUP_DIR/" 2>/dev/null; then
+    log "Off-site sync complete"
+    # Clean old remote backups beyond retention
+    ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 \
+        "find /home/enrico/backups -name 'backup-*.tar.gz' -mtime +$RETENTION_DAYS -delete" 2>/dev/null
+else
+    log "WARN: Off-site sync to heavy failed"
+fi
+
 # Verify
 BACKUP_SIZE=$(du -sh "$BACKUP_ROOT/backup-$DATE.tar.gz" 2>/dev/null | cut -f1)
 log "Backup complete: $BACKUP_SIZE ($BACKUP_COUNT backups retained)"
