@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test lint test validate
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test security-scan security-audit dr-test lint test validate
 
 ping:
 	ansible all -m ping
@@ -117,6 +117,19 @@ openclaw-health:
 openclaw-doctor: doctor openclaw-health
 	@echo ""
 	@echo "=== Full Cluster Health Complete ==="
+
+# Security
+security-scan:
+	@echo "=== Docker Image Security Scan ==="
+	@command -v trivy > /dev/null 2>&1 || { echo "Install trivy: https://aquasecurity.github.io/trivy/"; exit 1; }
+	trivy image --severity CRITICAL,HIGH openclaw-custom:local
+	trivy image --severity CRITICAL,HIGH mongo:7
+
+security-audit:
+	@bash scripts/openclaw-security-audit.sh
+
+dr-test:
+	@bash scripts/openclaw-dr-test.sh
 
 # CI/CD — Linting and Validation
 lint:

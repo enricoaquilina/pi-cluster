@@ -214,8 +214,12 @@ fi
 
 # Telegram notification on failure
 if $TELEGRAM_MODE && [ "$FAIL" -gt 0 ]; then
-    TELEGRAM_BOT_TOKEN=$(grep -oP 'TELEGRAM_BOT_TOKEN="\K[^"]+' "$SCRIPT_DIR/openclaw-watchdog-cluster.sh" 2>/dev/null || echo "")
-    if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+    ENV_FILE="$SCRIPT_DIR/.env.cluster"
+    if [ -f "$ENV_FILE" ]; then
+        # shellcheck source=/dev/null
+        source "$ENV_FILE"
+    fi
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
         failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
         curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=1630148884" \
