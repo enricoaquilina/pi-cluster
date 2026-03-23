@@ -96,7 +96,7 @@ fi
 # 5. Docker containers not running as root (where avoidable)
 echo "5. Container user"
 if command -v docker > /dev/null 2>&1; then
-    for container in mongodb; do
+    for container in mongodb openclaw-openclaw-gateway-1 openclaw-openclaw-cli-1; do
         user=$(docker inspect "$container" --format '{{.Config.User}}' 2>/dev/null)
         if [ -n "$user" ] && [ "$user" != "0" ] && [ "$user" != "root" ] && [ "$user" != "0:0" ]; then
             pass "$container runs as non-root ($user)"
