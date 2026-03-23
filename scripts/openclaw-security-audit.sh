@@ -34,18 +34,24 @@ fi
 # 2. Service port bindings
 echo "2. Port bindings"
 if command -v ss > /dev/null 2>&1; then
-    # MongoDB should be on 127.0.0.1
-    if ss -tlnp 2>/dev/null | grep ':27017' | grep -q '0.0.0.0'; then
-        fail "MongoDB binding" "bound to 0.0.0.0 (should be 127.0.0.1)"
+    # MongoDB should be on 127.0.0.1 (check local address column only)
+    mongo_bind=$(ss -tlnp 2>/dev/null | awk '/:27017 /{print $4}')
+    if echo "$mongo_bind" | grep -q '127.0.0.1'; then
+        pass "MongoDB bound to localhost ($mongo_bind)"
+    elif [ -n "$mongo_bind" ]; then
+        fail "MongoDB binding" "$mongo_bind (should be 127.0.0.1:27017)"
     else
-        pass "MongoDB bound to localhost"
+        warn "MongoDB binding" "port 27017 not listening"
     fi
 
-    # Gateway should be on 192.168.0.22
-    if ss -tlnp 2>/dev/null | grep ':18789' | grep -q '0.0.0.0'; then
-        fail "Gateway binding" "bound to 0.0.0.0 (should be 192.168.0.22)"
+    # Gateway should be on 192.168.0.22 (check local address column only)
+    gw_bind=$(ss -tlnp 2>/dev/null | awk '/:18789 /{print $4}')
+    if echo "$gw_bind" | grep -q '192.168.0.22'; then
+        pass "Gateway bound to LAN IP ($gw_bind)"
+    elif [ -n "$gw_bind" ]; then
+        fail "Gateway binding" "$gw_bind (should be 192.168.0.22:18789)"
     else
-        pass "Gateway bound to LAN IP"
+        warn "Gateway binding" "port 18789 not listening"
     fi
 else
     warn "Port bindings" "ss not available, skipping"
@@ -60,7 +66,12 @@ if command -v docker > /dev/null 2>&1; then
             mem_mb=$((mem_limit / 1024 / 1024))
             pass "Memory limit $container: ${mem_mb}MB"
         elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
-            fail "Memory limit $container" "no limit set"
+            # Check if kernel supports cgroups memory limits
+            if ! grep -q 'cgroup_memory=1' /proc/cmdline 2>/dev/null && [ "$(uname -m)" = "aarch64" ]; then
+                warn "Memory limit $container" "kernel cgroups not enabled (add cgroup_memory=1 cgroup_enable=memory to /boot/firmware/cmdline.txt)"
+            else
+                fail "Memory limit $container" "no limit set"
+            fi
         fi
     done
 else
@@ -132,7 +143,7 @@ fi
 # 8. No world-readable sensitive files
 echo "8. World-readable sensitive files"
 world_readable=0
-for f in "$ENV_FILE" "$PAIRED_JSON" /home/enrico/.ssh/id_* /home/enrico/homelab/secrets/*.yml; do
+for f in "$ENV_FILE" "$PAIRED_JSON" /home/enrico/.ssh/id_ed25519 /home/enrico/.ssh/id_rsa /home/enrico/homelab/secrets/*.yml; do
     if [ -f "$f" ]; then
         perms=$(stat -c '%a' "$f" 2>/dev/null)
         last_digit="${perms: -1}"
