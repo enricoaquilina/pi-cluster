@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import urllib.request
+from datetime import datetime, timezone
 
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
 MC_API = "http://192.168.0.5:8000/api"
@@ -29,6 +30,7 @@ def main():
             "hostname": n["host"],
             "framework": "OpenClaw",
             "status": "healthy" if n.get("connected") else "degraded",
+            "last_heartbeat": datetime.now(timezone.utc).isoformat(),
             "ram_total_mb": n.get("ram_total_mb", 0),
             "ram_used_mb": n.get("ram_used_mb", 0),
             "cpu_percent": n.get("load", 0),
