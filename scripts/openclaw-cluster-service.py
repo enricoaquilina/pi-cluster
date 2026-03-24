@@ -51,7 +51,7 @@ from pydantic import BaseModel, Field
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
 LOG_DB = "/tmp/openclaw-dispatch-log.db"
 GATEWAY_CONTAINER = "openclaw-openclaw-gateway-1"
-MC_API = "http://127.0.0.1:8000/api"
+MC_API = "http://192.168.0.5:8000/api"
 MC_KEY = os.environ.get("MC_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
@@ -266,19 +266,19 @@ def update_node_in_cache(stats: dict) -> bool:
         return False
 
     stats["reachable"] = True
+    stats["connected"] = True  # node is pushing stats = it's alive and connected
     stats["mc_name"] = MC_NAMES.get(name, name)
+    stats["push_ts"] = time.time()
 
     updated = False
     for i, n in enumerate(data["nodes"]):
         if n["name"] == name:
-            stats["connected"] = n.get("connected", False)
             stats["host"] = n.get("host", name)
             data["nodes"][i] = stats
             updated = True
             break
 
     if not updated:
-        stats["connected"] = False
         stats["host"] = name
         data["nodes"].append(stats)
 

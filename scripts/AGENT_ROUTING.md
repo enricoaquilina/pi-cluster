@@ -2,11 +2,11 @@
 
 When executing commands on remote nodes, use the Router API to select the best node.
 
-## Router API (http://192.168.0.22:8520)
+## Router API (http://192.168.0.5:8520)
 
 ### Route a task (GET)
 ```bash
-curl -s http://192.168.0.22:8520/route/coding
+curl -s http://192.168.0.5:8520/route/coding
 # Returns: {"task_type": "coding", "node": "build"}
 ```
 
@@ -14,14 +14,14 @@ Task types: `coding`, `research`, `compute`, `any`
 
 ### Dispatch a command (POST)
 ```bash
-curl -s -X POST http://192.168.0.22:8520/dispatch \
+curl -s -X POST http://192.168.0.5:8520/dispatch \
   -H "Content-Type: application/json" \
   -d '{"task_type": "coding", "command": "git status", "cwd": "/opt/workspace"}'
 ```
 
 ### Check cluster health (GET)
 ```bash
-curl -s http://192.168.0.22:8520/health
+curl -s http://192.168.0.5:8520/health
 ```
 
 ## Node Roles

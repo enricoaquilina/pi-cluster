@@ -127,7 +127,7 @@ CHANGE_COUNT=$(echo "$CHANGES" | grep "^CHANGES=" | cut -d= -f2)
 # Step 4: Only restart gateway if pairings actually changed
 if [ "${CHANGE_COUNT:-0}" -gt 0 ]; then
     echo "Restarting gateway (${CHANGE_COUNT} pairings changed)..."
-    cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>&1
+    cd /home/enrico/openclaw && docker compose restart openclaw-gateway 2>&1
     sleep 15
 else
     echo "No pairing changes — skipping gateway restart."

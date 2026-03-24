@@ -49,10 +49,11 @@ done
 log "Backing up dispatch log..."
 cp /tmp/openclaw-dispatch-log.db "$BACKUP_DIR/dispatch/" 2>/dev/null || log "  WARN: dispatch log not found"
 
-# 4. Mission Control database
+# 4. Mission Control database (lives on heavy)
 log "Backing up MC database..."
-docker exec mission-control-db pg_dump -U missioncontrol missioncontrol \
-    > "$BACKUP_DIR/mc/missioncontrol.sql" 2>/dev/null || log "  WARN: MC dump failed"
+ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 \
+    "docker exec mission-control-db pg_dump -U missioncontrol missioncontrol" \
+    > "$BACKUP_DIR/mc/missioncontrol.sql" 2>/dev/null || log "  WARN: MC dump failed (heavy unreachable?)"
 
 # 5. Ansible vault secrets
 log "Backing up Ansible secrets..."

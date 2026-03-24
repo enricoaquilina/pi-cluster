@@ -10,34 +10,10 @@
 | 6 | Self-healing watchdog + Telegram alerts | 2026-03-21 |
 | 7 | Multi-model orchestration (6 models) | 2026-03-21 |
 | 8 | Production hardening + Mission Control integration | 2026-03-21 |
+| 9 | Service migration to heavy (all Docker off master) | 2026-03-24 |
+| 10 | Master registered as 4th compute node (orchestrator) | 2026-03-24 |
 
 ## Upcoming
-
-### Phase 9: Service Migration to Heavy
-**Goal:** Move n8n + MongoDB from master to heavy, freeing master's RAM for agent workloads.
-
-- [ ] 9.1 — Set up Docker on heavy (if not already)
-- [ ] 9.2 — Deploy MongoDB on heavy, migrate data from master
-- [ ] 9.3 — Deploy n8n on heavy, point to new MongoDB, verify workflows
-- [ ] 9.4 — Update Cloudflare tunnel / reverse proxy for new n8n location
-- [ ] 9.5 — Stop old n8n + MongoDB on master, verify nothing breaks
-- [ ] 9.6 — Update Mission Control service checks for new locations
-- [ ] 9.7 — Update smoke test + health checks
-
-**Prerequisite:** Ethernet cable for heavy (reduces migration risk with reliable NFS)
-
-### Phase 10: Register Master as Compute Node
-**Goal:** Master becomes a 4th node host (8GB Pi 5), adding ~5GB usable RAM to the cluster.
-
-- [ ] 10.1 — Install OpenClaw node host on master (v2026.3.11)
-- [ ] 10.2 — Deploy exec-approvals + systemd service
-- [ ] 10.3 — Pair with gateway (master connects to itself)
-- [ ] 10.4 — Add to inventory as `openclaw_nodes` member (role: orchestrator)
-- [ ] 10.5 — Update router: add master as fallback node for all task types
-- [ ] 10.6 — Update stats collector, MC feed, pairing script
-- [ ] 10.7 — Stress test: 4-node routing under load
-
-**Prerequisite:** Phase 9 complete (services off master)
 
 ### Phase 10.5: Mac SSH to Heavy
 **Goal:** SSH directly from Mac to heavy for Claude Code sessions.

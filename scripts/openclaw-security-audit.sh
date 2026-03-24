@@ -44,12 +44,12 @@ if command -v ss > /dev/null 2>&1; then
         warn "MongoDB binding" "port 27017 not listening"
     fi
 
-    # Gateway should be on 192.168.0.22 (check local address column only)
+    # Gateway should be on 192.168.0.5 (check local address column only)
     gw_bind=$(ss -tlnp 2>/dev/null | awk '/:18789 /{print $4}')
-    if echo "$gw_bind" | grep -q '192.168.0.22'; then
+    if echo "$gw_bind" | grep -q '192.168.0.5'; then
         pass "Gateway bound to LAN IP ($gw_bind)"
     elif [ -n "$gw_bind" ]; then
-        fail "Gateway binding" "$gw_bind (should be 192.168.0.22:18789)"
+        fail "Gateway binding" "$gw_bind (should be 192.168.0.5:18789)"
     else
         warn "Gateway binding" "port 18789 not listening"
     fi
