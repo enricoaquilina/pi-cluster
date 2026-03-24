@@ -38,9 +38,10 @@ ssh -o ConnectTimeout=5 slave0 "sudo sed -i 's|--host [0-9.]*|--host 100.85.234.
 ssh -o ConnectTimeout=5 slave1 "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.5|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: slave1 node repoint failed"
 sudo systemctl restart openclaw-node 2>/dev/null || log "WARN: heavy node restart failed"
 
-# 4. Update Cloudflare tunnel on master to point to heavy
-log "Updating Cloudflare tunnel..."
-ssh -o ConnectTimeout=5 master "sudo sed -i 's|service: http://localhost:3000|service: http://192.168.0.5:3000|' /etc/cloudflared/config.yml && sudo systemctl restart cloudflared" 2>/dev/null || log "WARN: tunnel update failed"
+# 4. Ensure Cloudflare tunnel is running on heavy, stop emergency tunnel on master
+log "Ensuring Cloudflare tunnel on heavy..."
+sudo systemctl enable --now cloudflared 2>/dev/null || log "WARN: heavy cloudflared start failed"
+ssh -o ConnectTimeout=5 master "sudo systemctl stop cloudflared && sudo systemctl disable cloudflared" 2>/dev/null || log "WARN: master cloudflared stop failed"
 
 # 5. Verify
 log "Waiting 15s for nodes to reconnect..."

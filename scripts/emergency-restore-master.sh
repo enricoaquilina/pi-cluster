@@ -53,12 +53,10 @@ cd /mnt/external/mongodb && docker compose up -d 2>/dev/null || log "WARN: Mongo
 log "Starting Mission Control (stale fallback)..."
 cd /mnt/external/mission-control && docker compose up -d 2>/dev/null || log "WARN: Mission Control start failed"
 
-# 4. Update Cloudflare tunnel to serve MC from master
-log "Updating Cloudflare tunnel to local MC..."
-if [ -f /etc/cloudflared/config.yml ]; then
-    sudo sed -i 's|service: http://192.168.0.5:3000|service: http://localhost:3000|' /etc/cloudflared/config.yml
-    sudo systemctl restart cloudflared 2>/dev/null || log "WARN: cloudflared restart failed"
-fi
+# 4. Re-enable Cloudflare tunnel on master (primary tunnel runs on heavy)
+log "Re-enabling Cloudflare tunnel on master..."
+sudo sed -i 's|service: http://localhost:5678|service: http://localhost:5678|; s|service: http://localhost:3000|service: http://localhost:3000|' /etc/cloudflared/config.yml 2>/dev/null
+sudo systemctl enable --now cloudflared 2>/dev/null || log "WARN: cloudflared start failed"
 
 # 5. Re-point all node services to master gateway
 log "Re-pointing node services to master gateway..."
