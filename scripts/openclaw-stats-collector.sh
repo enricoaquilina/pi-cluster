@@ -13,7 +13,7 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Update connection status — try gateway CLI first, fall back to healthcheck
-connected_raw=$(docker exec "$GATEWAY_CONTAINER" timeout 8 openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
+connected_raw=$(docker exec -e OPENCLAW_GATEWAY_TOKEN=REDACTED_GATEWAY_TOKEN "$GATEWAY_CONTAINER" timeout 8 openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
 
 # Fallback: if CLI fails, infer connection from node agent push freshness
 if [ -z "$connected_raw" ] && [ -f "$CACHE_FILE" ]; then
