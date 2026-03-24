@@ -12,8 +12,22 @@ CACHE_FILE="/tmp/openclaw-node-stats.json"
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Update connection status from gateway (the only thing that requires SSH/docker)
-connected_raw=$(docker exec "$GATEWAY_CONTAINER" openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
+# Update connection status — try gateway CLI first, fall back to healthcheck
+connected_raw=$(docker exec "$GATEWAY_CONTAINER" timeout 8 openclaw nodes status 2>&1 | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
+
+# Fallback: if CLI fails, infer connection from node agent push freshness
+if [ -z "$connected_raw" ] && [ -f "$CACHE_FILE" ]; then
+    connected_raw=$(python3 -c "
+import json, time
+with open('$CACHE_FILE') as f:
+    data = json.load(f)
+now = time.time()
+for n in data.get('nodes', []):
+    ts = n.get('push_ts', 0)
+    if now - ts < 90:  # pushed within 90s = connected
+        print(n['name'])
+" 2>/dev/null || echo "")
+fi
 
 if [ -f "$CACHE_FILE" ]; then
     export CONNECTED_RAW="$connected_raw"

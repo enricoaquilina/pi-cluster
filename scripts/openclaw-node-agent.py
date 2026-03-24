@@ -8,7 +8,7 @@ Usage: runs via systemd timer every 30 seconds on each node
 
 Environment:
   OPENCLAW_NODE_NAME  — node name (build, light, heavy, control)
-  OPENCLAW_MASTER_URL — master router API URL (default: http://192.168.0.22:8520)
+  OPENCLAW_MASTER_URL — master router API URL (default: http://192.168.0.5:8520)
 """
 
 import json
@@ -19,7 +19,7 @@ import sys
 import urllib.request
 
 NODE_NAME = os.environ.get("OPENCLAW_NODE_NAME", socket.gethostname())
-MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", "http://192.168.0.22:8520")
+MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", "http://192.168.0.5:8520")
 NODE_PUSH_SECRET = os.environ.get("NODE_PUSH_SECRET", "")
 
 
