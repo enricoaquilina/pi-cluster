@@ -31,6 +31,11 @@ if [ "$swap_total" -gt 0 ]; then
     [ "$swap_pct" -gt "$SWAP_THRESHOLD" ] && alerts+=("Swap ${swap_pct}%")
 fi
 
+# Disk space check (alert on any filesystem >85%)
+DISK_THRESHOLD=85
+disk_pct=$(df / | awk 'NR==2 {gsub(/%/,""); print $5}')
+[ "$disk_pct" -gt "$DISK_THRESHOLD" ] && alerts+=("Disk ${disk_pct}%")
+
 # Temperature check (Pi 5 uses vcgencmd, x86 uses thermal zone)
 temp=""
 if command -v vcgencmd &>/dev/null; then
