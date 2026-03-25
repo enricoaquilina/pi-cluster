@@ -8,7 +8,7 @@
 set -uo pipefail
 
 BACKUP_ROOT="/mnt/external/backups"
-REMOTE_HOST="192.168.0.5"
+REMOTE_HOST="${HEAVY_IP:-192.168.0.5}"
 REMOTE_DIR="/home/enrico/backups"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP_DIR=$(mktemp -d /tmp/openclaw-dr-test.XXXXXX)
