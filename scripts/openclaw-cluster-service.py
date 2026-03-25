@@ -51,7 +51,7 @@ from pydantic import BaseModel, Field
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
 LOG_DB = "/tmp/openclaw-dispatch-log.db"
 GATEWAY_CONTAINER = "openclaw-openclaw-gateway-1"
-MC_API = os.environ.get("MC_API_URL", "http://127.0.0.1:8000/api")
+MC_API = os.environ.get("MC_API_URL", "http://192.168.0.5:8000/api")
 MC_KEY = os.environ.get("MC_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
