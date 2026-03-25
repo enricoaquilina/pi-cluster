@@ -28,10 +28,12 @@ log "=== Backup started ==="
 
 mkdir -p "$BACKUP_DIR"/{gateway,identities,mc,ansible,dispatch}
 
-# 1. Gateway config
+# 1. Gateway config (gateway runs on heavy)
 log "Backing up gateway config..."
-cp /home/enrico/.openclaw/openclaw.json "$BACKUP_DIR/gateway/" 2>/dev/null || log "  WARN: openclaw.json not found"
-sudo cp /home/enrico/.openclaw/devices/paired.json "$BACKUP_DIR/gateway/" 2>/dev/null || log "  WARN: paired.json not found"
+ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "cat /home/enrico/.openclaw/openclaw.json" \
+    > "$BACKUP_DIR/gateway/openclaw.json" 2>/dev/null || log "  WARN: openclaw.json not found on heavy"
+ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "sudo cat /home/enrico/.openclaw/devices/paired.json" \
+    > "$BACKUP_DIR/gateway/paired.json" 2>/dev/null || log "  WARN: paired.json not found on heavy"
 chmod 600 "$BACKUP_DIR/gateway/paired.json" 2>/dev/null || true
 
 # 2. Node identities
@@ -45,9 +47,10 @@ for host in slave0 slave1 heavy; do
         > "$BACKUP_DIR/identities/$host.json" 2>/dev/null || log "  WARN: $host identity not found"
 done
 
-# 3. Dispatch log
+# 3. Dispatch log (lives on heavy)
 log "Backing up dispatch log..."
-cp /tmp/openclaw-dispatch-log.db "$BACKUP_DIR/dispatch/" 2>/dev/null || log "  WARN: dispatch log not found"
+ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "cat /tmp/openclaw-dispatch-log.db" \
+    > "$BACKUP_DIR/dispatch/openclaw-dispatch-log.db" 2>/dev/null || log "  WARN: dispatch log not found on heavy"
 
 # 4. Mission Control database (lives on heavy)
 log "Backing up MC database..."

@@ -61,8 +61,14 @@ if [ -n "${LATEST_FILE:-}" ] && [ -f "$LATEST_FILE" ]; then
 import json, sys
 with open('$PAIRED') as f:
     data = json.load(f)
-nodes = data if isinstance(data, list) else data.get('devices', data.get('nodes', []))
-print(len(nodes))
+if isinstance(data, list):
+    print(len(data))
+elif isinstance(data, dict) and ('devices' in data or 'nodes' in data):
+    print(len(data.get('devices', data.get('nodes', []))))
+elif isinstance(data, dict):
+    print(len(data))
+else:
+    print(0)
 " 2>/dev/null)
             if [ -n "$node_count" ] && [ "$node_count" -ge 4 ]; then
                 pass "paired.json valid ($node_count nodes)"
