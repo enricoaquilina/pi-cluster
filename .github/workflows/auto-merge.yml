@@ -2,10 +2,9 @@
 name: Auto-Merge
 
 on:
-  # workflow_run is the exception to GitHub's anti-recursion rule —
-  # it DOES trigger when other workflows complete via GITHUB_TOKEN
+  # Trigger after key workflows complete
   workflow_run:
-    workflows: ["AI PR Review"]
+    workflows: ["AI PR Review", "Claude Code Fix", "Lint", "Validate", "Security Scan"]
     types: [completed]
 
 permissions:
@@ -16,53 +15,55 @@ jobs:
   auto-merge:
     name: Merge if all checks pass
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success'
+    # Only proceed if the triggering workflow succeeded (or was skipped)
+    if: |
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event.workflow_run.conclusion == 'skipped'
     steps:
       - name: Get PR number from workflow run
         id: pr
         run: |
-          # The workflow_run event includes the PR that triggered it
-          PR_NUMBER=$(gh api \
-            "/repos/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}/artifacts" \
-            --jq '.total_count' 2>/dev/null || echo "0")
-
-          # Fallback: find PR from the head branch
           HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
-          if [ -n "$HEAD_BRANCH" ]; then
+          PR_NUMBER=""
+          if [ -n "$HEAD_BRANCH" ] && [ "$HEAD_BRANCH" != "master" ]; then
             PR_NUMBER=$(gh pr list -R "${{ github.repository }}" \
               --head "$HEAD_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || echo "")
           fi
-
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "Found PR #${PR_NUMBER} from branch ${HEAD_BRANCH}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check all CI and merge
+      - name: Wait for all checks then merge
         if: steps.pr.outputs.number != ''
         run: |
           PR_NUMBER="${{ steps.pr.outputs.number }}"
           echo "Checking PR #${PR_NUMBER}..."
 
-          # Wait briefly for any still-running checks to complete
-          sleep 10
+          # Retry loop — other checks may still be running
+          for attempt in 1 2 3 4 5; do
+            sleep 15
+            CHECK_OUTPUT=$(gh pr checks "$PR_NUMBER" -R "${{ github.repository }}" 2>&1 || true)
+            FAILED=$(echo "$CHECK_OUTPUT" | grep -ci "fail" || true)
+            PENDING=$(echo "$CHECK_OUTPUT" | grep -ci "pending" || true)
 
-          # Check if all CI checks pass
-          CHECK_OUTPUT=$(gh pr checks "$PR_NUMBER" -R "${{ github.repository }}" 2>&1 || true)
-          FAILED=$(echo "$CHECK_OUTPUT" | grep -c "fail" || true)
-          PENDING=$(echo "$CHECK_OUTPUT" | grep -c "pending" || true)
+            echo "Attempt $attempt: failed=$FAILED pending=$PENDING"
+            echo "$CHECK_OUTPUT"
 
-          echo "$CHECK_OUTPUT"
+            if [ "$FAILED" -gt 0 ]; then
+              echo "::warning::PR has failing checks, skipping merge"
+              exit 0
+            fi
 
-          if [ "$FAILED" -gt 0 ]; then
-            echo "::warning::PR has failing checks, skipping merge"
-            exit 0
-          fi
+            if [ "$PENDING" -eq 0 ]; then
+              break
+            fi
 
-          if [ "$PENDING" -gt 0 ]; then
-            echo "::warning::PR still has pending checks, skipping merge"
-            exit 0
-          fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "::warning::Checks still pending after 5 attempts, skipping"
+              exit 0
+            fi
+          done
 
           # Check no review requesting changes
           REVIEW_DECISION=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \

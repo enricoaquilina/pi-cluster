@@ -2,12 +2,13 @@
 name: Claude Code Fix
 
 on:
-  # Trigger when PR review comments are posted (by PR-Agent or humans)
-  pull_request_review_comment:
-    types: [created]
-  # Also trigger on issue/PR comments with @claude mention
+  # Trigger when PR-Agent posts code suggestions as PR comments
   issue_comment:
     types: [created]
+  # Also trigger after AI PR Review completes (to auto-fix suggestions)
+  workflow_run:
+    workflows: ["AI PR Review"]
+    types: [completed]
 
 permissions:
   contents: write
@@ -15,21 +16,31 @@ permissions:
   issues: write
 
 jobs:
-  claude-fix:
-    name: Claude Auto-Fix
-    # Only run when:
-    # 1. PR-Agent posts a review comment (bot account), OR
-    # 2. Someone mentions @claude in a comment
+  claude-fix-on-comment:
+    name: Claude Auto-Fix (comment)
+    # Run when a bot posts a PR comment with code suggestions, or @claude is mentioned
     if: |
-      (github.event_name == 'pull_request_review_comment' &&
-       github.event.comment.user.type == 'Bot') ||
-      (github.event_name == 'issue_comment' &&
-       contains(github.event.comment.body, '@claude'))
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      (
+        (github.event.comment.user.type == 'Bot' &&
+         contains(github.event.comment.body, 'Code Suggestions')) ||
+        contains(github.event.comment.body, '@claude')
+      )
     runs-on: ubuntu-latest
     steps:
+      - name: Get PR branch
+        id: pr
+        run: |
+          PR_DATA=$(gh pr view "${{ github.event.issue.number }}" \
+            -R "${{ github.repository }}" --json headRefName -q '.headRefName')
+          echo "branch=$PR_DATA" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
+          ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
 
       - uses: anthropics/claude-code-action@beta
@@ -39,12 +50,67 @@ jobs:
           trigger_phrase: "@claude"
           timeout_minutes: 30
           direct_prompt: |
-            Review the PR review comments posted by the automated reviewer.
-            For each issue raised:
-            1. Determine if the issue is valid and worth fixing
-            2. If valid, make the fix directly in the code
-            3. If not valid (false positive), reply explaining why
+            Review the PR comments posted by the automated reviewer (PR-Agent).
+            Look for the "Code Suggestions" comment with specific code improvements.
+            For each suggestion:
+            1. Determine if the suggestion is valid and improves the code
+            2. If valid, make the fix directly
+            3. If not valid (false positive or harmful), skip it
+            Focus on: security fixes, Ansible best practices,
+            shell script safety, and systemd service correctness.
+            Do NOT make cosmetic-only changes.
+            Commit fixes with clear messages.
 
+  claude-fix-on-review:
+    name: Claude Auto-Fix (post-review)
+    # Run after AI PR Review completes successfully
+    if: |
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get PR info
+        id: pr
+        run: |
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          PR_NUMBER=$(gh pr list -R "${{ github.repository }}" \
+            --head "$HEAD_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || echo "")
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+
+          # Check if PR-Agent posted code suggestions
+          if [ -n "$PR_NUMBER" ]; then
+            HAS_SUGGESTIONS=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
+              --json comments --jq '.comments[] | select(.author.login == "github-actions") | select(.body | contains("Code Suggestions")) | .id' 2>/dev/null | head -1)
+            if [ -n "$HAS_SUGGESTIONS" ]; then
+              echo "has_suggestions=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_suggestions=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+        if: steps.pr.outputs.has_suggestions == 'true'
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@beta
+        if: steps.pr.outputs.has_suggestions == 'true'
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          model: "claude-sonnet-4-20250514"
+          timeout_minutes: 30
+          direct_prompt: |
+            Review PR #${{ steps.pr.outputs.number }} in this repository.
+            The automated reviewer (PR-Agent) has posted code suggestions.
+            Read the PR comments to find them.
+            For each suggestion:
+            1. Determine if the suggestion is valid and improves the code
+            2. If valid, make the fix directly
+            3. If not valid, skip it
             Focus on: security fixes, Ansible best practices,
             shell script safety, and systemd service correctness.
             Do NOT make cosmetic-only changes.
