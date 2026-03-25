@@ -21,6 +21,7 @@ PASS=0
 FAIL=0
 TESTS=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 API="http://127.0.0.1:8520"
 MC_API="http://127.0.0.1:8000/api"
 GATEWAY="openclaw-openclaw-gateway-1"
@@ -88,7 +89,7 @@ else
     fail "Gateway container" "$gw_status"
 fi
 
-connected=$(docker exec "$GATEWAY" sh -c 'OPENCLAW_GATEWAY_TOKEN=REDACTED_GATEWAY_TOKEN timeout 10 node dist/index.js nodes status 2>&1' | grep "paired.*connected" | grep -vc "disconnected")
+connected=$(docker exec "$GATEWAY" sh -c 'OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 10 node dist/index.js nodes status 2>&1' | grep "paired.*connected" | grep -vc "disconnected")
 if [ "$connected" -eq 4 ]; then
     pass "All 4 nodes connected to gateway"
 else
@@ -99,7 +100,7 @@ fi
 echo "4. Dispatch execution"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name _ <<< "$entry"
-    result=$(docker exec "$GATEWAY" sh -c "OPENCLAW_GATEWAY_TOKEN=REDACTED_GATEWAY_TOKEN timeout 15 node dist/index.js nodes run --node $name --raw 'echo E2E_OK_$name'" 2>&1)
+    result=$(docker exec "$GATEWAY" sh -c "OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 15 node dist/index.js nodes run --node $name --raw 'echo E2E_OK_$name'" 2>&1)
     if echo "$result" | grep -q "E2E_OK_$name"; then
         pass "Dispatch $name"
     else
@@ -111,7 +112,7 @@ done
 echo "5. Python interpreter"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name _ <<< "$entry"
-    result=$(docker exec "$GATEWAY" sh -c "OPENCLAW_GATEWAY_TOKEN=REDACTED_GATEWAY_TOKEN timeout 15 node dist/index.js nodes run --node $name --raw 'bash -c \"python3 -c \\\"print(\\\\\\\"PY_OK\\\\\\\")\\\"\"'" 2>&1)
+    result=$(docker exec "$GATEWAY" sh -c "OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 15 node dist/index.js nodes run --node $name --raw 'bash -c \"python3 -c \\\"print(\\\\\\\"PY_OK\\\\\\\")\\\"\"'" 2>&1)
     if echo "$result" | grep -q "PY_OK"; then
         pass "Python $name"
     else

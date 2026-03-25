@@ -194,6 +194,7 @@
         dest: /usr/local/bin/.env.cluster
         mode: "0600"
         owner: enrico
+      no_log: true
 
     - name: Deploy resource monitor cron (every 5 min)
       ansible.builtin.cron:
