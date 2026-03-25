@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Monitors heavy node health. After 3 consecutive failures (6 min), auto-restores
 # services to master. Runs every 2 min via cron on master.
 #

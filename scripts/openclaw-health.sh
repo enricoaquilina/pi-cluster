@@ -8,6 +8,9 @@
 
 set -uo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+
 THRESHOLD_RAM=85
 JSON_MODE=false
 [ "${1:-}" = "--json" ] && JSON_MODE=true
@@ -37,7 +40,7 @@ for node_def in "${NODES[@]}"; do
 
     # Check gateway connection
     connected="false"
-    if docker exec "$GATEWAY_CONTAINER" sh -c 'OPENCLAW_GATEWAY_TOKEN=dd697e7d788d7cb4995dc0d26778c80f18d6732b5c498c8a timeout 10 node dist/index.js nodes status 2>&1' | grep -q "$name.*connected"; then
+    if docker exec "$GATEWAY_CONTAINER" sh -c "OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 10 node dist/index.js nodes status 2>&1" | grep -q "$name.*connected"; then
         connected="true"
     fi
 

@@ -174,4 +174,17 @@ test:
 
 validate: lint test
 	@echo ""
+	@echo "=== Permission Check ==="
+	@for f in scripts/.env.cluster secrets/*.yml; do \
+		if [ -f "$$f" ]; then \
+			perms=$$(stat -c '%a' "$$f"); \
+			if [ "$$perms" != "600" ]; then \
+				echo "  FAIL: $$f has permissions $$perms (should be 600)"; \
+				exit 1; \
+			else \
+				echo "  OK: $$f (600)"; \
+			fi; \
+		fi; \
+	done
+	@echo ""
 	@echo "=== Full Validation Complete ==="
