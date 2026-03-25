@@ -8,7 +8,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
-MC_API = "http://192.168.0.5:8000/api"
+MC_API = os.environ.get("MC_API_URL", "http://127.0.0.1:8000/api")
 MC_KEY = os.environ.get("MC_API_KEY", "")
 
 

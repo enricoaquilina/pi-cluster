@@ -19,7 +19,7 @@ import sys
 import urllib.request
 
 NODE_NAME = os.environ.get("OPENCLAW_NODE_NAME", socket.gethostname())
-MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", "http://192.168.0.5:8520")
+MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", os.environ.get("CLUSTER_API_URL", "http://192.168.0.5:8520"))
 NODE_PUSH_SECRET = os.environ.get("NODE_PUSH_SECRET", "")
 
 
