@@ -27,7 +27,7 @@ jobs:
           github_action_config.auto_describe: "true"
           github_action_config.auto_label: "false"
           config.model: "openrouter/google/gemini-2.5-flash"
-          config.custom_model_max_tokens: 4000
+          config.custom_model_max_tokens: 16000
           pr_reviewer.require_score_review: "true"
           pr_reviewer.num_code_suggestions: 3
           pr_reviewer.extra_instructions: |
