@@ -43,6 +43,14 @@ else
     else
         fail "Backup freshness" "$(basename "$LATEST_FILE") is ${AGE_HOURS}h old (>24h)"
     fi
+
+    # Size sanity check — backup should be >100K (was 8.5K when broken)
+    BACKUP_SIZE_KB=$(du -k "$LATEST_FILE" 2>/dev/null | cut -f1)
+    if [ "${BACKUP_SIZE_KB:-0}" -gt 100 ]; then
+        pass "Backup size OK (${BACKUP_SIZE_KB}K)"
+    else
+        fail "Backup size" "${BACKUP_SIZE_KB}K (expected >100K, may be incomplete)"
+    fi
 fi
 
 # 2-6. Extract and validate backup contents
