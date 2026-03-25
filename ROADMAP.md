@@ -13,47 +13,28 @@
 | 9 | Service migration to heavy (all Docker off master) | 2026-03-24 |
 | 10 | Master registered as 4th compute node (orchestrator) | 2026-03-24 |
 | 11 | Ethernet for heavy, WiFi disabled (dormant fallback) | 2026-03-24 |
+| 12 | Token budget tracking + daily Telegram digest | 2026-03-21 |
+| 13 | E2E cluster test suite (36 tests, daily cron) | 2026-03-21, expanded 2026-03-25 |
+| 14 | Centralized logging: logrotate, journald, Docker limits | 2026-03-25 |
+| 15 | CI/CD pipeline: AI review → Claude fix → auto-merge → auto-deploy | 2026-03-25 |
+| 16 | Security hardening: token extraction, permissions, audit | 2026-03-25 |
+| 17 | Monitoring: resource alerts, IP centralization, silent failure hardening | 2026-03-25 |
+| 18 | Auto-deploy, failover tests, documentation overhaul | 2026-03-25 |
 
-## Upcoming
+## Future Ideas (Prioritized)
 
-### Phase 10.5: Mac SSH to Heavy
-**Goal:** SSH directly from Mac to heavy for Claude Code sessions.
+### Near-term
+- **Cloud backup** — Add B2/S3 as 3rd backup location (currently master + heavy only)
+- **Mac SSH direct** — SSH from Mac to heavy via LAN IP
+- **API rate limiting** — Prevent abuse of cluster service endpoints
 
-- [ ] 10.5.1 — Add heavy to Mac's `~/.ssh/config` (direct LAN IP 192.168.0.5)
-- [ ] 10.5.2 — Copy Mac SSH key to heavy (`ssh-copy-id enrico@heavy`)
-- [ ] 10.5.3 — Verify `ssh heavy` from Mac works
-- [ ] 11.4 — Update Mission Control node hostname
-- [ ] 11.5 — Test NFS performance (should be <1ms vs ~200ms)
-- [ ] 11.6 — Remove Tailscale dependency for heavy (keep as backup)
-
-**Prerequisite:** Physical ethernet cable
-
-### Phase 12: Token Budget Tracking
-**Goal:** Track OpenRouter spend per task type, alert on budget limits.
-
-- [ ] 12.1 — Create budget config (daily/weekly limits per task type)
-- [ ] 12.2 — Build token logger: intercept dispatch calls, log model + tokens used
-- [ ] 12.3 — Build spend calculator using OpenRouter pricing
-- [ ] 12.4 — Daily Telegram summary: spend by model, by task type
-- [ ] 12.5 — Alert when approaching budget threshold (80%, 100%)
-- [ ] 12.6 — Add spend data to Mission Control dashboard
-
-### Phase 13: End-to-End Cluster Test Suite
-**Goal:** Automated tests that verify the entire cluster is working.
-
-- [ ] 13.1 — Test: dispatch to each node, verify output
-- [ ] 13.2 — Test: interpreter commands (python3, node) on all nodes
-- [ ] 13.3 — Test: NFS read/write from each node
-- [ ] 13.4 — Test: router returns correct node for each task type
-- [ ] 13.5 — Test: health check returns valid data for all nodes
-- [ ] 13.6 — Test: MC API has fresh data (<5 min) for all nodes
-- [ ] 13.7 — Run as daily cron + on-demand via `make openclaw-test`
-- [ ] 13.8 — Telegram alert on test failure
-
-## Future Ideas (Unscheduled)
-
-- **Load-based task queuing** — if all nodes >80% RAM, queue tasks instead of overloading
-- **Multi-workspace isolation** — different projects on different nodes
+### Medium-term
+- **E2E failover expansion** — NFS mount loss recovery, concurrent dispatch under load
 - **Agent performance dashboard** — success/fail rates, avg duration, model comparison
-- **Backup automation** — nightly backup of gateway config, MC database, agent state
+- **Structured logging** (JSON) — replace text logs for better parsing
+- **Pre-deploy validation** — CI validates inventory matches actual network
+
+### Long-term
+- **Secrets management** — Vault/Sealed Secrets instead of .env.cluster
+- **Multi-workspace isolation** — different projects on different nodes
 - **Auto-scaling** — spin up cloud instances when cluster is at capacity
