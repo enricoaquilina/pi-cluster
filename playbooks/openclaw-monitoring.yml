@@ -40,7 +40,7 @@
         minute: "0"
         hour: "*/6"
         user: enrico
-        job: "curl -sf http://127.0.0.1:8520/budget/check >> /var/log/openclaw-budget.log 2>&1"
+        job: "curl -sf http://192.168.0.5:8520/budget/check >> /var/log/openclaw-budget.log 2>&1"
         cron_file: openclaw-budget
 
     - name: Deploy daily digest cron (8pm)
@@ -49,7 +49,7 @@
         minute: "0"
         hour: "20"
         user: enrico
-        job: "curl -sf http://127.0.0.1:8520/budget/digest >> /var/log/openclaw-budget.log 2>&1"
+        job: "curl -sf http://192.168.0.5:8520/budget/digest >> /var/log/openclaw-budget.log 2>&1"
         cron_file: openclaw-budget
 
     - name: Deploy openclaw version check cron (nightly)
@@ -177,3 +177,28 @@
         enabled: true
         state: started
         daemon_reload: true
+
+- name: Deploy resource monitor on all nodes
+  hosts: cluster
+  become: true
+  tasks:
+    - name: Deploy resource monitor script
+      ansible.builtin.copy:
+        src: ../scripts/resource-monitor.sh
+        dest: /usr/local/bin/resource-monitor.sh
+        mode: "0755"
+
+    - name: Deploy .env.cluster for Telegram alerts
+      ansible.builtin.copy:
+        src: ../scripts/.env.cluster
+        dest: /usr/local/bin/.env.cluster
+        mode: "0600"
+        owner: enrico
+
+    - name: Deploy resource monitor cron (every 5 min)
+      ansible.builtin.cron:
+        name: "resource monitor"
+        minute: "*/5"
+        user: enrico
+        job: "/usr/local/bin/resource-monitor.sh"
+        cron_file: openclaw-resource-monitor
