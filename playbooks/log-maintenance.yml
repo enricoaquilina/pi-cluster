@@ -1,0 +1,153 @@
+---
+# Log rotation, journald limits, Docker log limits, cleanup crons
+# Usage: make log-maintenance
+- name: Deploy openclaw log rotation
+  hosts: cluster
+  become: true
+  tasks:
+    - name: Deploy openclaw logrotate config
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/openclaw
+        mode: "0644"
+        content: |
+          /var/log/openclaw-*.log
+          /var/log/emergency-restore.log
+          /var/log/cluster-cleanup.log {
+              weekly
+              rotate 4
+              compress
+              delaycompress
+              missingok
+              notifempty
+              copytruncate
+              maxsize 50M
+          }
+
+- name: Migrate /tmp logs to /var/log on heavy
+  hosts: heavy
+  tasks:
+    - name: Remove old mc-watchdog cron entry
+      ansible.builtin.lineinfile:
+        path: /var/spool/cron/crontabs/enrico
+        regexp: 'mission-control-watchdog.*>>.*/tmp/mc-watchdog'
+        state: absent
+      become: true
+
+    - name: Add mc-watchdog cron with proper log path
+      ansible.builtin.cron:
+        name: "mission-control-watchdog"
+        minute: "*/5"
+        job: "/home/enrico/.local/bin/mission-control-watchdog >> /var/log/openclaw-mc-watchdog.log 2>&1"
+        user: enrico
+
+- name: Migrate /tmp logs to /var/log on master
+  hosts: masters
+  tasks:
+    - name: Remove old heavy-watchdog cron entry
+      ansible.builtin.lineinfile:
+        path: /var/spool/cron/crontabs/enrico
+        regexp: 'heavy-watchdog.*>>.*/tmp/heavy-watchdog'
+        state: absent
+      become: true
+
+    - name: Add heavy-watchdog cron with proper log path
+      ansible.builtin.cron:
+        name: "heavy-watchdog"
+        minute: "*/2"
+        job: "/home/enrico/homelab/scripts/heavy-watchdog.sh >> /var/log/openclaw-heavy-watchdog.log 2>&1"
+        user: enrico
+
+    - name: Remove old smoke-test cron entry
+      ansible.builtin.lineinfile:
+        path: /var/spool/cron/crontabs/enrico
+        regexp: 'system-smoke-test.*>>.*/tmp/smoke-test'
+        state: absent
+      become: true
+
+    - name: Add smoke-test cron with proper log path
+      ansible.builtin.cron:
+        name: "system-smoke-test"
+        minute: "*/5"
+        job: "/usr/local/bin/system-smoke-test.sh --cron 2>&1 | head -50 >> /var/log/openclaw-smoke-test.log"
+        user: enrico
+
+- name: Deploy journald limits
+  hosts: cluster
+  become: true
+  tasks:
+    - name: Ensure journald drop-in directory exists
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Deploy journald size limits
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/cluster-limits.conf
+        mode: "0644"
+        content: |
+          [Journal]
+          SystemMaxUse=100M
+          SystemMaxFileSize=10M
+          MaxRetentionSec=2week
+      notify: Restart journald
+
+  handlers:
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+
+- name: Deploy Docker log limits and cleanup crons on heavy
+  hosts: heavy
+  tasks:
+    - name: Add logging config to Docker compose files
+      ansible.builtin.shell: |
+        python3 -c "
+        import re, sys
+        path = '{{ item }}'
+        with open(path) as f:
+            content = f.read()
+        if 'logging:' in content:
+            print('OK')
+            sys.exit(0)
+        logging_block = '    logging:\n      driver: json-file\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n'
+        new_content = re.sub(r'(    restart: .+\n)', r'\1' + logging_block, content)
+        if new_content == content:
+            print('SKIPPED')
+            sys.exit(0)
+        with open(path, 'w') as f:
+            f.write(new_content)
+        print('CHANGED')
+        "
+      loop:
+        - /mnt/external/openclaw/docker-compose.yml
+        - /mnt/external/mission-control/docker-compose.yml
+        - /mnt/external/mongodb/docker-compose.yml
+        - /mnt/external/n8n/docker-compose.yml
+      register: compose_result
+      changed_when: "'CHANGED' in compose_result.stdout"
+
+    - name: Deploy dispatch log cleanup cron
+      ansible.builtin.cron:
+        name: "openclaw dispatch log cleanup"
+        minute: "30"
+        hour: "4"
+        job: >-
+          sqlite3 /tmp/openclaw-dispatch-log.db
+          "DELETE FROM dispatch_log WHERE timestamp < datetime('now', '-30 days');"
+          && sqlite3 /tmp/openclaw-dispatch-log.db "VACUUM;"
+        user: enrico
+        cron_file: openclaw-log-cleanup
+      become: true
+
+    - name: Deploy Docker image prune cron
+      ansible.builtin.cron:
+        name: "docker image prune"
+        minute: "0"
+        hour: "5"
+        weekday: "0"
+        job: "docker image prune -af --filter 'until=168h' > /dev/null 2>&1"
+        user: enrico
+        cron_file: openclaw-log-cleanup
+      become: true

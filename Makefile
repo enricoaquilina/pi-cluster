@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test security-scan security-audit dr-test lint test validate
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test log-maintenance logs security-scan security-audit dr-test lint test validate
 
 ping:
 	ansible all -m ping
@@ -72,6 +72,12 @@ doctor:
 
 pihole-maintenance:
 	ansible-playbook playbooks/pihole-maintenance.yml
+
+log-maintenance:
+	ansible-playbook playbooks/log-maintenance.yml
+
+logs:
+	@bash scripts/openclaw-logs.sh
 
 # OpenClaw Distributed Agent Cluster
 openclaw-nodes:
