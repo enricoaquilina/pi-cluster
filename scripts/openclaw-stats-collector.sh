@@ -50,4 +50,4 @@ with open('$CACHE_FILE', 'w') as f:
 fi
 
 # Feed Mission Control dashboard
-python3 "$SCRIPT_DIR/openclaw-mc-feed.py" 2>/dev/null || true
+python3 "$SCRIPT_DIR/openclaw-mc-feed.py" || echo "WARN: MC feed failed" >&2

@@ -188,6 +188,23 @@ else
     fail "MC services" "unreachable"
 fi
 
+# MC heartbeat freshness — catch silent push failures
+if [ -n "$mc_nodes" ]; then
+    stale_nodes=$(echo "$mc_nodes" | python3 -c "
+import json,sys
+from datetime import datetime,timezone,timedelta
+nodes = json.load(sys.stdin)
+cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+stale = [n['name'] for n in nodes if datetime.fromisoformat(n['last_heartbeat'].replace('Z','+00:00')) < cutoff]
+print(','.join(stale) if stale else '')
+" 2>/dev/null)
+    if [ -z "$stale_nodes" ]; then
+        pass "MC heartbeats fresh (<10min)"
+    else
+        fail "MC heartbeats stale" "$stale_nodes"
+    fi
+fi
+
 # ── Test 10: Budget API ──────────────────────────────────────────────────────
 echo "10. Budget API"
 budget=$(curl -sf "$API/budget" 2>/dev/null)

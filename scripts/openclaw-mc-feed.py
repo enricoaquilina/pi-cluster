@@ -20,6 +20,7 @@ def main():
         print(f"Cache error: {e}", file=sys.stderr)
         return
 
+    errors = 0
     for n in data.get("nodes", []):
         if not n.get("reachable"):
             continue
@@ -50,6 +51,8 @@ def main():
             },
         }).encode()
 
+        pushed = False
+        last_error = None
         for method in ["PATCH", "POST"]:
             path = f"/nodes/{mc_name}" if method == "PATCH" else "/nodes"
             try:
@@ -63,9 +66,19 @@ def main():
                     },
                 )
                 urllib.request.urlopen(req, timeout=5)
+                pushed = True
                 break
-            except Exception:
+            except Exception as e:
+                last_error = f"{method} {MC_API}{path}: {e}"
                 continue
+
+        if not pushed:
+            print(f"WARN: failed to push {mc_name}: {last_error}", file=sys.stderr)
+            errors += 1
+
+    if errors:
+        print(f"MC feed: {errors} node(s) failed to push", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
