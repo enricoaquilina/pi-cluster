@@ -12,25 +12,16 @@
 | 8 | Production hardening + Mission Control integration | 2026-03-21 |
 | 9 | Service migration to heavy (all Docker off master) | 2026-03-24 |
 | 10 | Master registered as 4th compute node (orchestrator) | 2026-03-24 |
+| 11 | Ethernet for heavy, WiFi disabled (dormant fallback) | 2026-03-24 |
 
 ## Upcoming
 
 ### Phase 10.5: Mac SSH to Heavy
 **Goal:** SSH directly from Mac to heavy for Claude Code sessions.
 
-- [ ] 10.5.1 — Connect heavy via ethernet (same LAN as master)
-- [ ] 10.5.2 — Add heavy to Mac's `~/.ssh/config` (direct LAN IP, no ProxyJump needed)
-- [ ] 10.5.3 — Copy Mac SSH key to heavy (`ssh-copy-id enrico@heavy`)
-- [ ] 10.5.4 — Verify `ssh heavy` from Mac works
-
-**Prerequisite:** Ethernet cable (Phase 11)
-
-### Phase 11: Ethernet for Heavy
-**Goal:** Replace WiFi/Tailscale with LAN for reliability and performance.
-
-- [ ] 11.1 — Connect ethernet cable to heavy, get 192.168.0.x IP
-- [ ] 11.2 — Update inventory, SSH configs, NFS exports (remove WiFi/Tailscale subnets)
-- [ ] 11.3 — Update pairing script, router, stats collector with LAN IP
+- [ ] 10.5.1 — Add heavy to Mac's `~/.ssh/config` (direct LAN IP 192.168.0.5)
+- [ ] 10.5.2 — Copy Mac SSH key to heavy (`ssh-copy-id enrico@heavy`)
+- [ ] 10.5.3 — Verify `ssh heavy` from Mac works
 - [ ] 11.4 — Update Mission Control node hostname
 - [ ] 11.5 — Test NFS performance (should be <1ms vs ~200ms)
 - [ ] 11.6 — Remove Tailscale dependency for heavy (keep as backup)

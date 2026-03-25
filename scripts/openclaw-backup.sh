@@ -61,9 +61,10 @@ cp /home/enrico/homelab/secrets/*.yml "$BACKUP_DIR/ansible/" 2>/dev/null || true
 cp /home/enrico/homelab/vars/*.yml "$BACKUP_DIR/ansible/" 2>/dev/null || true
 cp /home/enrico/homelab/inventory/hosts.yml "$BACKUP_DIR/ansible/" 2>/dev/null || true
 
-# 6. Cloudflare tunnel config
+# 6. Cloudflare tunnel config (lives on heavy)
 log "Backing up tunnel config..."
-cp /etc/cloudflared/config.yml "$BACKUP_DIR/gateway/cloudflared.yml" 2>/dev/null || true
+ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "cat /etc/cloudflared/config.yml" \
+    > "$BACKUP_DIR/gateway/cloudflared.yml" 2>/dev/null || log "  WARN: cloudflared config not found on heavy"
 
 # Fix ownership so tar works
 sudo chown -R enrico:enrico "$BACKUP_DIR" 2>/dev/null

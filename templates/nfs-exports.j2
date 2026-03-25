@@ -1,5 +1,5 @@
 # OpenClaw distributed agent cluster NFS exports
 # Managed by Ansible — do not edit manually
 {% for export in nfs_exports %}
-{{ export.path }} 192.168.0.0/24(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000) 192.168.4.0/22(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000) 100.64.0.0/10(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000)
+{{ export.path }} 192.168.0.0/24(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000) 100.64.0.0/10(rw,sync,no_subtree_check,all_squash,anonuid=1000,anongid=1000)
 {% endfor %}
