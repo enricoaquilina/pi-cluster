@@ -20,6 +20,10 @@ nfs_options: "defaults,soft,timeo=10,_netdev"
 # Workspace path (consistent across all nodes)
 openclaw_workspace: /opt/workspace
 
+# Service endpoints (heavy node)
+heavy_ip: 192.168.0.5
+cluster_api_url: "http://{{ heavy_ip }}:8520"
+
 # Monitoring
 openclaw_health_threshold_ram: 85
 openclaw_health_check_interval: "*/15"

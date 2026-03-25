@@ -9,11 +9,11 @@
 
 STATE_FILE="/tmp/heavy-watchdog-state"
 FAIL_THRESHOLD=3
-HEAVY_IP="192.168.0.5"
 GATEWAY_PORT="18789"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/.env.cluster" 2>/dev/null || true
+HEAVY_IP="${HEAVY_IP:-192.168.0.5}"
 
 send_telegram() {
     local msg="$1"

@@ -16,6 +16,9 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+
 BACKUP_ROOT="/mnt/external/backups"
 DATE=$(date +%Y-%m-%d)
 BACKUP_DIR="$BACKUP_ROOT/$DATE"
@@ -30,9 +33,9 @@ mkdir -p "$BACKUP_DIR"/{gateway,identities,mc,ansible,dispatch}
 
 # 1. Gateway config (gateway runs on heavy)
 log "Backing up gateway config..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "cat /home/enrico/.openclaw/openclaw.json" \
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "cat /home/enrico/.openclaw/openclaw.json" \
     > "$BACKUP_DIR/gateway/openclaw.json" 2>/dev/null || log "  WARN: openclaw.json not found on heavy"
-ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "sudo cat /home/enrico/.openclaw/devices/paired.json" \
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "sudo cat /home/enrico/.openclaw/devices/paired.json" \
     > "$BACKUP_DIR/gateway/paired.json" 2>/dev/null || log "  WARN: paired.json not found on heavy"
 chmod 600 "$BACKUP_DIR/gateway/paired.json" 2>/dev/null || true
 
@@ -49,12 +52,12 @@ done
 
 # 3. Dispatch log (lives on heavy)
 log "Backing up dispatch log..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "cat /tmp/openclaw-dispatch-log.db" \
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "cat /tmp/openclaw-dispatch-log.db" \
     > "$BACKUP_DIR/dispatch/openclaw-dispatch-log.db" 2>/dev/null || log "  WARN: dispatch log not found on heavy"
 
 # 4. Mission Control database (lives on heavy)
 log "Backing up MC database..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 \
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" \
     "docker exec mission-control-db pg_dump -U missioncontrol missioncontrol" \
     > "$BACKUP_DIR/mc/missioncontrol.sql" 2>/dev/null || log "  WARN: MC dump failed (heavy unreachable?)"
 
@@ -66,7 +69,7 @@ cp /home/enrico/homelab/inventory/hosts.yml "$BACKUP_DIR/ansible/" 2>/dev/null |
 
 # 6. Cloudflare tunnel config (lives on heavy)
 log "Backing up tunnel config..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "cat /etc/cloudflared/config.yml" \
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "cat /etc/cloudflared/config.yml" \
     > "$BACKUP_DIR/gateway/cloudflared.yml" 2>/dev/null || log "  WARN: cloudflared config not found on heavy"
 
 # Fix ownership so tar works
@@ -83,13 +86,13 @@ find "$BACKUP_ROOT" -name "backup-*.tar.gz" -mtime +"$RETENTION_DAYS" -delete 2>
 BACKUP_COUNT=$(find "$BACKUP_ROOT" -name "backup-*.tar.gz" | wc -l)
 
 # Off-site backup to heavy node
-REMOTE_BACKUP_DIR="enrico@192.168.0.5:/home/enrico/backups"
+REMOTE_BACKUP_DIR="enrico@${HEAVY_HOST:-heavy}:/home/enrico/backups"
 log "Syncing to off-site (heavy)..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 "mkdir -p /home/enrico/backups" 2>/dev/null
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "mkdir -p /home/enrico/backups" 2>/dev/null
 if rsync -az --timeout=30 "$BACKUP_ROOT/backup-$DATE.tar.gz" "$REMOTE_BACKUP_DIR/" 2>/dev/null; then
     log "Off-site sync complete"
     # Clean old remote backups beyond retention
-    ssh -o ConnectTimeout=5 -o BatchMode=yes 192.168.0.5 \
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" \
         "find /home/enrico/backups -name 'backup-*.tar.gz' -mtime +$RETENTION_DAYS -delete" 2>/dev/null
 else
     log "WARN: Off-site sync to heavy failed"
