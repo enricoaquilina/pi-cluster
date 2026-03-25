@@ -88,7 +88,7 @@ else
     fail "Gateway container" "$gw_status"
 fi
 
-connected=$(docker exec "$GATEWAY" openclaw nodes status 2>&1 | grep "paired.*connected" | grep -vc "disconnected")
+connected=$(docker exec "$GATEWAY" sh -c 'OPENCLAW_GATEWAY_TOKEN=dd697e7d788d7cb4995dc0d26778c80f18d6732b5c498c8a timeout 10 node dist/index.js nodes status 2>&1' | grep "paired.*connected" | grep -vc "disconnected")
 if [ "$connected" -eq 4 ]; then
     pass "All 4 nodes connected to gateway"
 else
@@ -99,7 +99,7 @@ fi
 echo "4. Dispatch execution"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name _ <<< "$entry"
-    result=$(docker exec "$GATEWAY" openclaw nodes run --node "$name" --raw "echo E2E_OK_$name" 2>&1)
+    result=$(docker exec "$GATEWAY" sh -c "OPENCLAW_GATEWAY_TOKEN=dd697e7d788d7cb4995dc0d26778c80f18d6732b5c498c8a timeout 15 node dist/index.js nodes run --node $name --raw 'echo E2E_OK_$name'" 2>&1)
     if echo "$result" | grep -q "E2E_OK_$name"; then
         pass "Dispatch $name"
     else
@@ -111,7 +111,7 @@ done
 echo "5. Python interpreter"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name _ <<< "$entry"
-    result=$(docker exec "$GATEWAY" openclaw nodes run --node "$name" --raw "python3 -c 'print(\"PY_OK\")'" 2>&1)
+    result=$(docker exec "$GATEWAY" sh -c "OPENCLAW_GATEWAY_TOKEN=dd697e7d788d7cb4995dc0d26778c80f18d6732b5c498c8a timeout 15 node dist/index.js nodes run --node $name --raw 'bash -c \"python3 -c \\\"print(\\\\\\\"PY_OK\\\\\\\")\\\"\"'" 2>&1)
     if echo "$result" | grep -q "PY_OK"; then
         pass "Python $name"
     else
@@ -222,7 +222,7 @@ if $TELEGRAM_MODE && [ "$FAIL" -gt 0 ]; then
     if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
         failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
         curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=1630148884" \
+            -d "chat_id=${TELEGRAM_CHAT_ID:-1630148884}" \
             -d "text=🔴 *E2E Test Failed*
 Passed: $PASS / Failed: $FAIL
 $failures" \

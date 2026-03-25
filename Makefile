@@ -111,6 +111,9 @@ openclaw-upgrade:
 openclaw-test:
 	@bash scripts/openclaw-e2e-test.sh
 
+openclaw-test-alert:
+	@bash scripts/openclaw-e2e-test.sh --telegram
+
 openclaw-health:
 	@bash scripts/openclaw-health.sh
 
