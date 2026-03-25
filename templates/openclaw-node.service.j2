@@ -9,6 +9,8 @@ User=enrico
 Environment=HOME=/home/enrico
 Environment=OPENCLAW_GATEWAY_TOKEN={{ openclaw_gateway_token }}
 Environment=OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1
+Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+Environment=OPENCLAW_NO_RESPAWN=1
 ExecStart=/usr/bin/openclaw node run --host {{ openclaw_gateway_host }} --port {{ openclaw_gateway_port }} --display-name {{ openclaw_node_name }}
 Restart=always
 RestartSec=10
