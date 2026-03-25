@@ -61,6 +61,14 @@
         job: "/home/enrico/homelab/scripts/openclaw-version-check.sh --upgrade >> /var/log/openclaw-version.log 2>&1"
         cron_file: openclaw-version
 
+    - name: Deploy auto-deploy cron (pull + apply configs)
+      ansible.builtin.cron:
+        name: "auto-deploy"
+        minute: "*/5"
+        user: enrico
+        job: "/home/enrico/homelab/scripts/auto-deploy.sh"
+        cron_file: openclaw-auto-deploy
+
     - name: Deploy old backup cleanup cron
       ansible.builtin.cron:
         name: "openclaw backup cleanup"

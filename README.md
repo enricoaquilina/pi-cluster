@@ -5,114 +5,94 @@ Ansible-managed infrastructure for a 4-node cluster running distributed OpenClaw
 ## Architecture
 
 ```
-                    ┌─────────────────────────┐
-                    │     master (Pi 5 8GB)    │
-                    │  Gateway · Router API    │
-                    │  n8n · Docker · MongoDB  │
-                    └─────┬──────┬──────┬──────┘
-                          │      │      │
-              ┌───────────┘      │      └───────────┐
-              │                  │                   │
-     ┌────────▼────────┐ ┌──────▼──────┐  ┌────────▼────────┐
-     │ build (Pi 5 4G) │ │light (Pi4 2G│  │ heavy (16GB x86)│
-     │ role: coding    │ │role: research│  │ role: compute   │
-     │ Sonnet 4.6      │ │Qwen 3.5 Plus│  │ Opus 4.6        │
-     └─────────────────┘ └─────────────┘  └─────────────────┘
+     ┌─────────────────────────┐
+     │     master (Pi 5 8GB)   │
+     │  NFS server · Pi-hole   │
+     │  Cloudflare tunnel      │
+     │  Backups · Orchestrator │
+     └─────┬──────┬──────┬─────┘
+           │      │      │
+ ┌─────────┘      │      └─────────┐
+ │                │                 │
+ ▼                ▼                 ▼
+┌──────────┐ ┌──────────┐ ┌────────────────────┐
+│  build   │ │  light   │ │       heavy        │
+│ Pi 5 4GB │ │ Pi 4 2GB │ │ NiPoGi P2 12GB    │
+│ coding   │ │ research │ │ compute + services │
+│          │ │          │ │ Gateway · MC · n8n │
+│          │ │          │ │ MongoDB · Router   │
+└──────────┘ └──────────┘ └────────────────────┘
 ```
 
 ## Nodes
 
-| Node | Hardware | IP | Role | OpenClaw |
-|------|----------|----|------|----------|
-| **master** | Pi 5 8GB | 192.168.0.22 | Gateway, control plane | v2026.3.11 |
-| **build** (slave0) | Pi 5 4GB | 192.168.0.3 | Coding node host | v2026.3.11 |
-| **light** (slave1) | Pi 4 2GB | 192.168.0.4 | Research node host | v2026.3.11 |
-| **heavy** | NiPoGi P2, AMD Ryzen 3, 16GB | Tailscale | Compute node host | v2026.3.11 |
+| Node | Hardware | IP | Role |
+|------|----------|----|------|
+| **master** | Pi 5 8GB | 192.168.0.22 | NFS server, DNS, backups, orchestrator node |
+| **build** (slave0) | Pi 5 4GB | 192.168.0.3 / Tailscale | Coding node, Pi-hole MASTER |
+| **light** (slave1) | Pi 4 2GB | 192.168.0.4 | Research node, Pi-hole BACKUP |
+| **heavy** | NiPoGi P2 AMD Ryzen 3 12GB | 192.168.0.5 / Tailscale | All Docker services, monitoring, compute |
 
-## Intelligent Task Routing
+## Services (all on heavy)
 
-Tasks are automatically routed to the best-fit node based on role affinity and real-time health (RAM, CPU load). The router uses cached stats (refreshed every 30s) for sub-40ms decisions.
+| Service | Port | Description |
+|---------|------|-------------|
+| OpenClaw Gateway | 18789 | Agent gateway (WebSocket) |
+| Router API | 8520 | Task routing + dispatch + budget |
+| Mission Control API | 127.0.0.1:8000 | Dashboard backend (PostgreSQL) |
+| Mission Control UI | 3000 | Dashboard frontend (Caddy) |
+| MongoDB | 127.0.0.1:27017 | Data store (local storage) |
+| n8n | 5678 | Workflow automation |
+| Pi-hole VIP | 192.168.0.53 | HA DNS (keepalived failover) |
 
-| Task Type | Routes To | AI Model | Fallbacks |
-|-----------|----------|----------|-----------|
-| `coding` | build | Claude Sonnet 4.6 | GLM-5, MiniMax M2.7 |
-| `research` | light | Qwen 3.5 Plus | MiniMax M2.7, Gemini Flash Lite |
-| `compute` | heavy | Claude Opus 4.6 | GPT-5.4, GLM-5 |
-| `any` | least loaded | MiniMax M2.7 | Gemini Flash, DeepSeek V3.2 |
+## Task Routing
 
-If a preferred node is overloaded (>85% RAM), falls back to the next best available.
+Tasks are routed to the best-fit node based on role affinity and real-time health (RAM, CPU). Stats refreshed every 30s.
+
+| Task Type | Primary | Fallbacks |
+|-----------|---------|-----------|
+| `coding` | build | heavy, light |
+| `research` | light | heavy, build |
+| `compute` | heavy | build, light |
+| `orchestrator` | master (control) | heavy |
 
 ## Self-Healing
 
-- **Cluster watchdog** (2min timer): detects disconnected nodes, auto-re-pairs
-- **Telegram alerts**: notification on auto-recovery or unrecoverable failures
-- **NFS watchdog** (2min timer): auto-remounts dropped NFS shares
-- **Nightly version check** (2am): safely tests new OpenClaw versions, rolls back if broken
+- **Cluster watchdog** (2min): detects disconnected nodes, auto-re-pairs
+- **Heavy watchdog** (2min on master): monitors heavy, auto-restores to master after 6min failure
+- **NFS watchdog** (2min): auto-remounts dropped shares
+- **Resource monitor** (5min): RAM/swap/temp/disk alerts via Telegram
+- **E2E test** (daily 6am): 36 tests, Telegram alert on failure
 
-## Services
+## Operations
 
-| Service | Host | Port | Description |
-|---------|------|------|-------------|
-| OpenClaw Gateway | master | 18789 | Agent gateway (WebSocket) |
-| Router API | master | 8520 | HTTP API for task routing |
-| Pi-hole VIP | 192.168.0.53 | 53 | HA DNS (keepalived failover) |
-| n8n | heavy | 5678 | Workflow automation (migrated from master) |
-
-## Make Targets
-
-### Cluster Operations
 | Command | Description |
 |---------|-------------|
-| `make openclaw-recovery` | Full disaster recovery (nodes + NFS + monitoring + pairing) |
-| `make openclaw-pair` | Re-pair all nodes with gateway |
-| `make openclaw-health` | Cluster health check |
-| `make openclaw-dispatch coding "cmd"` | Route and execute command on best node |
-| `make openclaw-route coding` | Show which node would handle a task type |
-| `make openclaw-version` | Check for newer OpenClaw version |
-| `make openclaw-upgrade` | Test and apply upgrade if safe |
-
-### Infrastructure
-| Command | Description |
-|---------|-------------|
-| `make ping` | Test connectivity to all nodes |
-| `make update` | apt dist-upgrade on all nodes |
-| `make status` | Show uptime |
-| `make doctor` | Full diagnostics (connectivity, DNS, VIP, disk, memory) |
-| `make pihole-ha` | Deploy keepalived + Gravity Sync |
-| `make vpn` | Deploy KeepSolid VPN config |
-
-### CI/CD
-| Command | Description |
-|---------|-------------|
-| `make lint` | YAML lint + Ansible lint + ShellCheck |
-| `make test` | Template rendering + syntax check |
-| `make validate` | Full lint + test |
+| `make deploy` | Sync NFS scripts from git (also runs automatically every 5min) |
+| `make openclaw-test` | Run E2E test suite (36 tests) |
+| `make logs` | View cluster-wide logs |
+| `make openclaw-health` | Health check all nodes |
+| `make dr-test` | Disaster recovery validation |
+| `make validate` | Lint + test + permission check |
+| `make log-maintenance` | Deploy logrotate, journald limits, cleanup crons |
+| `make openclaw-monitoring` | Deploy all monitoring (crons, watchdogs, resource monitor) |
 
 ## CI/CD Pipeline
 
-PRs to `master` trigger:
-1. **YAML Lint** + **Ansible Lint** + **ShellCheck** — code quality
-2. **Ansible Syntax Check** + **Dry Run** — playbook validation
-3. **Template Rendering** — Jinja2 template tests
-4. **PR-Agent** (OpenRouter/Gemini Flash) — AI code review
-5. **Claude Code Action** — auto-fixes review comments (`@claude`)
-
-## DNS Architecture
-
 ```
-Devices → Pi-hole VIP 192.168.0.53 (keepalived)
-            ├── slave0 Pi-hole (MASTER, priority 150)
-            └── slave1 Pi-hole (BACKUP, priority 100)
-         → Fallback: Cloudflare 1.1.1.1
+PR opened → AI Review (Gemini Flash) → Claude Fix (auto-applies suggestions)
+         → Lint + Validate + Security Scan
+         → Auto-Merge (all checks pass) → Auto-Deploy (5min cron on master)
 ```
 
-## Secrets
+## Monitoring & Alerting
 
-Encrypted with Ansible Vault:
-- `secrets/openclaw.yml` — gateway token
-- `secrets/monitoring.yml` — Telegram bot credentials
-- `secrets/pihole.yml` — keepalived auth
-- `secrets/vpn.yml` — KeepSolid VPN keys
+Alerts via Telegram:
+- Resource thresholds: RAM >80%, swap >50%, temp >75°C, disk >85%
+- E2E test failures (daily)
+- Node disconnections (auto-recovery attempted)
+- Heavy node unreachable (auto-restore after 6min)
+- Service restarts (mc-watchdog on heavy)
 
 ## Project Structure
 
@@ -122,11 +102,9 @@ homelab/
 ├── inventory/           # Hosts and group vars
 ├── vars/                # Variable files
 ├── templates/           # Jinja2 templates (systemd, configs)
-├── scripts/             # Bash scripts (router, watchdog, health, pairing)
-├── skills/              # OpenClaw MCP skills (cluster-dispatch)
+├── scripts/             # Bash/Python scripts (router, watchdog, health, etc.)
 ├── secrets/             # Ansible Vault encrypted secrets
-├── tests/               # CI tests (template rendering, syntax)
-├── openclaw/            # Custom Docker build + MCP proxy
-├── .github/workflows/   # CI/CD pipelines
+├── docs/                # Architecture, runbook, DR procedures
+├── .github/workflows/   # CI/CD: review, fix, merge, lint, security
 └── Makefile             # All cluster operations
 ```

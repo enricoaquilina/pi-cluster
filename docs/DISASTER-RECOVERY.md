@@ -5,9 +5,15 @@
 | Location | Path | Contents |
 |----------|------|----------|
 | Local (master) | `/mnt/external/backups/backup-YYYY-MM-DD.tar.gz` | Full daily backup |
-| Off-site (heavy) | `192.168.0.5:/home/enrico/backups/backup-YYYY-MM-DD.tar.gz` | Rsync copy |
+| Off-site (heavy) | `heavy:/home/enrico/backups/backup-YYYY-MM-DD.tar.gz` | Rsync copy |
 
 Retention: 14 days on both local and remote.
+
+**Important notes (updated 2026-03-25):**
+- Gateway config (openclaw.json, paired.json) is fetched from **heavy** via SSH (not local on master)
+- Dispatch log is fetched from **heavy** `/tmp/openclaw-dispatch-log.db`
+- MongoDB data is on heavy's **local storage** (`/home/enrico/mongodb-data/`), NOT on NFS
+- Backup size should be >100K — if smaller, the backup script may have lost connectivity to heavy
 
 ## Backup Contents
 

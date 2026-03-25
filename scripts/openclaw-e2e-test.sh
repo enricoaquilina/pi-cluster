@@ -14,6 +14,9 @@
 #   8. Health API returns valid data
 #   9. Mission Control API has fresh data
 #  10. Budget API returns spend data
+#  11. Disk space on all nodes (<90%)
+#  12. Backup freshness (<25h) and size (>100K)
+#  13. Gateway restart recovery (--full only)
 
 set -uo pipefail
 
@@ -213,6 +216,71 @@ if echo "$budget" | grep -q "daily_usd"; then
     pass "Budget API returns spend data"
 else
     fail "Budget API" "no spend data"
+fi
+
+# ── Test 11: Disk space ─────────────────────────────────────────────────────
+echo "11. Disk space"
+for entry in "${NODES[@]}"; do
+    IFS=: read -r name ssh_host <<< "$entry"
+    disk_pct=$(ssh -o ConnectTimeout=3 -o BatchMode=yes "$ssh_host" "df / | awk 'NR==2 {gsub(/%/,\"\"); print \$5}'" 2>/dev/null)
+    if [ -n "$disk_pct" ] && [ "$disk_pct" -lt 90 ]; then
+        pass "Disk $name (${disk_pct}%)"
+    elif [ -n "$disk_pct" ]; then
+        fail "Disk $name" "${disk_pct}% used (>90%)"
+    else
+        fail "Disk $name" "check failed"
+    fi
+done
+
+# ── Test 12: Backup freshness + size ───────────────────────────────────────
+echo "12. Backup health"
+backup_info=$(ssh -o ConnectTimeout=3 -o BatchMode=yes master "
+    latest=\$(find /mnt/external/backups -name 'backup-*.tar.gz' -printf '%T@ %s %p\n' 2>/dev/null | sort -rn | head -1)
+    if [ -n \"\$latest\" ]; then
+        ts=\$(echo \$latest | cut -d' ' -f1 | cut -d. -f1)
+        size_kb=\$(echo \$latest | awk '{print int(\$2/1024)}')
+        age_h=\$(( (\$(date +%s) - ts) / 3600 ))
+        echo \"\$age_h \$size_kb\"
+    fi
+" 2>/dev/null)
+if [ -n "$backup_info" ]; then
+    read -r age_h size_kb <<< "$backup_info"
+    if [ "$age_h" -lt 25 ]; then
+        pass "Backup age (${age_h}h)"
+    else
+        fail "Backup age" "${age_h}h old (>25h)"
+    fi
+    if [ "$size_kb" -gt 100 ]; then
+        pass "Backup size (${size_kb}K)"
+    else
+        fail "Backup size" "${size_kb}K (expected >100K)"
+    fi
+else
+    fail "Backup" "no backups found"
+fi
+
+# ── Test 13: Gateway restart recovery (--full only) ────────────────────────
+FULL_MODE=false
+[ "${1:-}" = "--full" ] && FULL_MODE=true
+
+if $FULL_MODE; then
+    echo "13. Gateway restart recovery"
+    docker restart "$GATEWAY" > /dev/null 2>&1
+    echo "  Waiting for gateway to recover..."
+    recovered=false
+    for i in $(seq 1 12); do
+        sleep 10
+        status=$(docker ps --filter "name=$GATEWAY" --format '{{.Status}}' 2>/dev/null)
+        if echo "$status" | grep -q "healthy"; then
+            recovered=true
+            break
+        fi
+    done
+    if $recovered; then
+        pass "Gateway recovered in $((i * 10))s"
+    else
+        fail "Gateway recovery" "not healthy after 120s"
+    fi
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
