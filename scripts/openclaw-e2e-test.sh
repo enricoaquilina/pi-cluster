@@ -16,7 +16,9 @@
 #  10. Budget API returns spend data
 #  11. Disk space on all nodes (<90%)
 #  12. Backup freshness (<25h) and size (>100K)
-#  13. Gateway restart recovery (--full only)
+#  13. MC/Router API reachable from master (cross-node connectivity)
+#  14. WhatsApp provider active
+#  15. Gateway restart recovery (--full only)
 
 set -uo pipefail
 
@@ -26,7 +28,7 @@ TESTS=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 API="http://127.0.0.1:8520"
-MC_API="http://127.0.0.1:8000/api"
+MC_API="${MC_API_URL:-http://192.168.0.5:8000/api}"
 GATEWAY="openclaw-openclaw-gateway-1"
 
 # Nodes: name:ssh_host
@@ -259,7 +261,29 @@ else
     fail "Backup" "no backups found"
 fi
 
-# ── Test 13: Gateway restart recovery (--full only) ────────────────────────
+# ── Test 13: MC API reachable from master ──────────────────────────────────
+echo "13. Cross-node connectivity"
+if ssh -o ConnectTimeout=3 -o BatchMode=yes master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:8000/health" > /dev/null 2>&1; then
+    pass "MC API reachable from master"
+else
+    fail "MC API from master" "unreachable (check binding)"
+fi
+if ssh -o ConnectTimeout=3 -o BatchMode=yes master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:8520/health" > /dev/null 2>&1; then
+    pass "Router API reachable from master"
+else
+    fail "Router API from master" "unreachable"
+fi
+
+# ── Test 14: WhatsApp provider active ──────────────────────────────────────
+echo "14. WhatsApp provider"
+wa_listening=$(docker logs --since 10m "$GATEWAY" 2>&1 | grep -c "Listening for personal WhatsApp")
+if [ "$wa_listening" -gt 0 ]; then
+    pass "WhatsApp provider active (${wa_listening} listen events)"
+else
+    fail "WhatsApp provider" "no listening events in last 10min"
+fi
+
+# ── Test 15: Gateway restart recovery (--full only) ────────────────────────
 FULL_MODE=false
 [ "${1:-}" = "--full" ] && FULL_MODE=true
 
