@@ -13,7 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HEAVY_HOST="${HEAVY_HOST:-heavy}"
 LOG_FILE="/tmp/db-maintenance.log"
 
-log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"; }
+# shellcheck source=scripts/lib/log.sh
+source "$SCRIPT_DIR/lib/log.sh"
 
 log "=== Database maintenance started ==="
 
