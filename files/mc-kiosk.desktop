@@ -1,5 +1,5 @@
 [Desktop Entry]
 Type=Application
 Name=Mission Control Kiosk
-Exec=chromium --kiosk --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble http://heavy:3000
+Exec=chromium --start-fullscreen --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble http://heavy:3000
 X-GNOME-Autostart-enabled=true
