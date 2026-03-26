@@ -6,19 +6,76 @@ on:
   workflow_run:
     workflows: ["AI PR Review", "Claude Code Fix", "Lint", "Validate", "Security Scan"]
     types: [completed]
+  # Also run on schedule to catch merge conflicts from master changes
+  schedule:
+    - cron: "*/30 * * * *"  # every 30 minutes
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
+  # Detect and flag merge conflicts on all open PRs
+  conflict-check:
+    name: Check for merge conflicts
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_run'
+    steps:
+      - name: Flag conflicting PRs
+        run: |
+          # Get all open PRs
+          PRS=$(gh pr list -R "${{ github.repository }}" --state open --json number,headRefName,mergeable -q '.[]')
+          echo "$PRS" | while IFS= read -r pr; do
+            [ -z "$pr" ] && continue
+            PR_NUM=$(echo "$pr" | jq -r '.number')
+            BRANCH=$(echo "$pr" | jq -r '.headRefName')
+            MERGEABLE=$(echo "$pr" | jq -r '.mergeable')
+
+            if [ "$MERGEABLE" = "CONFLICTING" ]; then
+              echo "PR #${PR_NUM} (${BRANCH}) has merge conflicts"
+
+              # Check if we already commented about conflicts (avoid spam)
+              EXISTING=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
+                --json comments -q '.comments[].body' 2>/dev/null \
+                | grep -c "Merge conflict detected" || true)
+
+              if [ "$EXISTING" -eq 0 ]; then
+                gh pr comment "$PR_NUM" -R "${{ github.repository }}" --body "$(cat <<'COMMENT'
+⚠️ **Merge conflict detected**
+
+This PR has conflicts with `master` that need to be resolved before it can be merged.
+
+**To fix:** rebase onto latest master:
+```bash
+git fetch origin master
+git rebase origin/master
+# resolve conflicts, then:
+git push --force-with-lease
+```
+
+_Auto-detected by merge conflict checker_
+COMMENT
+)"
+                # Add a label if available
+                gh pr edit "$PR_NUM" -R "${{ github.repository }}" \
+                  --add-label "conflict" 2>/dev/null || true
+                echo "Commented on PR #${PR_NUM}"
+              else
+                echo "Already commented on PR #${PR_NUM}, skipping"
+              fi
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   auto-merge:
     name: Merge if all checks pass
     runs-on: ubuntu-latest
-    # Only proceed if the triggering workflow succeeded (or was skipped)
     if: |
-      github.event.workflow_run.conclusion == 'success' ||
-      github.event.workflow_run.conclusion == 'skipped'
+      github.event_name == 'workflow_run' && (
+        github.event.workflow_run.conclusion == 'success' ||
+        github.event.workflow_run.conclusion == 'skipped'
+      )
     steps:
       - name: Get PR number from workflow run
         id: pr
@@ -34,8 +91,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for all checks then merge
+      - name: Check mergeability
         if: steps.pr.outputs.number != ''
+        id: mergeable
+        run: |
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          MERGEABLE=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
+            --json mergeable -q '.mergeable' 2>/dev/null || echo "UNKNOWN")
+          echo "status=$MERGEABLE" >> "$GITHUB_OUTPUT"
+          if [ "$MERGEABLE" = "CONFLICTING" ]; then
+            echo "::warning::PR #${PR_NUMBER} has merge conflicts — cannot auto-merge"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for all checks then merge
+        if: steps.pr.outputs.number != '' && steps.mergeable.outputs.status != 'CONFLICTING'
         run: |
           PR_NUMBER="${{ steps.pr.outputs.number }}"
           echo "Checking PR #${PR_NUMBER}..."

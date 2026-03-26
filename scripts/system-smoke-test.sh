@@ -354,6 +354,7 @@ fi
 # ── Cron Mode: State Tracking + Alerts + API Post ────────────────────────────
 
 # Critical services that trigger immediate alerts
+# shellcheck disable=SC2034  # used for reference/future alerting tiers
 declare -A CRITICAL=(
     [openclaw-gateway]=1 [openclaw-telegram]=1 [openclaw-whatsapp]=1
     [mission-control-api]=1 [postgresql]=1 [zeroclaw-slave0]=1
@@ -399,7 +400,8 @@ post_to_api() {
 
 post_alert_to_api() {
     local svc="$1" status="$2" msg="$3" downtime="${4:-}"
-    local json='{"service":"'"$svc"'","status":"'"$status"'","message":"'"$(echo "$msg" | sed 's/"/\\"/g')"'"'
+    local json
+    json='{"service":"'"$svc"'","status":"'"$status"'","message":"'"$(echo "$msg" | sed 's/"/\\"/g')"'"'
     [[ -n "$downtime" ]] && json+=',"downtime_seconds":'"$downtime"
     json+='}'
     curl -sf --max-time 10 -X POST "${MISSION_CONTROL_API}/services/alert" \

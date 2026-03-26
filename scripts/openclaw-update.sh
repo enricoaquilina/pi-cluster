@@ -17,7 +17,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 HEAVY_HOST="${HEAVY_HOST:-heavy}"
 COMPOSE_DIR="/mnt/external/openclaw"
-COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
 CHANNEL="${OPENCLAW_UPDATE_CHANNEL:-stable}"
 ALERT="${OPENCLAW_UPDATE_ALERT:-true}"
 ALERT_SCRIPT="/usr/local/bin/cluster-alert.sh"
