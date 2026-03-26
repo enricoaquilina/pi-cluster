@@ -1,20 +1,33 @@
 ---
 - name: Mission Control kiosk display
   hosts: master
-  become: true
+  become: false
   tasks:
-    - name: Ensure autostart directory exists
+    - name: Remove old autostart desktop file
       file:
-        path: /home/enrico/.config/autostart
+        path: /home/enrico/.config/autostart/mc-kiosk.desktop
+        state: absent
+
+    - name: Ensure systemd user directory exists
+      file:
+        path: /home/enrico/.config/systemd/user
         state: directory
-        owner: enrico
-        group: enrico
         mode: '0755'
 
-    - name: Deploy MC kiosk autostart
+    - name: Deploy MC kiosk systemd service
       copy:
-        src: ../files/mc-kiosk.desktop
-        dest: /home/enrico/.config/autostart/mc-kiosk.desktop
-        owner: enrico
-        group: enrico
+        src: ../templates/mc-kiosk.service.j2
+        dest: /home/enrico/.config/systemd/user/mc-kiosk.service
         mode: '0644'
+      register: service_file
+
+    - name: Reload systemd user daemon
+      command: systemctl --user daemon-reload
+      environment:
+        XDG_RUNTIME_DIR: /run/user/1000
+      when: service_file.changed
+
+    - name: Enable and start MC kiosk service
+      command: systemctl --user enable --now mc-kiosk
+      environment:
+        XDG_RUNTIME_DIR: /run/user/1000

@@ -1,0 +1,54 @@
+---
+name: Mission Control Tests
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - 'mission-control/**'
+  pull_request:
+    branches: [master, main]
+    paths:
+      - 'mission-control/**'
+
+jobs:
+  test:
+    name: MC Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: missioncontrol
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: missioncontrol
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd mission-control/backend
+          pip install -r requirements.txt -r requirements-test.txt
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://missioncontrol:testpassword@localhost:5432/missioncontrol
+          API_KEY: test-api-key
+          POSTGRES_PASSWORD: testpassword
+          OPENCLAW_DIR: /tmp
+          POLYBOT_DATA_DIR: /tmp
+        run: |
+          cd mission-control/backend
+          python -m pytest tests/ -v --tb=short

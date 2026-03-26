@@ -1,0 +1,14 @@
+[Unit]
+Description=Mission Control Kiosk Display
+After=default.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/bin/chromium --start-fullscreen --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble http://heavy:3000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

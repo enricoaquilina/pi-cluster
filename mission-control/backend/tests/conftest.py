@@ -13,11 +13,12 @@ from httpx import ASGITransport, AsyncClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Set required env vars before importing app
+# Real credentials are provided via environment (CI or local .env); defaults are test-only values
 os.environ.setdefault(
     "DATABASE_URL",
-    f"postgresql://missioncontrol:{os.environ.get('POSTGRES_PASSWORD', 'O9ou9AI9E+YmcEWmjrv9c1Su')}@localhost:5432/missioncontrol",
+    f"postgresql://missioncontrol:{os.environ.get('POSTGRES_PASSWORD', 'testpassword')}@localhost:5432/missioncontrol",
 )
-os.environ.setdefault("API_KEY", os.environ.get("API_KEY", "860e75126051c283758226e6852fcb687b1423c2b7c0af51"))
+os.environ.setdefault("API_KEY", os.environ.get("API_KEY", "test-api-key"))
 os.environ.setdefault("OPENCLAW_DIR", "/tmp")
 os.environ.setdefault("POLYBOT_DATA_DIR", "/tmp")
 

@@ -42,6 +42,8 @@ API_KEY = os.environ.get("API_KEY", "")
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 OPENCLAW_DIR = Path(os.environ.get("OPENCLAW_DIR", "/openclaw"))
 
+_start_time = time.time()
+
 
 # ── SSE Event Bus ─────────────────────────────────────────────────────────────
 
@@ -401,7 +403,17 @@ class ServiceAlertIn(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    result = {"status": "ok", "uptime_seconds": int(time.time() - _start_time), "sse_subscribers": len(event_bus._subscribers)}
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.close()
+        result["db"] = "ok"
+    except Exception as e:
+        result["db"] = f"error: {e}"
+        result["status"] = "degraded"
+    return result
 
 
 
