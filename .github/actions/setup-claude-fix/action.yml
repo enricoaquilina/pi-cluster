@@ -1,0 +1,53 @@
+name: 'Setup Claude Fix'
+description: 'Generate App token, checkout branch, and run Claude Code Action'
+
+inputs:
+  branch:
+    description: 'Branch to checkout'
+    required: true
+  prompt:
+    description: 'Prompt for Claude'
+    required: true
+  claude_args:
+    description: 'Additional Claude CLI args'
+    required: false
+    default: '--model claude-sonnet-4-20250514 --max-turns 30'
+  bot_app_id:
+    description: 'GitHub App ID'
+    required: true
+  bot_private_key:
+    description: 'GitHub App private key'
+    required: true
+  anthropic_api_key:
+    description: 'Anthropic API key'
+    required: true
+  condition:
+    description: 'Whether to run (true/false)'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate App token
+      if: inputs.condition == 'true'
+      id: app-token
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: ${{ inputs.bot_app_id }}
+        private-key: ${{ inputs.bot_private_key }}
+
+    - uses: actions/checkout@v4
+      if: inputs.condition == 'true'
+      with:
+        ref: ${{ inputs.branch }}
+        fetch-depth: 0
+        token: ${{ steps.app-token.outputs.token }}
+
+    - uses: anthropics/claude-code-action@v1
+      if: inputs.condition == 'true'
+      with:
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        github_token: ${{ steps.app-token.outputs.token }}
+        prompt: ${{ inputs.prompt }}
+        claude_args: ${{ inputs.claude_args }}
