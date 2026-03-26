@@ -20,11 +20,12 @@ COMPOSE_DIR="/mnt/external/openclaw"
 CHANNEL="${OPENCLAW_UPDATE_CHANNEL:-stable}"
 ALERT="${OPENCLAW_UPDATE_ALERT:-true}"
 ALERT_SCRIPT="/usr/local/bin/cluster-alert.sh"
-LOG_FILE="/tmp/openclaw-update.log"
+export LOG_FILE="/tmp/openclaw-update.log"
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
 
-log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"; }
+# shellcheck source=scripts/lib/log.sh
+source "$SCRIPT_DIR/lib/log.sh"
 send_alert() { [[ "$ALERT" == "true" ]] && bash "$ALERT_SCRIPT" "$1" 2>/dev/null || true; }
 
 log "=== OpenClaw update check started (channel: $CHANNEL, dry-run: $DRY_RUN) ==="
