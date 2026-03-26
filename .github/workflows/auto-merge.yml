@@ -40,22 +40,11 @@ jobs:
                 | grep -c "Merge conflict detected" || true)
 
               if [ "$EXISTING" -eq 0 ]; then
-                gh pr comment "$PR_NUM" -R "${{ github.repository }}" --body "$(cat <<'COMMENT'
-⚠️ **Merge conflict detected**
-
-This PR has conflicts with `master` that need to be resolved before it can be merged.
-
-**To fix:** rebase onto latest master:
-```bash
-git fetch origin master
-git rebase origin/master
-# resolve conflicts, then:
-git push --force-with-lease
-```
-
-_Auto-detected by merge conflict checker_
-COMMENT
-)"
+                COMMENT_BODY="**Merge conflict detected**"
+                COMMENT_BODY+=$'\n\n'"This PR has conflicts with master that need to be resolved before it can be merged."
+                COMMENT_BODY+=$'\n\n'"To fix: rebase onto latest master and force-push."
+                COMMENT_BODY+=$'\n\n'"_Auto-detected by merge conflict checker_"
+                gh pr comment "$PR_NUM" -R "${{ github.repository }}" --body "$COMMENT_BODY"
                 # Add a label if available
                 gh pr edit "$PR_NUM" -R "${{ github.repository }}" \
                   --add-label "conflict" 2>/dev/null || true
@@ -105,24 +94,51 @@ COMMENT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Wait for all checks then merge
+      - name: Get head SHA
         if: steps.pr.outputs.number != '' && steps.mergeable.outputs.status != 'CONFLICTING'
+        id: sha
+        run: |
+          HEAD_SHA=$(gh pr view "${{ steps.pr.outputs.number }}" -R "${{ github.repository }}" \
+            --json headRefOid -q '.headRefOid' 2>/dev/null || echo "")
+          echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+          echo "Head SHA: $HEAD_SHA"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for all checks then merge
+        if: steps.pr.outputs.number != '' && steps.mergeable.outputs.status != 'CONFLICTING' && steps.sha.outputs.sha != ''
         run: |
           PR_NUMBER="${{ steps.pr.outputs.number }}"
-          echo "Checking PR #${PR_NUMBER}..."
+          HEAD_SHA="${{ steps.sha.outputs.sha }}"
+          REPO="${{ github.repository }}"
+          # Required checks — these must explicitly pass
+          REQUIRED_CHECKS="ShellCheck,YAML Lint,Ansible Syntax Check"
+
+          echo "Checking PR #${PR_NUMBER} (SHA: ${HEAD_SHA})..."
 
           # Retry loop — other checks may still be running
-          for attempt in 1 2 3 4 5; do
-            sleep 15
-            CHECK_OUTPUT=$(gh pr checks "$PR_NUMBER" -R "${{ github.repository }}" 2>&1 || true)
-            FAILED=$(echo "$CHECK_OUTPUT" | grep -ci "fail" || true)
-            PENDING=$(echo "$CHECK_OUTPUT" | grep -ci "pending" || true)
+          for attempt in 1 2 3 4 5 6 7 8; do
+            sleep 20
 
-            echo "Attempt $attempt: failed=$FAILED pending=$PENDING"
-            echo "$CHECK_OUTPUT"
+            # Use REST API directly (avoids gh pr checks GraphQL permission bug)
+            CHECKS_JSON=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" \
+              --jq '.check_runs | map({name: .name, status: .status, conclusion: .conclusion})' 2>&1 || echo "[]")
+
+            TOTAL=$(echo "$CHECKS_JSON" | jq 'length')
+            FAILED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.conclusion == "failure")] | length')
+            PENDING=$(echo "$CHECKS_JSON" | jq '[.[] | select(.status != "completed")] | length')
+
+            echo "Attempt $attempt: total=$TOTAL failed=$FAILED pending=$PENDING"
+            echo "$CHECKS_JSON" | jq -r '.[] | "\(.name): \(.status) / \(.conclusion)"'
+
+            # Fail-safe: if 0 checks found, API may have errored — do NOT merge
+            if [ "$TOTAL" -eq 0 ]; then
+              echo "::warning::No checks found (possible API error). Skipping merge."
+              exit 0
+            fi
 
             if [ "$FAILED" -gt 0 ]; then
-              echo "::warning::PR has failing checks, skipping merge"
+              echo "::warning::PR has $FAILED failing check(s), skipping merge"
               exit 0
             fi
 
@@ -130,14 +146,30 @@ COMMENT
               break
             fi
 
-            if [ "$attempt" -eq 5 ]; then
-              echo "::warning::Checks still pending after 5 attempts, skipping"
+            if [ "$attempt" -eq 8 ]; then
+              echo "::warning::Checks still pending after 8 attempts (~3 min), skipping"
               exit 0
             fi
           done
 
+          # Verify required checks explicitly passed
+          for check_name in ${REQUIRED_CHECKS//,/ }; do
+            # shellcheck disable=SC2016
+            STATUS=$(echo "$CHECKS_JSON" | jq -r --arg name "$check_name" \
+              '.[] | select(.name == $name) | .conclusion')
+            if [ -z "$STATUS" ]; then
+              echo "::warning::Required check '${check_name}' not found, skipping merge"
+              exit 0
+            fi
+            if [ "$STATUS" != "success" ]; then
+              echo "::warning::Required check '${check_name}' has conclusion '${STATUS}', skipping merge"
+              exit 0
+            fi
+            echo "Required check '${check_name}': $STATUS"
+          done
+
           # Check no review requesting changes
-          REVIEW_DECISION=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
+          REVIEW_DECISION=$(gh pr view "$PR_NUMBER" -R "$REPO" \
             --json reviewDecision -q '.reviewDecision' 2>/dev/null || echo "")
           if [ "$REVIEW_DECISION" = "CHANGES_REQUESTED" ]; then
             echo "::warning::PR has changes requested, skipping merge"
@@ -145,7 +177,7 @@ COMMENT
           fi
 
           echo "All checks passed, merging PR #${PR_NUMBER}..."
-          gh pr merge "$PR_NUMBER" -R "${{ github.repository }}" \
+          gh pr merge "$PR_NUMBER" -R "$REPO" \
             --squash --delete-branch \
             || echo "::error::Merge failed"
         env:
