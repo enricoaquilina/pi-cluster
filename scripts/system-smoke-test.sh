@@ -220,10 +220,16 @@ check_pihole() {
 
 # 13. Cloudflare Tunnel
 check_cloudflared() {
-    if curl -sf --max-time 10 https://mc.siliconsentiments.work > /dev/null 2>/dev/null; then
+    # CF Access returns 302 redirect; both 200 and 302 mean tunnel is reachable
+    local http_code
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+        -H "CF-Access-Client-Id: ${CF_ACCESS_CLIENT_ID:-}" \
+        -H "CF-Access-Client-Secret: ${CF_ACCESS_CLIENT_SECRET:-}" \
+        https://mc.siliconsentiments.work 2>/dev/null)
+    if [ "$http_code" = "200" ] || [ "$http_code" = "302" ]; then
         check_service "cloudflared" "up"
     else
-        check_service "cloudflared" "down" "Tunnel unreachable (runs on heavy)"
+        check_service "cloudflared" "down" "Tunnel unreachable (HTTP $http_code)"
     fi
 }
 
