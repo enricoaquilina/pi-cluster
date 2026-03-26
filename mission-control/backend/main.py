@@ -117,7 +117,7 @@ def get_db():
 
 
 def init_db():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = _pool.getconn()
     try:
         with conn.cursor() as cur:
             cur.execute("""
@@ -200,7 +200,7 @@ def init_db():
             """)
         conn.commit()
     finally:
-        conn.close()
+        _pool.putconn(conn)
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -213,8 +213,8 @@ async def _heartbeat_sweep():
     """Periodically mark nodes as offline when heartbeat is stale."""
     while True:
         await asyncio.sleep(60)
+        conn = _pool.getconn()
         try:
-            conn = psycopg2.connect(DATABASE_URL)
             with conn.cursor() as cur:
                 cur.execute(
                     """UPDATE nodes
@@ -227,9 +227,10 @@ async def _heartbeat_sweep():
                     logger.info("Heartbeat sweep: marked %d node(s) offline", cur.rowcount)
                     event_bus.publish("nodes")
             conn.commit()
-            conn.close()
         except Exception as e:
             logger.warning("Heartbeat sweep error: %s", e)
+        finally:
+            _pool.putconn(conn)
 
 
 @asynccontextmanager
@@ -1075,15 +1076,14 @@ async def _zeroclaw_chat(node: str, prompt: str, system_prompt: str, timeout: in
 
 def _is_node_dispatchable(node_name: str) -> bool:
     """Check if a node is healthy enough to dispatch to."""
+    conn = _pool.getconn()
     try:
-        conn = psycopg2.connect(DATABASE_URL)
         with conn.cursor() as cur:
             cur.execute(
                 """SELECT status, last_heartbeat FROM nodes WHERE name = %s""",
                 (node_name,),
             )
             row = cur.fetchone()
-        conn.close()
         if not row:
             return False
         status, last_hb = row
@@ -1095,6 +1095,8 @@ def _is_node_dispatchable(node_name: str) -> bool:
         return age < 600  # 10 minutes
     except Exception:
         return True  # If DB is down, don't block dispatch
+    finally:
+        _pool.putconn(conn)
 
 
 def _log_dispatch(persona: str, node: str, delegate: str, fallback: bool,
@@ -1102,8 +1104,8 @@ def _log_dispatch(persona: str, node: str, delegate: str, fallback: bool,
                   status: str = "success", error_detail: Optional[str] = None,
                   original_node: Optional[str] = None):
     """Log a dispatch attempt to the database."""
+    conn = _pool.getconn()
     try:
-        conn = psycopg2.connect(DATABASE_URL)
         with conn.cursor() as cur:
             cur.execute(
                 """INSERT INTO dispatch_log
@@ -1115,9 +1117,10 @@ def _log_dispatch(persona: str, node: str, delegate: str, fallback: bool,
                  elapsed_ms, status, error_detail),
             )
         conn.commit()
-        conn.close()
     except Exception as e:
         logger.warning("Failed to log dispatch: %s", e)
+    finally:
+        _pool.putconn(conn)
 
 
 @app.post("/api/dispatch", response_model=DispatchResponse)
