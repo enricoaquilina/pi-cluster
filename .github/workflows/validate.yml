@@ -29,6 +29,7 @@ jobs:
 
       - name: Symlink test secrets for vault playbooks
         run: |
+          mkdir -p secrets
           ln -sf "$(pwd)/tests/secrets/vpn.yml" secrets/vpn.yml
           ln -sf "$(pwd)/tests/secrets/pihole.yml" secrets/pihole.yml
           ln -sf "$(pwd)/tests/secrets/openclaw.yml" secrets/openclaw.yml
@@ -80,6 +81,7 @@ jobs:
 
       - name: Symlink test secrets
         run: |
+          mkdir -p secrets
           ln -sf "$(pwd)/tests/secrets/vpn.yml" secrets/vpn.yml
           ln -sf "$(pwd)/tests/secrets/pihole.yml" secrets/pihole.yml
           ln -sf "$(pwd)/tests/secrets/openclaw.yml" secrets/openclaw.yml

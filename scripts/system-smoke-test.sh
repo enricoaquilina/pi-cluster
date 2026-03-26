@@ -328,24 +328,6 @@ build_json() {
     echo "$json"
 }
 
-# 10b. OpenClaw heavy node
-check_openclaw_heavy() {
-    if curl -sf --max-time 5 http://${HEAVY_IP}:8520/nodes 2>/dev/null | python3 -c "import json,sys; nodes=json.load(sys.stdin).get('nodes',[]); exit(0 if any(n['name']=='heavy' and n.get('connected') for n in nodes) else 1)" 2>/dev/null; then
-        check_service "openclaw-heavy" "up"
-    else
-        check_service "openclaw-heavy" "down" "Node not connected to gateway"
-    fi
-}
-
-# 10c. Router API
-check_router_api() {
-    if curl -sf --max-time 5 http://${HEAVY_IP}:8520/health >/dev/null 2>&1; then
-        check_service "router-api" "up"
-    else
-        check_service "router-api" "down" "Router API unreachable"
-    fi
-}
-
 if [[ "$MODE" == "json" ]]; then
     build_json | tee "$RESULTS_FILE"
     exit 0
