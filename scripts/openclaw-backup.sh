@@ -57,7 +57,7 @@ ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "tar czf - -C /h
 
 # 3. Dispatch log (lives on heavy)
 log "Backing up dispatch log..."
-ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "cat /tmp/openclaw-dispatch-log.db" \
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "cat ${DISPATCH_LOG_DB:-/home/enrico/data/openclaw-dispatch-log.db}" \
     > "$BACKUP_DIR/dispatch/openclaw-dispatch-log.db" 2>/dev/null || log "  WARN: dispatch log not found on heavy"
 
 # 4. Mission Control database (lives on heavy)
@@ -101,6 +101,19 @@ if rsync -az --timeout=30 "$BACKUP_ROOT/backup-$DATE.tar.gz" "$REMOTE_BACKUP_DIR
         "find /home/enrico/backups -name 'backup-*.tar.gz' -mtime +$RETENTION_DAYS -delete" 2>/dev/null
 else
     log "WARN: Off-site sync to heavy failed"
+fi
+
+# Cloud backup (3rd copy — requires rclone configured)
+if command -v rclone &>/dev/null && [ -n "${CLOUD_BACKUP_DEST:-}" ]; then
+    log "Syncing to cloud ($CLOUD_BACKUP_DEST)..."
+    if rclone copy "$BACKUP_ROOT/backup-$DATE.tar.gz" "$CLOUD_BACKUP_DEST" \
+        --transfers 1 --bwlimit "${CLOUD_BACKUP_BW_LIMIT:-5M}" 2>/dev/null; then
+        log "Cloud sync complete"
+        # Clean old cloud backups beyond retention
+        rclone delete "$CLOUD_BACKUP_DEST" --min-age "${RETENTION_DAYS}d" 2>/dev/null || true
+    else
+        log "WARN: Cloud sync failed"
+    fi
 fi
 
 # Verify

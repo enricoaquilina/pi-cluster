@@ -49,7 +49,7 @@ from pydantic import BaseModel, Field
 # ── Config ───────────────────────────────────────────────────────────────────
 
 CACHE_FILE = "/tmp/openclaw-node-stats.json"
-LOG_DB = "/tmp/openclaw-dispatch-log.db"
+LOG_DB = os.environ.get("DISPATCH_LOG_DB", "/home/enrico/data/openclaw-dispatch-log.db")
 GATEWAY_CONTAINER = "openclaw-openclaw-gateway-1"
 MC_API = os.environ.get("MC_API_URL", "http://192.168.0.5:8000/api")
 MC_KEY = os.environ.get("MC_API_KEY", "")
