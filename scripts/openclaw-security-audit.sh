@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Security Best Practices Audit
 # Checks secrets, bindings, memory limits, permissions, and more.
 # Usage: bash scripts/openclaw-security-audit.sh

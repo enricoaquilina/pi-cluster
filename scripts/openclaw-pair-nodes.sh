@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Node Pairing (Safe Merge)
 # Reads node identities and merges them into the gateway's paired.json
 # without disrupting existing entries (operator, previously paired nodes).

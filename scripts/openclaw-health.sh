@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Cluster Health Check
 # Runs from master, checks all nodes and services
 #

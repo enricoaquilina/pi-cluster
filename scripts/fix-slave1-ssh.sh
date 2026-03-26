@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Fix slave1 SSH after botched UID change
 # Usage: 
 #   1. Power off slave1

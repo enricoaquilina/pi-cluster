@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Version Check & Safe Upgrade
 # Checks if a newer version is available, tests it, and upgrades if the
 # SYSTEM_RUN_DENIED bug is fixed. Rolls back if the bug persists.

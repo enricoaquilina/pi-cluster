@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Disaster Recovery Validation
 # Verifies backups exist, are recent, and contain valid data.
 # Usage: bash scripts/openclaw-dr-test.sh

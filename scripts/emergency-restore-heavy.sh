@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Restore normal operation on heavy after a master emergency.
 # Run this on heavy after heavy is back online.
 #

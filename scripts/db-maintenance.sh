@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Weekly Database Maintenance
 # Runs VACUUM/ANALYZE on PostgreSQL and compact on MongoDB.
 # Schedule: Sunday 5am via cron (after 3am backup, 4am update)
