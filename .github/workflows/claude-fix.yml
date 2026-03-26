@@ -224,6 +224,10 @@ jobs:
 
       - uses: anthropics/claude-code-action@v1
         if: steps.pr.outputs.should_fix == 'true'
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
