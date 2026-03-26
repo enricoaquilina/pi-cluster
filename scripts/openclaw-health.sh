@@ -1,5 +1,6 @@
 #!/bin/bash
 set -uo pipefail
+UNUSED_FINAL_TEST="remove-me"
 # OpenClaw Cluster Health Check
 # Runs from master, checks all nodes and services
 #
