@@ -23,6 +23,9 @@ RESULTS_FILE="/tmp/smoke-test-latest.json"
 LOG_FILE="/tmp/smoke-test.log"
 ALERT_INTERVAL=600  # 30 minutes
 
+RESTART_COUNT_FILE="/var/run/cluster-health/restart-count"
+MAX_RESTARTS_PER_HOUR=3
+
 mkdir -p "$STATE_DIR" "$FAIL_COUNT_DIR"
 
 # Colors for interactive mode
@@ -362,6 +365,21 @@ send_alert() {
     bash "$ALERT_SCRIPT" "$msg" 2>/dev/null || true
 }
 
+# Circuit breaker: cap auto-recovery restarts per hour
+check_circuit_breaker() {
+    if [ -f "$RESTART_COUNT_FILE" ]; then
+        AGE=$(( $(date +%s) - $(stat -c %Y "$RESTART_COUNT_FILE") ))
+        [ "$AGE" -gt 3600 ] && echo 0 > "$RESTART_COUNT_FILE"
+    fi
+    COUNT=$(cat "$RESTART_COUNT_FILE" 2>/dev/null || echo 0)
+    if [ "$COUNT" -ge "$MAX_RESTARTS_PER_HOUR" ]; then
+        send_alert "Circuit breaker: $COUNT restarts this hour, skipping auto-recovery"
+        return 1
+    fi
+    echo $((COUNT + 1)) > "$RESTART_COUNT_FILE"
+    return 0
+}
+
 post_to_api() {
     local json='{"checks":['
     local first=true
@@ -459,18 +477,22 @@ openclaw_tg_fails=$(cat "$FAIL_COUNT_DIR/openclaw-telegram.count" 2>/dev/null ||
 openclaw_gw_fails=$(cat "$FAIL_COUNT_DIR/openclaw-gateway.count" 2>/dev/null || echo "0")
 
 if [[ "$openclaw_tg_fails" -ge 3 ]] || [[ "$openclaw_gw_fails" -ge 3 ]]; then
-    send_alert "AUTO-RECOVERY: Restarting OpenClaw gateway after ${openclaw_tg_fails} consecutive Telegram failures"
-    cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
-    sleep 30
-    # Re-check
-    if timeout 8 ssh -o ConnectTimeout=3 -o BatchMode=yes ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
-        send_alert "AUTO-RECOVERY SUCCESS: OpenClaw gateway restarted, Telegram DNS resolving"
-        echo "0" > "$FAIL_COUNT_DIR/openclaw-telegram.count"
-        echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway.count"
-        echo "up" > "$STATE_DIR/openclaw-telegram.status"
-        echo "up" > "$STATE_DIR/openclaw-gateway.status"
+    if ! check_circuit_breaker; then
+        echo "[${NOW}] Circuit breaker tripped — skipping Telegram auto-recovery" >> "$LOG_FILE"
     else
-        send_alert "AUTO-RECOVERY FAILED: OpenClaw gateway still can't resolve Telegram API after restart"
+        send_alert "AUTO-RECOVERY: Restarting OpenClaw gateway after ${openclaw_tg_fails} consecutive Telegram failures"
+        cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
+        sleep 30
+        # Re-check
+        if timeout 8 ssh -o ConnectTimeout=3 -o BatchMode=yes ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
+            send_alert "AUTO-RECOVERY SUCCESS: OpenClaw gateway restarted, Telegram DNS resolving"
+            echo "0" > "$FAIL_COUNT_DIR/openclaw-telegram.count"
+            echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway.count"
+            echo "up" > "$STATE_DIR/openclaw-telegram.status"
+            echo "up" > "$STATE_DIR/openclaw-gateway.status"
+        else
+            send_alert "AUTO-RECOVERY FAILED: OpenClaw gateway still can't resolve Telegram API after restart"
+        fi
     fi
 fi
 
@@ -481,29 +503,37 @@ docker_dns_fails=$(cat "$FAIL_COUNT_DIR/docker-dns.count" 2>/dev/null || echo "0
 
 # If Tailscale MagicDNS is failing to resolve, restart tailscaled
 if [[ "$tailscale_dns_fails" -ge 3 ]]; then
-    send_alert "AUTO-RECOVERY: Tailscale MagicDNS not resolving for 15+ min — restarting tailscaled"
-    sudo systemctl restart tailscaled 2>/dev/null || true
-    sleep 10
-    if dig +short +time=3 google.com @100.100.100.100 >/dev/null 2>&1; then
-        send_alert "AUTO-RECOVERY SUCCESS: Tailscale MagicDNS resolving after restart"
-        echo "0" > "$FAIL_COUNT_DIR/tailscale-dns.count"
-        echo "up" > "$STATE_DIR/tailscale-dns.status"
+    if ! check_circuit_breaker; then
+        echo "[${NOW}] Circuit breaker tripped — skipping Tailscale auto-recovery" >> "$LOG_FILE"
     else
-        send_alert "AUTO-RECOVERY FAILED: Tailscale MagicDNS still not resolving"
+        send_alert "AUTO-RECOVERY: Tailscale MagicDNS not resolving for 15+ min — restarting tailscaled"
+        sudo systemctl restart tailscaled 2>/dev/null || true
+        sleep 10
+        if dig +short +time=3 google.com @100.100.100.100 >/dev/null 2>&1; then
+            send_alert "AUTO-RECOVERY SUCCESS: Tailscale MagicDNS resolving after restart"
+            echo "0" > "$FAIL_COUNT_DIR/tailscale-dns.count"
+            echo "up" > "$STATE_DIR/tailscale-dns.status"
+        else
+            send_alert "AUTO-RECOVERY FAILED: Tailscale MagicDNS still not resolving"
+        fi
     fi
 fi
 
 # If Docker container DNS is broken for 3+ checks (15 min), restart affected containers
 if [[ "$docker_dns_fails" -ge 3 ]]; then
-    send_alert "AUTO-RECOVERY: Docker container DNS broken for 15+ min — restarting OpenClaw gateway"
-    cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
-    sleep 10
-    if timeout 5 ssh -o ConnectTimeout=3 -o BatchMode=yes ${HEAVY_HOST} docker exec openclaw-openclaw-gateway-1 sh -c "getent hosts google.com" >/dev/null 2>&1; then
-        send_alert "AUTO-RECOVERY SUCCESS: Docker container DNS restored after gateway restart"
-        echo "0" > "$FAIL_COUNT_DIR/docker-dns.count"
-        echo "up" > "$STATE_DIR/docker-dns.status"
+    if ! check_circuit_breaker; then
+        echo "[${NOW}] Circuit breaker tripped — skipping Docker DNS auto-recovery" >> "$LOG_FILE"
     else
-        send_alert "AUTO-RECOVERY FAILED: Docker container DNS still broken — may need daemon restart"
+        send_alert "AUTO-RECOVERY: Docker container DNS broken for 15+ min — restarting OpenClaw gateway"
+        cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
+        sleep 10
+        if timeout 5 ssh -o ConnectTimeout=3 -o BatchMode=yes ${HEAVY_HOST} docker exec openclaw-openclaw-gateway-1 sh -c "getent hosts google.com" >/dev/null 2>&1; then
+            send_alert "AUTO-RECOVERY SUCCESS: Docker container DNS restored after gateway restart"
+            echo "0" > "$FAIL_COUNT_DIR/docker-dns.count"
+            echo "up" > "$STATE_DIR/docker-dns.status"
+        else
+            send_alert "AUTO-RECOVERY FAILED: Docker container DNS still broken — may need daemon restart"
+        fi
     fi
 fi
 
