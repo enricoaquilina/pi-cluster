@@ -1,0 +1,47 @@
+---
+name: Conflict Check
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # hourly
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check:
+    name: Check for merge conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Flag conflicting PRs
+        run: |
+          PRS=$(gh pr list -R "${{ github.repository }}" --state open --json number,headRefName,mergeable -q '.[]')
+          echo "$PRS" | while IFS= read -r pr; do
+            [ -z "$pr" ] && continue
+            PR_NUM=$(echo "$pr" | jq -r '.number')
+            BRANCH=$(echo "$pr" | jq -r '.headRefName')
+            MERGEABLE=$(echo "$pr" | jq -r '.mergeable')
+
+            if [ "$MERGEABLE" = "CONFLICTING" ]; then
+              echo "PR #${PR_NUM} (${BRANCH}) has merge conflicts"
+
+              EXISTING=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
+                --json comments -q '.comments[].body' 2>/dev/null \
+                | grep -c "Merge conflict detected" || true)
+
+              if [ "$EXISTING" -eq 0 ]; then
+                COMMENT_BODY="**Merge conflict detected**"
+                COMMENT_BODY+=$'\n\n'"This PR has conflicts with master that need to be resolved before it can be merged."
+                COMMENT_BODY+=$'\n\n'"To fix: rebase onto latest master and force-push."
+                COMMENT_BODY+=$'\n\n'"_Auto-detected by merge conflict checker_"
+                gh pr comment "$PR_NUM" -R "${{ github.repository }}" --body "$COMMENT_BODY"
+                gh pr edit "$PR_NUM" -R "${{ github.repository }}" \
+                  --add-label "conflict" 2>/dev/null || true
+                echo "Commented on PR #${PR_NUM}"
+              else
+                echo "Already commented on PR #${PR_NUM}, skipping"
+              fi
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
