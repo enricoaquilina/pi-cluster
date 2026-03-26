@@ -20,7 +20,7 @@ COMPOSE_DIR="/mnt/external/openclaw"
 CHANNEL="${OPENCLAW_UPDATE_CHANNEL:-stable}"
 ALERT="${OPENCLAW_UPDATE_ALERT:-true}"
 ALERT_SCRIPT="/usr/local/bin/cluster-alert.sh"
-LOG_FILE="/tmp/openclaw-update.log"
+export LOG_FILE="/tmp/openclaw-update.log"
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
 

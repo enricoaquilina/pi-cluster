@@ -23,7 +23,7 @@ BACKUP_ROOT="/mnt/external/backups"
 DATE=$(date +%Y-%m-%d)
 BACKUP_DIR="$BACKUP_ROOT/$DATE"
 RETENTION_DAYS=14
-LOG_FILE="/var/log/openclaw-backup.log"
+export LOG_FILE="/var/log/openclaw-backup.log"
 
 # shellcheck source=scripts/lib/log.sh
 source "$SCRIPT_DIR/lib/log.sh"

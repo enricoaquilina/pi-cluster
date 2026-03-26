@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 
 HEAVY_HOST="${HEAVY_HOST:-heavy}"
-LOG_FILE="/tmp/db-maintenance.log"
+export LOG_FILE="/tmp/db-maintenance.log"
 
 # shellcheck source=scripts/lib/log.sh
 source "$SCRIPT_DIR/lib/log.sh"
