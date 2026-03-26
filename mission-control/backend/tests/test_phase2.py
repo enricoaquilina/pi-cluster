@@ -1,9 +1,12 @@
 """Phase 2 verification tests: enhanced health, kiosk watchdog, CI readiness."""
 
 import os
-import subprocess
 
 import pytest
+requires_cluster = pytest.mark.skipif(
+    not os.path.exists("/mnt/external/mission-control"),
+    reason="Requires cluster environment (skipped in CI)",
+)
 
 
 async def test_health_returns_db_status(client):
@@ -57,14 +60,14 @@ def test_conftest_no_real_credentials():
     """conftest.py does not contain real credentials (2D)."""
     conftest_path = os.path.join(os.path.dirname(__file__), "conftest.py")
     content = open(conftest_path).read()
-    # Should not contain the real DB password or API key
     assert "O9ou9AI9E" not in content, "Real DB password found in conftest.py"
     assert "860e75126051c283" not in content, "Real API key found in conftest.py"
 
 
+@requires_cluster
 def test_ci_workflow_exists():
     """GitHub Actions workflow for MC tests exists (2D)."""
-    # Check in the repo on master
+    import subprocess
     result = subprocess.run(
         ["ssh", "master", "test -f ~/homelab/.github/workflows/mc-tests.yml && echo EXISTS"],
         capture_output=True, text=True, timeout=10,
@@ -72,8 +75,10 @@ def test_ci_workflow_exists():
     assert "EXISTS" in result.stdout, "mc-tests.yml workflow not found in repo"
 
 
+@requires_cluster
 def test_kiosk_service_file_exists():
     """Kiosk systemd service template exists in repo (2B)."""
+    import subprocess
     result = subprocess.run(
         ["ssh", "master", "test -f ~/homelab/templates/mc-kiosk.service.j2 && echo EXISTS"],
         capture_output=True, text=True, timeout=10,
@@ -81,8 +86,10 @@ def test_kiosk_service_file_exists():
     assert "EXISTS" in result.stdout, "mc-kiosk.service.j2 template not found"
 
 
+@requires_cluster
 def test_kiosk_service_has_restart():
     """Kiosk service has Restart=always for crash recovery (2B)."""
+    import subprocess
     result = subprocess.run(
         ["ssh", "master", "grep 'Restart=always' ~/homelab/templates/mc-kiosk.service.j2"],
         capture_output=True, text=True, timeout=10,
@@ -90,8 +97,10 @@ def test_kiosk_service_has_restart():
     assert result.returncode == 0, "Kiosk service missing Restart=always"
 
 
+@requires_cluster
 def test_old_desktop_autostart_removed():
     """Old .desktop autostart file removed from repo (2B)."""
+    import subprocess
     result = subprocess.run(
         ["ssh", "master", "test -f ~/homelab/files/mc-kiosk.desktop && echo EXISTS || echo GONE"],
         capture_output=True, text=True, timeout=10,

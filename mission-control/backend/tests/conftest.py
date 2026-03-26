@@ -23,9 +23,22 @@ os.environ.setdefault("OPENCLAW_DIR", "/tmp")
 os.environ.setdefault("POLYBOT_DATA_DIR", "/tmp")
 
 
+def _is_cluster():
+    """Check if running on the actual cluster (not CI)."""
+    return os.path.exists("/mnt/external/mission-control")
+
+
+# Make is_cluster available as a pytest marker
+requires_cluster = pytest.mark.skipif(
+    not _is_cluster(), reason="Requires cluster environment (skipped in CI)"
+)
+
+
 @pytest.fixture(scope="session")
 def app():
-    from main import app, event_bus
+    from main import app, event_bus, init_db
+    # Ensure DB tables exist (critical for CI with fresh PostgreSQL)
+    init_db()
     loop = asyncio.new_event_loop()
     event_bus.set_loop(loop)
     loop.close()
@@ -72,13 +85,16 @@ def cleanup_test_data():
     """Delete test nodes, services, and alerts after all tests complete."""
     yield
     db_url = os.environ["DATABASE_URL"]
-    conn = psycopg2.connect(db_url)
-    with conn.cursor() as cur:
-        for name in TEST_NODE_NAMES:
-            cur.execute("DELETE FROM nodes WHERE name = %s", (name,))
-        for svc in TEST_SERVICE_NAMES:
-            cur.execute("DELETE FROM service_checks WHERE service = %s", (svc,))
-            cur.execute("DELETE FROM service_alerts WHERE service = %s", (svc,))
-        cur.execute("DELETE FROM dispatch_log WHERE persona = 'test'")
-    conn.commit()
-    conn.close()
+    try:
+        conn = psycopg2.connect(db_url)
+        with conn.cursor() as cur:
+            for name in TEST_NODE_NAMES:
+                cur.execute("DELETE FROM nodes WHERE name = %s", (name,))
+            for svc in TEST_SERVICE_NAMES:
+                cur.execute("DELETE FROM service_checks WHERE service = %s", (svc,))
+                cur.execute("DELETE FROM service_alerts WHERE service = %s", (svc,))
+            cur.execute("DELETE FROM dispatch_log WHERE persona = 'test'")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass  # Tables may not exist in CI if tests failed early
