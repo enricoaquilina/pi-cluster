@@ -120,10 +120,16 @@ jobs:
           for attempt in 1 2 3 4 5 6 7 8; do
             sleep 20
 
-            # Use REST API directly (avoids gh pr checks GraphQL permission bug)
-            CHECKS_JSON=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" \
-              --jq '.check_runs | map({name: .name, status: .status, conclusion: .conclusion})' 2>&1 || echo "[]")
+            # Fetch raw JSON from REST API (no --jq to avoid mixed stderr)
+            RAW_RESPONSE=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" 2>/dev/null || echo "")
 
+            # Validate response is JSON and extract check runs
+            if ! echo "$RAW_RESPONSE" | jq -e '.check_runs' >/dev/null 2>&1; then
+              echo "Attempt $attempt: API returned invalid response, retrying..."
+              continue
+            fi
+
+            CHECKS_JSON=$(echo "$RAW_RESPONSE" | jq '[.check_runs[] | {name: .name, status: .status, conclusion: .conclusion}]')
             TOTAL=$(echo "$CHECKS_JSON" | jq 'length')
             FAILED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.conclusion == "failure")] | length')
             PENDING=$(echo "$CHECKS_JSON" | jq '[.[] | select(.status != "completed")] | length')
@@ -154,9 +160,8 @@ jobs:
 
           # Verify required checks explicitly passed
           for check_name in ${REQUIRED_CHECKS//,/ }; do
-            # shellcheck disable=SC2016
             STATUS=$(echo "$CHECKS_JSON" | jq -r --arg name "$check_name" \
-              '.[] | select(.name == $name) | .conclusion')
+              '[.[] | select(.name == $name) | .conclusion] | first // empty')
             if [ -z "$STATUS" ]; then
               echo "::warning::Required check '${check_name}' not found, skipping merge"
               exit 0
