@@ -13,7 +13,6 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_DIR="${OPENCLAW_COMPOSE_DIR:-/home/enrico/openclaw}"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
 ENV_FILE="$COMPOSE_DIR/.env"

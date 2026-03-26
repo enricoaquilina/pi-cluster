@@ -3,7 +3,12 @@
 import os
 import subprocess
 
-from conftest import requires_cluster
+import pytest
+
+requires_cluster = pytest.mark.skipif(
+    not os.path.exists("/mnt/external/mission-control"),
+    reason="Requires cluster environment (skipped in CI)",
+)
 
 
 async def test_health_returns_db_status(client):

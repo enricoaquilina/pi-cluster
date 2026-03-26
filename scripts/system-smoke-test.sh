@@ -196,12 +196,12 @@ check_router_api() {
 
 # 11. Polymarket Bot
 check_polymarket_bot() {
-    if ! timeout 5 bash -c 'XDG_RUNTIME_DIR=/run/user/1000 systemctl --user is-active --quiet polymarket-bot' 2>/dev/null; then
+    if ! systemctl is-active --quiet polymarket-bot 2>/dev/null; then
         check_service "polymarket-bot" "down" "Service not active"
         return
     fi
     local recent_errors
-    recent_errors=$(timeout 5 journalctl --user-unit polymarket-bot --since "10 min ago" --no-pager 2>/dev/null | grep -c "ERROR" 2>/dev/null || true); recent_errors=${recent_errors:-0}; recent_errors=$(echo "$recent_errors" | tr -d "[:space:]")
+    recent_errors=$(journalctl -u polymarket-bot --since "10 min ago" --no-pager 2>/dev/null | grep -c "ERROR" 2>/dev/null || true); recent_errors=${recent_errors:-0}; recent_errors=$(echo "$recent_errors" | tr -d "[:space:]")
     if [ "$recent_errors" -gt 20 ]; then
         check_service "polymarket-bot" "degraded" "${recent_errors} errors in last 10 min"
     else
