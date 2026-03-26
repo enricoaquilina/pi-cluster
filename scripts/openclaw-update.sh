@@ -113,4 +113,13 @@ log "Running openclaw doctor..."
 ssh -o ConnectTimeout=5 -o BatchMode=yes "$HEAVY_HOST" \
     "docker exec openclaw-openclaw-gateway-1 openclaw doctor 2>&1" | tee -a "$LOG_FILE" || true
 
+# Post-deploy E2E validation
+log "Running post-deploy E2E tests..."
+if "$SCRIPT_DIR/openclaw-e2e-test.sh" >> "$LOG_FILE" 2>&1; then
+    log "Post-deploy E2E tests passed"
+else
+    log "WARN: Post-deploy E2E tests had failures (check log)"
+    send_alert "OpenClaw post-deploy E2E tests had failures after update to $NEW_VERSION"
+fi
+
 log "=== OpenClaw update finished ==="

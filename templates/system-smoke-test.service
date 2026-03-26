@@ -1,0 +1,10 @@
+[Unit]
+Description=System smoke test — checks all services, alerts on state transitions
+
+[Service]
+Type=oneshot
+User=enrico
+RuntimeDirectory=cluster-health cluster-health/services cluster-health/fail-counts
+RuntimeDirectoryPreserve=yes
+ExecStart=/home/enrico/pi-cluster/scripts/system-smoke-test.sh --cron
+TimeoutSec=120

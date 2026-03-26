@@ -269,11 +269,40 @@ check_tailscale_dns() {
     fi
 }
 
+# 16. WhatsApp Echo Loop — detect self-chat echo chains
+check_whatsapp_echo() {
+    local echo_count
+    echo_count=$(timeout 10 ssh -o ConnectTimeout=3 -o BatchMode=yes ${HEAVY_HOST} \
+      "docker logs --since 10m openclaw-openclaw-gateway-1" 2>&1 | python3 -c "
+import sys, re
+from datetime import datetime
+events = []
+for line in sys.stdin:
+    line = line.strip()
+    m = re.match(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})', line)
+    if not m: continue
+    try: ts = datetime.fromisoformat(m.group(1))
+    except: continue
+    if 'Auto-replied to' in line: events.append(('r', ts))
+    elif 'Inbound message' in line and 'direct' in line: events.append(('i', ts))
+echoes = sum(1 for i in range(len(events)-1)
+    if events[i][0]=='r' and events[i+1][0]=='i'
+    and 0 < (events[i+1][1]-events[i][1]).total_seconds() < 2)
+print(echoes)
+" 2>/dev/null)
+    if [ "${echo_count:-0}" -eq 0 ]; then
+        check_service "whatsapp-echo-guard" "up"
+    else
+        check_service "whatsapp-echo-guard" "down" "${echo_count} echo chains in 10m"
+    fi
+}
+
 # ── Run All Checks ────────────────────────────────────────────────────────────
 
 check_openclaw_gateway
 check_openclaw_telegram
 check_openclaw_whatsapp
+check_whatsapp_echo
 check_mc_api
 check_postgres
 check_mongodb
@@ -295,7 +324,7 @@ if [[ "$MODE" == "interactive" ]]; then
     echo ""
     printf "${BOLD}%-25s %-10s %-8s %s${NC}\n" "SERVICE" "STATUS" "MS" "ERROR"
     echo "────────────────────────────────────────────────────────────────"
-    for svc in openclaw-gateway openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-slave0 openclaw-slave1 openclaw-heavy router-api polymarket-bot pihole-dns cloudflared docker-dns tailscale-dns; do
+    for svc in openclaw-gateway openclaw-telegram openclaw-whatsapp whatsapp-echo-guard mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-slave0 openclaw-slave1 openclaw-heavy router-api polymarket-bot pihole-dns cloudflared docker-dns tailscale-dns; do
         status="${RESULTS[$svc]:-unknown}"
         ms="${RESPONSE_MS[$svc]:-}"
         err="${ERRORS[$svc]:-}"

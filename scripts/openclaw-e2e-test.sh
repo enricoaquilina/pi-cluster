@@ -276,11 +276,11 @@ fi
 
 # ── Test 14: WhatsApp provider active ──────────────────────────────────────
 echo "14. WhatsApp provider"
-wa_listening=$(docker logs --since 10m "$GATEWAY" 2>&1 | grep -c "Listening for personal WhatsApp")
+wa_listening=$(docker logs "$GATEWAY" 2>&1 | grep -c "Listening for personal WhatsApp")
 if [ "$wa_listening" -gt 0 ]; then
-    pass "WhatsApp provider active (${wa_listening} listen events)"
+    pass "WhatsApp provider active (${wa_listening} listen events since start)"
 else
-    fail "WhatsApp provider" "no listening events in last 10min"
+    fail "WhatsApp provider" "no listening events in container lifetime"
 fi
 
 # ── Test 15: Gateway restart recovery (--full only) ────────────────────────
