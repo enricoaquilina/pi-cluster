@@ -232,15 +232,17 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           prompt: |
-            The "${{ steps.pr.outputs.workflow }}" CI workflow FAILED on PR #${{ steps.pr.outputs.number }}.
+            STRICT RULES — follow exactly:
+            1. The "${{ steps.pr.outputs.workflow }}" CI check FAILED on this PR.
+            2. Read the error logs below and identify the EXACT file(s) and line(s) with errors.
+            3. Fix ONLY those specific lines. Do NOT touch any other file or line.
+            4. Do NOT add new files, features, tests, or improvements.
+            5. Do NOT refactor, rename, or reorganize anything.
+            6. Make the MINIMUM change to make the failing check pass.
+            7. Commit with exactly this message: "Auto-fix: resolve ${{ steps.pr.outputs.workflow }} failure"
 
-            Here are the failed job logs:
+            Failed CI logs:
             ```
             ${{ steps.pr.outputs.failed_log }}
             ```
-
-            Fix ONLY the issues flagged by CI — do not refactor or improve unrelated code.
-            Common issues: ShellCheck warnings, YAML lint, Ansible syntax, security findings.
-            If this is NOT a code issue (transient error), just comment on the PR.
-            Commit with: "Auto-fix: resolve ${{ steps.pr.outputs.workflow }} failure"
-          claude_args: "--model claude-sonnet-4-20250514 --max-turns 30 --allowedTools Edit,Read,Write,Glob,Grep,Bash(git:*),Bash(gh:*)"
+          claude_args: "--model claude-sonnet-4-20250514 --max-turns 10 --allowedTools Edit,Read,Bash(git:*)"
