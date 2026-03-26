@@ -16,6 +16,7 @@ TEMP_THRESHOLD=75   # alert when temp > 75°C
 
 # Load env for Telegram
 ENV_FILE="$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/.env.cluster
 [ -f "$ENV_FILE" ] && source "$ENV_FILE"
 
 alerts=()
