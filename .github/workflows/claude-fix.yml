@@ -56,6 +56,7 @@ jobs:
       - uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           model: "claude-sonnet-4-20250514"
           trigger_phrase: "@claude"
           timeout_minutes: 30
@@ -123,6 +124,7 @@ jobs:
         if: steps.pr.outputs.has_suggestions == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           model: "claude-sonnet-4-20250514"
           timeout_minutes: 30
           direct_prompt: |
@@ -226,6 +228,7 @@ jobs:
         if: steps.pr.outputs.should_fix == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
           model: "claude-sonnet-4-20250514"
           timeout_minutes: 30
           direct_prompt: |
