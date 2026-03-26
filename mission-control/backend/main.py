@@ -24,6 +24,17 @@ from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 logger = logging.getLogger("mission-control")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    logger.addHandler(_handler)
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+    logger.addHandler(_handler)
+logger = logging.getLogger("mission-control")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 POLYBOT_DATA = Path(os.environ.get("POLYBOT_DATA_DIR", "/polybot-data"))
@@ -1238,7 +1249,7 @@ def get_dispatch_log(
 
 OPENROUTER_API_KEY = os.environ.get(
     "OPENROUTER_API_KEY",
-    "REDACTED_OPENROUTER_API_KEY",
+    "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",
 )
 BUDGET_DAILY = float(os.environ.get("BUDGET_DAILY", "5.00"))
 BUDGET_WEEKLY = float(os.environ.get("BUDGET_WEEKLY", "25.00"))
