@@ -11,9 +11,18 @@ Environment=OPENCLAW_GATEWAY_TOKEN={{ openclaw_gateway_token }}
 Environment=OPENCLAW_ALLOW_INSECURE_PRIVATE_WS=1
 Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
 Environment=OPENCLAW_NO_RESPAWN=1
+{% if openclaw_node_memory_max is defined %}
+MemoryMax={{ openclaw_node_memory_max }}
+{% endif %}
+{% if openclaw_node_max_old_space is defined %}
+Environment=NODE_OPTIONS=--max-old-space-size={{ openclaw_node_max_old_space }}
+{% endif %}
 ExecStart=/usr/bin/openclaw node run --host {{ openclaw_gateway_host }} --port {{ openclaw_gateway_port }} --display-name {{ openclaw_node_name }}
 Restart=always
 RestartSec=10
+TimeoutStopSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
