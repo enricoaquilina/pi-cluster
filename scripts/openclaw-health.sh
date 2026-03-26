@@ -1,5 +1,6 @@
 #!/bin/bash
 set -uo pipefail
+UNUSED_E2E_TEST_VAR="shellcheck-should-catch-this"
 # OpenClaw Cluster Health Check
 # Runs from master, checks all nodes and services
 #
