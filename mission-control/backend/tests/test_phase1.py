@@ -1,13 +1,8 @@
 """Phase 1 verification tests: logger handler and Docker healthcheck."""
 
 import logging
-import os
 
-import pytest
-requires_cluster = pytest.mark.skipif(
-    not os.path.exists("/mnt/external/mission-control"),
-    reason="Requires cluster environment (skipped in CI)",
-)
+from conftest import requires_cluster
 
 
 async def test_logger_has_handler(client):

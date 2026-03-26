@@ -95,7 +95,7 @@ done
 log "Connected: ${connected[*]:-none} | Disconnected: ${disconnected[*]:-none}"
 
 # Step 4: Auto-recovery for disconnected nodes
-if [ ${{ "{#" }}disconnected[@]} -gt 0 ]; then
+{% raw %}if [ ${#disconnected[@]} -gt 0 ]; then{% endraw %}
     log "Attempting auto-recovery for: ${disconnected[*]}"
 
     bash "$SCRIPTS_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
@@ -122,7 +122,7 @@ print('false')
             fi
         done
 
-        if [ ${{ "{#" }}still_disconnected[@]} -eq 0 ]; then
+        {% raw %}if [ ${#still_disconnected[@]} -eq 0 ]; then{% endraw %}
             log "Recovery successful: all nodes reconnected"
             save_state '{"gateway_alert":"false","node_alert":"false"}'
             send_telegram "🔄 *OpenClaw Auto-Recovery*

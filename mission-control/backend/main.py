@@ -29,12 +29,6 @@ if not logger.handlers:
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
     logger.addHandler(_handler)
-logger.setLevel(logging.INFO)
-if not logger.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
-    logger.addHandler(_handler)
-logger = logging.getLogger("mission-control")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 POLYBOT_DATA = Path(os.environ.get("POLYBOT_DATA_DIR", "/polybot-data"))
@@ -74,6 +68,10 @@ class EventBus:
         with self._lock:
             self._subscribers.discard(q)
             logger.info("SSE client disconnected (%d total)", len(self._subscribers))
+
+    @property
+    def subscriber_count(self) -> int:
+        return len(self._subscribers)
 
     def publish(self, event: str):
         """Thread-safe publish — uses call_soon_threadsafe for sync endpoints."""
@@ -403,12 +401,11 @@ class ServiceAlertIn(BaseModel):
 
 @app.get("/health")
 def health():
-    result = {"status": "ok", "uptime_seconds": int(time.time() - _start_time), "sse_subscribers": len(event_bus._subscribers)}
+    result = {"status": "ok", "uptime_seconds": int(time.time() - _start_time), "sse_subscribers": event_bus.subscriber_count}
     try:
-        conn = psycopg2.connect(DATABASE_URL)
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
-        conn.close()
+        with psycopg2.connect(DATABASE_URL) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
         result["db"] = "ok"
     except Exception as e:
         result["db"] = f"error: {e}"
