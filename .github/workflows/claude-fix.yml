@@ -5,7 +5,7 @@ on:
   issue_comment:
     types: [created]
   workflow_run:
-    workflows: ["AI PR Review", "Lint", "Validate", "Security Scan"]
+    workflows: ["AI PR Review", "Lint", "Validate", "Security Scan", "Mission Control Tests"]
     types: [completed]
 
 permissions:
