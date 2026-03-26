@@ -134,9 +134,9 @@
         minute: "30"
         hour: "4"
         job: >-
-          sqlite3 /tmp/openclaw-dispatch-log.db
+          sqlite3 /home/enrico/data/openclaw-dispatch-log.db
           "DELETE FROM dispatch_log WHERE timestamp < datetime('now', '-30 days');"
-          && sqlite3 /tmp/openclaw-dispatch-log.db "VACUUM;"
+          && sqlite3 /home/enrico/data/openclaw-dispatch-log.db "VACUUM;"
         user: enrico
         cron_file: openclaw-log-cleanup
       become: true

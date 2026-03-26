@@ -11,7 +11,7 @@ Retention: 14 days on both local and remote.
 
 **Important notes (updated 2026-03-25):**
 - Gateway config (openclaw.json, paired.json) is fetched from **heavy** via SSH (not local on master)
-- Dispatch log is fetched from **heavy** `/tmp/openclaw-dispatch-log.db`
+- Dispatch log is fetched from **heavy** `/home/enrico/data/openclaw-dispatch-log.db`
 - MongoDB data is on heavy's **local storage** (`/home/enrico/mongodb-data/`), NOT on NFS
 - Backup size should be >100K — if smaller, the backup script may have lost connectivity to heavy
 
@@ -141,7 +141,7 @@ docker exec mission-control-db psql -U missioncontrol -c "ALTER DATABASE mission
 sudo systemctl stop openclaw-cluster-service
 
 # Restore dispatch log
-cp "$TMP/$DATE/dispatch/openclaw-dispatch-log.db" /tmp/openclaw-dispatch-log.db
+cp "$TMP/$DATE/dispatch/openclaw-dispatch-log.db" /home/enrico/data/openclaw-dispatch-log.db
 
 # Restart
 sudo systemctl start openclaw-cluster-service
