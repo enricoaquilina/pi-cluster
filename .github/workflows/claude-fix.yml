@@ -2,11 +2,10 @@
 name: Claude Code Fix
 
 on:
-  # Trigger when PR-Agent posts code suggestions as PR comments
+  # Manual invocation via @claude in PR comments
   issue_comment:
     types: [created]
-  # Trigger after AI PR Review completes (to auto-fix suggestions)
-  # AND after Lint/Validate/Security workflows fail (to auto-fix CI errors)
+  # Auto-fix on CI failure or PR review suggestions
   workflow_run:
     workflows: ["AI PR Review", "Lint", "Validate", "Security Scan"]
     types: [completed]
@@ -15,11 +14,12 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  checks: read
 
 jobs:
+  # ── Manual: @claude mention in PR comments ──────────────────────────────────
   claude-fix-on-comment:
-    name: Claude Auto-Fix (comment)
-    # Run when a bot posts a PR comment with code suggestions, or @claude is mentioned
+    name: Claude Fix (comment)
     if: |
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request != null &&
@@ -39,10 +39,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        continue-on-error: true
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - uses: anthropics/claude-code-action@beta
         with:
@@ -62,9 +71,9 @@ jobs:
             Do NOT make cosmetic-only changes.
             Commit fixes with clear messages.
 
+  # ── Auto: fix PR-Agent review suggestions ───────────────────────────────────
   claude-fix-on-review:
-    name: Claude Auto-Fix (post-review)
-    # Run after AI PR Review completes successfully
+    name: Claude Fix (review suggestions)
     if: |
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.name == 'AI PR Review' &&
@@ -80,7 +89,6 @@ jobs:
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
 
-          # Check if PR-Agent posted code suggestions
           if [ -n "$PR_NUMBER" ]; then
             HAS_SUGGESTIONS=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
               --json comments --jq '.comments[] | select(.author.login == "github-actions") | select(.body | contains("Code Suggestions")) | .id' 2>/dev/null | head -1)
@@ -89,15 +97,27 @@ jobs:
             else
               echo "has_suggestions=false" >> "$GITHUB_OUTPUT"
             fi
+          else
+            echo "has_suggestions=false" >> "$GITHUB_OUTPUT"
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate App token
+        if: steps.pr.outputs.has_suggestions == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        continue-on-error: true
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
       - uses: actions/checkout@v4
         if: steps.pr.outputs.has_suggestions == 'true'
         with:
           ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - uses: anthropics/claude-code-action@beta
         if: steps.pr.outputs.has_suggestions == 'true'
@@ -106,27 +126,23 @@ jobs:
           model: "claude-sonnet-4-20250514"
           timeout_minutes: 30
           direct_prompt: |
-            Review PR #${{ steps.pr.outputs.number }} in this repository.
-            The automated reviewer (PR-Agent) has posted code suggestions.
-            Read the PR comments to find them.
-            For each suggestion:
-            1. Determine if the suggestion is valid and improves the code
-            2. If valid, make the fix directly
-            3. If not valid, skip it
-            Focus on: security fixes, Ansible best practices,
-            shell script safety, and systemd service correctness.
-            Do NOT make cosmetic-only changes.
-            Commit fixes with clear messages.
+            Review PR #${{ steps.pr.outputs.number }}.
+            The automated reviewer (PR-Agent) posted code suggestions.
+            For each valid suggestion, make the fix directly.
+            Skip false positives. Commit with clear messages.
 
+  # ── Auto: fix CI failures ───────────────────────────────────────────────────
   claude-fix-on-ci-failure:
-    name: Claude Auto-Fix (CI failure)
-    # Run when Lint, Validate, or Security Scan fails on a PR branch
+    name: Claude Fix (CI failure)
     if: |
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.conclusion == 'failure' &&
       github.event.workflow_run.head_branch != 'master' &&
       github.event.workflow_run.head_branch != 'main'
     runs-on: ubuntu-latest
+    concurrency:
+      group: claude-fix-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
     steps:
       - name: Get PR and failure details
         id: pr
@@ -140,7 +156,7 @@ jobs:
             --head "$HEAD_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || echo "")
 
           if [ -z "$PR_NUMBER" ]; then
-            echo "No open PR for branch $HEAD_BRANCH, skipping"
+            echo "No open PR for branch $HEAD_BRANCH"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -148,20 +164,31 @@ jobs:
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
           echo "workflow=$WORKFLOW_NAME" >> "$GITHUB_OUTPUT"
-          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
 
-          # Check if Claude already attempted a fix for this run (prevent loops)
-          LAST_COMMIT_MSG=$(gh pr view "$PR_NUMBER" -R "$REPO" \
-            --json commits --jq '.commits[-1].messageHeadline' 2>/dev/null || echo "")
-          if echo "$LAST_COMMIT_MSG" | grep -qi "auto-fix\|ci fix\|fix.*shellcheck\|fix.*lint\|fix.*yaml"; then
-            echo "::warning::Last commit looks like an auto-fix attempt, skipping to prevent loop"
+          # Loop prevention: max 2 auto-fix attempts per PR
+          FIX_COUNT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
+            --json commits --jq '[.commits[].messageHeadline | select(startswith("Auto-fix:"))] | length' 2>/dev/null || echo "0")
+          if [ "$FIX_COUNT" -ge 2 ]; then
+            echo "::warning::Already $FIX_COUNT auto-fix attempts on PR #$PR_NUMBER"
+            gh pr comment "$PR_NUMBER" -R "$REPO" \
+              --body "Auto-fix exhausted ($FIX_COUNT attempts). This PR needs manual intervention." 2>/dev/null || true
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Get failed job logs
-          FAILED_LOG=$(gh run view "$RUN_ID" -R "$REPO" --log-failed 2>&1 | tail -100)
-          # Escape for GitHub output
+          # Get failed logs
+          FAILED_LOG=$(gh run view "$RUN_ID" -R "$REPO" --log-failed 2>&1 | tail -80)
+
+          # Check for transient failures
+          if echo "$FAILED_LOG" | grep -qi "502: Bad Gateway\|ETIMEDOUT\|rate limit\|network error\|Could not resolve host"; then
+            echo "::warning::Transient failure detected, re-running workflow"
+            gh pr comment "$PR_NUMBER" -R "$REPO" \
+              --body "CI failure appears transient (network/rate-limit). Re-running." 2>/dev/null || true
+            gh run rerun "$RUN_ID" -R "$REPO" --failed 2>/dev/null || true
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
           {
             echo "failed_log<<$EOF_MARKER"
@@ -170,22 +197,30 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "should_fix=true" >> "$GITHUB_OUTPUT"
-          echo "Found PR #$PR_NUMBER, workflow '$WORKFLOW_NAME' failed (run $RUN_ID)"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate App token
+        if: steps.pr.outputs.should_fix == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        continue-on-error: true
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
 
       - uses: actions/checkout@v4
         if: steps.pr.outputs.should_fix == 'true'
         with:
           ref: ${{ steps.pr.outputs.branch }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         if: steps.pr.outputs.should_fix == 'true'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "pi-cluster-bot[bot]"
+          git config user.email "pi-cluster-bot[bot]@users.noreply.github.com"
 
       - uses: anthropics/claude-code-action@beta
         if: steps.pr.outputs.should_fix == 'true'
@@ -201,18 +236,7 @@ jobs:
             ${{ steps.pr.outputs.failed_log }}
             ```
 
-            Your job is to fix the code so the CI check passes. Common issues:
-            - ShellCheck warnings (SC2034 unused vars, SC2155 declare+assign, SC1090 source directive)
-            - YAML lint errors (indentation, trailing spaces, line length)
-            - Ansible syntax errors (undefined variables, wrong module params)
-            - Security scan findings (hardcoded secrets, unsafe permissions)
-
-            Instructions:
-            1. Read the error logs carefully to identify the exact file(s) and line(s)
-            2. Fix ONLY the issues flagged by CI — do not refactor or improve unrelated code
-            3. If the failure is transient (network timeout, 502 error), do NOT make code changes — just comment on the PR that it was a transient failure
-            4. Commit with message: "Auto-fix: resolve ${{ steps.pr.outputs.workflow }} failure"
-            5. Push the fix
-
-            IMPORTANT: Do NOT fix issues that aren't real code problems (e.g., flaky network, Ansible Galaxy 502).
-            IMPORTANT: Do NOT make cosmetic changes or improvements beyond what CI flagged.
+            Fix ONLY the issues flagged by CI — do not refactor or improve unrelated code.
+            Common issues: ShellCheck warnings, YAML lint, Ansible syntax, security findings.
+            If this is NOT a code issue (transient error), just comment on the PR.
+            Commit with: "Auto-fix: resolve ${{ steps.pr.outputs.workflow }} failure"
