@@ -4,7 +4,6 @@ import logging
 import os
 
 import pytest
-
 requires_cluster = pytest.mark.skipif(
     not os.path.exists("/mnt/external/mission-control"),
     reason="Requires cluster environment (skipped in CI)",

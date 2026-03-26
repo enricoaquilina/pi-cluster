@@ -36,12 +36,9 @@ requires_cluster = pytest.mark.skipif(
 
 @pytest.fixture(scope="session")
 def app():
-    from main import app, event_bus, init_db
+    from main import app, init_db
     # Ensure DB tables exist (critical for CI with fresh PostgreSQL)
     init_db()
-    loop = asyncio.new_event_loop()
-    event_bus.set_loop(loop)
-    loop.close()
     return app
 
 
@@ -98,3 +95,26 @@ def cleanup_test_data():
         conn.close()
     except Exception:
         pass  # Tables may not exist in CI if tests failed early
+
+
+async def _drain_queue(q, timeout: float = 0.5) -> list:
+    """Drain all events from queue within timeout."""
+    import asyncio, json
+    events = []
+    try:
+        while True:
+            raw = await asyncio.wait_for(q.get(), timeout=timeout)
+            events.append(json.loads(raw))
+    except (asyncio.TimeoutError, asyncio.QueueEmpty):
+        pass
+    return events
+
+
+async def _flush_queue(q):
+    """Discard any pending events."""
+    import asyncio
+    while not q.empty():
+        try:
+            q.get_nowait()
+        except asyncio.QueueEmpty:
+            break

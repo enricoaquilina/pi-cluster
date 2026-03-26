@@ -85,6 +85,11 @@ class EventBus:
             else:
                 self._safe_put(q, payload)
 
+    @property
+    def subscriber_count(self) -> int:
+        with self._lock:
+            return len(self._subscribers)
+
     @staticmethod
     def _safe_put(q: asyncio.Queue, payload: str):
         try:
@@ -99,13 +104,9 @@ event_bus = EventBus()
 
 psycopg2.extras.register_uuid()
 
-try:
-    _pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=1, maxconn=10, dsn=DATABASE_URL
-    )
-except psycopg2.Error as e:
-    logger.error("Failed to initialize connection pool: %s", e)
-    raise
+_pool = psycopg2.pool.ThreadedConnectionPool(
+    minconn=1, maxconn=10, dsn=DATABASE_URL
+)
 
 
 def get_db():
@@ -240,7 +241,6 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_heartbeat_sweep())
     yield
     task.cancel()
-    _pool.closeall()
 
 
 app = FastAPI(title="Mission Control", version="1.0.0", lifespan=lifespan)
@@ -924,9 +924,8 @@ async def trigger_smoke_test(_=Depends(verify_api_key)):
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
-        import json as _json
         try:
-            result = _json.loads(stdout.decode())
+            result = json.loads(stdout.decode())
         except Exception:
             result = {"raw": stdout.decode(), "stderr": stderr.decode()}
         event_bus.publish("services")

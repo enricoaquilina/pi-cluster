@@ -10,10 +10,6 @@ import pytest
 @pytest.fixture
 def bus():
     """Fresh EventBus instance for isolation."""
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    os.environ.setdefault("DATABASE_URL", "postgresql://x:x@localhost/x")
-    os.environ.setdefault("API_KEY", "test")
     from main import EventBus
     return EventBus()
 

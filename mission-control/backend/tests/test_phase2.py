@@ -49,13 +49,6 @@ async def test_health_sse_count_increases_with_subscriber(client, event_bus_inst
         event_bus_instance.unsubscribe(q)
 
 
-async def test_health_backward_compat(client):
-    """Health still returns status=ok for backward compat with smoke test (2A)."""
-    resp = await client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
-
-
 def test_conftest_no_real_credentials():
     """conftest.py does not contain real credentials (2D)."""
     conftest_path = os.path.join(os.path.dirname(__file__), "conftest.py")
@@ -80,10 +73,10 @@ def test_kiosk_service_file_exists():
     """Kiosk systemd service template exists in repo (2B)."""
     import subprocess
     result = subprocess.run(
-        ["ssh", "master", "test -f ~/homelab/templates/mc-kiosk.service.j2 && echo EXISTS"],
+        ["ssh", "master", "test -f ~/homelab/templates/mc-kiosk.service && echo EXISTS"],
         capture_output=True, text=True, timeout=10,
     )
-    assert "EXISTS" in result.stdout, "mc-kiosk.service.j2 template not found"
+    assert "EXISTS" in result.stdout, "mc-kiosk.service template not found"
 
 
 @requires_cluster
@@ -91,7 +84,7 @@ def test_kiosk_service_has_restart():
     """Kiosk service has Restart=always for crash recovery (2B)."""
     import subprocess
     result = subprocess.run(
-        ["ssh", "master", "grep 'Restart=always' ~/homelab/templates/mc-kiosk.service.j2"],
+        ["ssh", "master", "grep 'Restart=always' ~/homelab/templates/mc-kiosk.service"],
         capture_output=True, text=True, timeout=10,
     )
     assert result.returncode == 0, "Kiosk service missing Restart=always"

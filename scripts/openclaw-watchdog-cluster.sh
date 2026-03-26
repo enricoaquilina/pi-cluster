@@ -1,33 +1,20 @@
 #!/bin/bash
-set -uo pipefail
 # OpenClaw Cluster Watchdog
 # Detects disconnected nodes, auto-re-pairs, and sends Telegram alerts.
-# Runs via systemd timer every 2 minutes on master.
-#
-# Actions:
-#   1. Check if gateway container is healthy
-#   2. Check if all nodes are connected (from cached stats)
-#   3. If nodes disconnected: attempt auto-re-pair
-#   4. If gateway down or nodes unrecoverable: send Telegram alert
+# Managed by Ansible — do not edit manually.
 
 set -uo pipefail
 
 CACHE_FILE="/tmp/openclaw-node-stats.json"
 STATE_FILE="/tmp/openclaw-watchdog-state.json"
-SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPTS_DIR="/home/enrico/homelab/scripts"
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 LOG_FILE="/var/log/openclaw-watchdog.log"
 
-# Telegram config — loaded from .env.cluster (not hardcoded)
-ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env.cluster"
-if [ -f "$ENV_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$ENV_FILE"
-fi
-TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+TELEGRAM_BOT_TOKEN="8799078317:AAGGtKj6ZXH0C3Zwyob5EgjMIEPmgA36CjA"
+TELEGRAM_CHAT_ID="1630148884"
 
-EXPECTED_NODES=("control" "build" "light" "heavy")
+EXPECTED_NODES=("build" "light" "heavy")
 
 log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"
@@ -108,15 +95,12 @@ done
 log "Connected: ${connected[*]:-none} | Disconnected: ${disconnected[*]:-none}"
 
 # Step 4: Auto-recovery for disconnected nodes
-if [ ${#disconnected[@]} -gt 0 ]; then
-    log "Attempting auto-recovery for: ${disconnected[*]}"
+if [ ${#disconnected[@]} -gt 0 ]; then    log "Attempting auto-recovery for: ${disconnected[*]}"
 
-    # Run the pairing script (handles stop, inject, restart cycle)
     bash "$SCRIPTS_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
     repair_status=$?
 
     if [ $repair_status -eq 0 ]; then
-        # Re-check after repair
         sleep 5
         bash "$SCRIPTS_DIR/openclaw-stats-collector.sh" 2>/dev/null
 
@@ -137,11 +121,8 @@ print('false')
             fi
         done
 
-        if [ ${#still_disconnected[@]} -eq 0 ]; then
-            log "Recovery successful: all nodes reconnected"
+        if [ ${#still_disconnected[@]} -eq 0 ]; then            log "Recovery successful: all nodes reconnected"
             save_state '{"gateway_alert":"false","node_alert":"false"}'
-
-            # Always notify on auto-recovery so you know it happened
             send_telegram "🔄 *OpenClaw Auto-Recovery*
 Detected disconnected: ${disconnected[*]}
 Auto-repaired successfully — all nodes back online."
@@ -161,7 +142,6 @@ Auto-repair attempted but failed."
         log "Recovery failed: pair script returned $repair_status"
     fi
 else
-    # All nodes connected — clear alert state
     prev_state=$(load_state)
     was_alerted=$(echo "$prev_state" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('node_alert','false') == 'true' or d.get('gateway_alert','false') == 'true')" 2>/dev/null || echo "false")
     if [ "$was_alerted" = "True" ]; then

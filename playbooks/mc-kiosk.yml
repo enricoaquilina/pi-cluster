@@ -16,7 +16,7 @@
 
     - name: Deploy MC kiosk systemd service
       copy:
-        src: ../templates/mc-kiosk.service.j2
+        src: ../templates/mc-kiosk.service
         dest: /home/enrico/.config/systemd/user/mc-kiosk.service
         mode: '0644'
       register: service_file
