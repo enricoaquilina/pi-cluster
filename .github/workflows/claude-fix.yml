@@ -53,14 +53,12 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - uses: anthropics/claude-code-action@beta
+      - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          model: "claude-sonnet-4-20250514"
           trigger_phrase: "@claude"
-          timeout_minutes: 30
-          direct_prompt: |
+          prompt: |
             Review the PR comments posted by the automated reviewer (PR-Agent).
             Look for the "Code Suggestions" comment with specific code improvements.
             For each suggestion:
@@ -71,6 +69,7 @@ jobs:
             shell script safety, and systemd service correctness.
             Do NOT make cosmetic-only changes.
             Commit fixes with clear messages.
+          claude_args: "--model claude-sonnet-4-20250514 --max-turns 30"
 
   # ── Auto: fix PR-Agent review suggestions ───────────────────────────────────
   claude-fix-on-review:
@@ -120,18 +119,17 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
 
-      - uses: anthropics/claude-code-action@beta
+      - uses: anthropics/claude-code-action@v1
         if: steps.pr.outputs.has_suggestions == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          model: "claude-sonnet-4-20250514"
-          timeout_minutes: 30
-          direct_prompt: |
+          prompt: |
             Review PR #${{ steps.pr.outputs.number }}.
             The automated reviewer (PR-Agent) posted code suggestions.
             For each valid suggestion, make the fix directly.
             Skip false positives. Commit with clear messages.
+          claude_args: "--model claude-sonnet-4-20250514 --max-turns 30"
 
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
   claude-fix-on-ci-failure:
@@ -224,14 +222,12 @@ jobs:
           git config user.name "pi-cluster-bot[bot]"
           git config user.email "pi-cluster-bot[bot]@users.noreply.github.com"
 
-      - uses: anthropics/claude-code-action@beta
+      - uses: anthropics/claude-code-action@v1
         if: steps.pr.outputs.should_fix == 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
-          model: "claude-sonnet-4-20250514"
-          timeout_minutes: 30
-          direct_prompt: |
+          prompt: |
             The "${{ steps.pr.outputs.workflow }}" CI workflow FAILED on PR #${{ steps.pr.outputs.number }}.
 
             Here are the failed job logs:
@@ -243,3 +239,4 @@ jobs:
             Common issues: ShellCheck warnings, YAML lint, Ansible syntax, security findings.
             If this is NOT a code issue (transient error), just comment on the PR.
             Commit with: "Auto-fix: resolve ${{ steps.pr.outputs.workflow }} failure"
+          claude_args: "--model claude-sonnet-4-20250514 --max-turns 30 --allowedTools Edit,Read,Write,Glob,Grep,Bash(git:*),Bash(gh:*)"
