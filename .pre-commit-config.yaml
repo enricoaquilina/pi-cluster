@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.11.0
+    hooks:
+      - id: shellcheck
+        args: ["-S", "warning"]
+        files: ^scripts/.*\.sh$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: ["--select", "E,F,W", "--ignore", "E501"]
+        files: ^(scripts|mission-control/backend)/.*\.py$
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: ["-c", ".yamllint.yml"]
