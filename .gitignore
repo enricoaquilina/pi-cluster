@@ -16,3 +16,10 @@ ansible/logs/
 .venv/
 __pycache__/
 scripts/.env.cluster
+
+# Secrets - never commit
+secrets/
+*.pem
+*.key
+!tests/secrets/
+!tests/vault-password.txt
