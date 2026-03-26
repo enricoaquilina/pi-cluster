@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Stats Collector (lightweight)
 # Updates connection status from gateway and pushes to Mission Control.
 # Node stats now arrive via push from openclaw-node-agent.py on each node.

@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Lightweight per-node resource monitor with Telegram alerts
 # Runs via cron every 5 minutes on each node
 # Only alerts on state CHANGE to avoid alert fatigue

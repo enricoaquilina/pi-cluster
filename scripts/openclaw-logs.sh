@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Cluster-wide log viewer
 # Usage: openclaw-logs.sh [LINES]    (default: 50)
 LINES=${1:-50}

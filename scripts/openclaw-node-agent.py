@@ -14,7 +14,6 @@ Environment:
 import json
 import os
 import socket
-import subprocess
 import sys
 import urllib.request
 

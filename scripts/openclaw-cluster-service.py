@@ -22,14 +22,13 @@ import asyncio
 import json
 import logging
 import os
-import subprocess
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Optional
-from urllib.request import Request, urlopen
+from urllib.request import Request as UrllibRequest, urlopen
 
 # Auto-load .env.cluster if present (secrets, auth keys)
 _env_file = Path(__file__).resolve().parent / ".env.cluster"
@@ -41,11 +40,10 @@ if _env_file.is_file():
                 _k, _, _v = _line.partition("=")
                 os.environ.setdefault(_k.strip(), _v.strip())
 
-import aiosqlite
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, Field
+import aiosqlite  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Request  # noqa: E402
+from fastapi.security import APIKeyHeader  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
 
 try:
     from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -266,7 +264,7 @@ async def log_dispatch(entry: dict):
             "status": "success" if entry.get("success") else "error",
             "error_detail": entry.get("error"),
         }).encode()
-        req = Request(
+        req = UrllibRequest(
             f"{MC_API}/dispatch/log",
             data=payload, method="POST",
             headers={"Content-Type": "application/json", "X-Api-Key": MC_KEY},
@@ -348,7 +346,7 @@ def push_to_mc(stats: dict):
     for method in ["PATCH", "POST"]:
         path = f"/nodes/{mc_name}" if method == "PATCH" else "/nodes"
         try:
-            req = Request(MC_API + path, data=payload, method=method,
+            req = UrllibRequest(MC_API + path, data=payload, method=method,
                           headers={"Content-Type": "application/json", "X-Api-Key": MC_KEY})
             urlopen(req, timeout=5)
             break
@@ -597,7 +595,7 @@ MODEL_COSTS = {
 def get_openrouter_usage() -> dict:
     """Fetch real usage data from OpenRouter API."""
     try:
-        req = Request(
+        req = UrllibRequest(
             "https://openrouter.ai/api/v1/auth/key",
             headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
         )
@@ -631,7 +629,7 @@ def send_telegram(message: str):
         payload = json.dumps({
             "chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"
         }).encode()
-        req = Request(
+        req = UrllibRequest(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             data=payload, method="POST",
             headers={"Content-Type": "application/json"},
@@ -685,7 +683,7 @@ def check_budget_alerts():
         alerts.append(f"Monthly: ${usage['monthly_usd']:.2f} / ${BUDGET_MONTHLY:.2f}")
 
     if alerts:
-        msg = f"*OpenRouter Budget Alert*\n" + "\n".join(alerts)
+        msg = "*OpenRouter Budget Alert*\n" + "\n".join(alerts)
         send_telegram(msg)
         return {"alerted": True, "alerts": alerts}
 

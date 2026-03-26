@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Intelligent Task Router
 # Selects the best node for a given task type based on cached node health and role affinity.
 #

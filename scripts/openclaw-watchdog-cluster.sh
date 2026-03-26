@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Cluster Watchdog
 # Detects disconnected nodes, auto-re-pairs, and sends Telegram alerts.
 # Runs via systemd timer every 2 minutes on master.

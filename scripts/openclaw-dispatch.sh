@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # OpenClaw Task Dispatcher
 # Routes a command to the best available node based on task type.
 #

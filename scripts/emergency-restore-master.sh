@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Emergency: restore critical services to master if heavy is down.
 # Designed to run on master when heavy (192.168.0.5) is unreachable.
 #

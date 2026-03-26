@@ -121,7 +121,7 @@ jobs:
           failed=0
           for f in scripts/*.sh; do
             [ -f "$f" ] || continue
-            if ! head -5 "$f" | grep -q 'set -.*u.*o pipefail'; then
+            if ! head -25 "$f" | grep -q 'set -.*u.*o pipefail'; then
               echo "WARN: $f missing strict mode (set -uo pipefail)"
               failed=1
             fi
