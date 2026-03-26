@@ -99,9 +99,13 @@ event_bus = EventBus()
 
 psycopg2.extras.register_uuid()
 
-_pool = psycopg2.pool.ThreadedConnectionPool(
-    minconn=1, maxconn=10, dsn=DATABASE_URL
-)
+try:
+    _pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=1, maxconn=10, dsn=DATABASE_URL
+    )
+except psycopg2.Error as e:
+    logger.error("Failed to initialize connection pool: %s", e)
+    raise
 
 
 def get_db():
@@ -235,6 +239,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_heartbeat_sweep())
     yield
     task.cancel()
+    _pool.closeall()
 
 
 app = FastAPI(title="Mission Control", version="1.0.0", lifespan=lifespan)
