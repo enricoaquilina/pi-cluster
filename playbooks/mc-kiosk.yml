@@ -22,12 +22,18 @@
       register: service_file
 
     - name: Reload systemd user daemon
-      command: systemctl --user daemon-reload
+      systemd:
+        daemon_reload: true
+        scope: user
       environment:
         XDG_RUNTIME_DIR: /run/user/1000
       when: service_file.changed
 
     - name: Enable and start MC kiosk service
-      command: systemctl --user enable --now mc-kiosk
+      systemd:
+        name: mc-kiosk
+        enabled: true
+        state: started
+        scope: user
       environment:
         XDG_RUNTIME_DIR: /run/user/1000
