@@ -1,0 +1,61 @@
+---
+- name: Deploy Mission Control to heavy
+  hosts: heavy
+  become: true
+  vars_files:
+    - ../secrets/monitoring.yml
+  tasks:
+    - name: Ensure MC directory exists
+      file:
+        path: /mnt/external/mission-control
+        state: directory
+        owner: enrico
+        group: enrico
+        mode: "0755"
+
+    - name: Sync MC source from repo
+      synchronize:
+        src: "{{ playbook_dir }}/../mission-control/"
+        dest: /mnt/external/mission-control/
+        delete: false
+        rsync_opts:
+          - "--exclude=.env"
+          - "--exclude=__pycache__"
+          - "--exclude=.pytest_cache"
+          - "--exclude=.git"
+          - "--exclude=*.pyc"
+      register: sync_result
+
+    - name: Deploy MC .env from vault
+      ansible.builtin.template:
+        src: ../templates/mission-control.env.j2
+        dest: /mnt/external/mission-control/.env
+        mode: "0600"
+        owner: enrico
+      no_log: true
+      register: env_result
+
+    - name: Set ownership on synced files
+      file:
+        path: /mnt/external/mission-control
+        owner: enrico
+        group: enrico
+        recurse: true
+      when: sync_result.changed
+
+    - name: Rebuild and restart MC containers
+      become_user: enrico
+      command: docker compose up -d --build
+      args:
+        chdir: /mnt/external/mission-control
+      when: sync_result.changed or env_result.changed
+      register: rebuild_result
+
+    - name: Wait for MC API to be healthy
+      uri:
+        url: http://localhost:8000/health
+        method: GET
+        status_code: 200
+      retries: 12
+      delay: 5
+      when: rebuild_result is defined and rebuild_result is changed

@@ -108,7 +108,7 @@ async def test_update_node_publishes_nodes_event(client, auth_headers, event_que
     await _flush_queue(event_queue)
 
     resp = await client.patch("/api/nodes/test-sse-node", json={
-        "status": "idle",
+        "status": "degraded",
     }, headers=auth_headers)
     assert resp.status_code == 200
     events = await _drain_queue(event_queue)

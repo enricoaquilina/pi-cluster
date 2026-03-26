@@ -192,3 +192,13 @@ validate: lint test
 	done
 	@echo ""
 	@echo "=== Full Validation Complete ==="
+
+# ── Mission Control ────────────────────────────────────────────────────────────
+
+.PHONY: mc-deploy mc-kiosk
+
+mc-deploy: ## Deploy Mission Control to heavy
+	ansible-playbook playbooks/mission-control.yml
+
+mc-kiosk: ## Deploy MC kiosk display on master
+	ansible-playbook playbooks/mc-kiosk.yml

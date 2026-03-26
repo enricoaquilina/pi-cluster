@@ -189,6 +189,8 @@
 - name: Deploy resource monitor on all nodes
   hosts: cluster
   become: true
+  vars_files:
+    - ../secrets/monitoring.yml
   tasks:
     - name: Deploy resource monitor script
       ansible.builtin.copy:
@@ -197,12 +199,21 @@
         mode: "0755"
 
     - name: Deploy .env.cluster for Telegram alerts
-      ansible.builtin.copy:
-        src: ../scripts/.env.cluster
+      ansible.builtin.template:
+        src: ../templates/env.cluster.j2
         dest: /usr/local/bin/.env.cluster
         mode: "0600"
         owner: enrico
       no_log: true
+
+    - name: Deploy .env.cluster to scripts directory
+      ansible.builtin.template:
+        src: ../templates/env.cluster.j2
+        dest: /home/enrico/homelab/scripts/.env.cluster
+        mode: "0600"
+        owner: enrico
+      no_log: true
+      when: inventory_hostname == "master"
 
     - name: Deploy resource monitor cron (every 5 min)
       ansible.builtin.cron:
