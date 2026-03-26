@@ -172,6 +172,10 @@ test:
 	@echo ""
 	@echo "=== Tests Complete ==="
 
+openclaw-preflight:
+	@echo "=== OpenClaw Pre-Deploy Validation ==="
+	bash scripts/openclaw-preflight.sh
+
 validate: lint test
 	@echo ""
 	@echo "=== Permission Check ==="
