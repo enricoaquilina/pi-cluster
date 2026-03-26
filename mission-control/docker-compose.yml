@@ -1,0 +1,81 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mission-control-db
+    mem_limit: 256m
+    environment:
+      POSTGRES_USER: missioncontrol
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: missioncontrol
+    volumes:
+      - mission-control_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U missioncontrol"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: mission-control-api
+    mem_limit: 256m
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+      - 192.168.0.53
+    environment:
+      DATABASE_URL: "postgresql://missioncontrol:${POSTGRES_PASSWORD}@db:5432/missioncontrol"
+      API_KEY: "${API_KEY}"
+      OPENCLAW_DIR: "/openclaw"
+      ZEROCLAW_SLAVE0_TOKEN: "${ZEROCLAW_SLAVE0_TOKEN}"
+      ZEROCLAW_SLAVE1_TOKEN: "${ZEROCLAW_SLAVE1_TOKEN}"
+    volumes:
+      - /home/enrico/.openclaw:/openclaw:ro
+      - /mnt/external/polymarket-bot/data:/polybot-data:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: mission-control-proxy
+    mem_limit: 128m
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+      - 192.168.0.53
+    environment:
+      API_KEY: "${API_KEY}"
+    ports:
+      - "3000:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./frontend:/srv/frontend:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mission-control_postgres_data:
+    external: true
