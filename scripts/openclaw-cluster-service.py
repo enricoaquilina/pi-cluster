@@ -113,14 +113,27 @@ async def require_node_secret(key: str = Depends(_node_secret_header)):
 
 LOG_FILE = "/var/log/openclaw-cluster-service.log"
 
-# Structured logging: stdout + file
+
+class _JsonFormatter(logging.Formatter):
+    """Emit one JSON object per log line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        return json.dumps({
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "level": record.levelname.lower(),
+            "msg": record.getMessage(),
+            "script": "openclaw-cluster-service.py",
+        })
+
+
+# Structured JSON logging: stdout + file
+_handler_stdout = logging.StreamHandler()
+_handler_stdout.setFormatter(_JsonFormatter())
+_handler_file = logging.FileHandler(LOG_FILE, mode="a")
+_handler_file.setFormatter(_JsonFormatter())
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(LOG_FILE, mode="a"),
-    ],
+    handlers=[_handler_stdout, _handler_file],
 )
 log = logging.getLogger("cluster")
 

@@ -23,9 +23,10 @@ BACKUP_ROOT="/mnt/external/backups"
 DATE=$(date +%Y-%m-%d)
 BACKUP_DIR="$BACKUP_ROOT/$DATE"
 RETENTION_DAYS=14
-LOG_FILE="/var/log/openclaw-backup.log"
+export LOG_FILE="/var/log/openclaw-backup.log"
 
-log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"; }
+# shellcheck source=scripts/lib/log.sh
+source "$SCRIPT_DIR/lib/log.sh"
 
 log "=== Backup started ==="
 
