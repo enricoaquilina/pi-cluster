@@ -10,6 +10,10 @@ EnvironmentFile=/home/enrico/homelab/scripts/.env.cluster
 ExecStart=/usr/bin/python3 /home/enrico/homelab/scripts/openclaw-cluster-service.py
 Restart=always
 RestartSec=5
+TimeoutStopSec=30
+MemoryMax=512M
+StartLimitIntervalSec=300
+StartLimitBurst=5
 Environment=HOME=/home/enrico
 
 [Install]
