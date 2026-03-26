@@ -1,0 +1,20 @@
+---
+- name: Mission Control kiosk display
+  hosts: master
+  become: true
+  tasks:
+    - name: Ensure autostart directory exists
+      file:
+        path: /home/enrico/.config/autostart
+        state: directory
+        owner: enrico
+        group: enrico
+        mode: '0755'
+
+    - name: Deploy MC kiosk autostart
+      copy:
+        src: ../files/mc-kiosk.desktop
+        dest: /home/enrico/.config/autostart/mc-kiosk.desktop
+        owner: enrico
+        group: enrico
+        mode: '0644'
