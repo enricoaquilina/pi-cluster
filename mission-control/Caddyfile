@@ -1,0 +1,48 @@
+{
+	servers {
+		timeouts {
+			read_body 10s
+			read_header 5s
+			write 30s
+			idle 60s
+		}
+	}
+}
+
+:80 {
+	handle /api/events {
+		reverse_proxy api:8000 {
+			header_up X-Api-Key {$API_KEY}
+			flush_interval -1
+		}
+	}
+
+	handle /api/* {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy api:8000 {
+			header_up X-Api-Key {$API_KEY}
+		}
+	}
+
+	handle /health {
+		reverse_proxy api:8000
+	}
+
+	handle /trading/* {
+		root * /srv/frontend
+		try_files {path} /trading/index.html
+		file_server
+	}
+
+	handle /trading {
+		redir /trading/ permanent
+	}
+
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+}
