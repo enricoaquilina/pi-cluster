@@ -50,6 +50,11 @@ for host in slave0 slave1 heavy; do
         > "$BACKUP_DIR/identities/$host.json" 2>/dev/null || log "  WARN: $host identity not found"
 done
 
+# 2b. WhatsApp credentials (session keys for linked device)
+log "Backing up WhatsApp credentials..."
+ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "tar czf - -C /home/enrico/.openclaw credentials/whatsapp" \
+    > "$BACKUP_DIR/gateway/whatsapp-creds.tar.gz" 2>/dev/null || log "  WARN: WhatsApp creds not found"
+
 # 3. Dispatch log (lives on heavy)
 log "Backing up dispatch log..."
 ssh -o ConnectTimeout=5 -o BatchMode=yes "${HEAVY_HOST:-heavy}" "cat /tmp/openclaw-dispatch-log.db" \
