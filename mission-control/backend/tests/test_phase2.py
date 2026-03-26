@@ -57,11 +57,13 @@ async def test_health_backward_compat(client):
 
 
 def test_conftest_no_real_credentials():
-    """conftest.py does not contain real credentials (2D)."""
+    """conftest.py uses generic test defaults, not real credentials (2D)."""
     conftest_path = os.path.join(os.path.dirname(__file__), "conftest.py")
     content = open(conftest_path).read()
-    assert "O9ou9AI9E" not in content, "Real DB password found in conftest.py"
-    assert "860e75126051c283" not in content, "Real API key found in conftest.py"
+    # Defaults should be generic test values, not long hex strings
+    import re
+    hex_secrets = re.findall(r"[a-f0-9]{40,}", content)
+    assert not hex_secrets, f"Possible real credentials in conftest.py: {hex_secrets}"
 
 
 @requires_cluster

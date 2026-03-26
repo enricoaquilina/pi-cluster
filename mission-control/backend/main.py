@@ -1261,7 +1261,7 @@ def get_dispatch_log(
 
 OPENROUTER_API_KEY = os.environ.get(
     "OPENROUTER_API_KEY",
-    "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",
+    "",
 )
 BUDGET_DAILY = float(os.environ.get("BUDGET_DAILY", "5.00"))
 BUDGET_WEEKLY = float(os.environ.get("BUDGET_WEEKLY", "25.00"))

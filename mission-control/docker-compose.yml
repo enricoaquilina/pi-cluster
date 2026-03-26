@@ -37,6 +37,7 @@ services:
       OPENCLAW_DIR: "/openclaw"
       ZEROCLAW_SLAVE0_TOKEN: "${ZEROCLAW_SLAVE0_TOKEN}"
       ZEROCLAW_SLAVE1_TOKEN: "${ZEROCLAW_SLAVE1_TOKEN}"
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
     volumes:
       - /home/enrico/.openclaw:/openclaw:ro
       - /mnt/external/polymarket-bot/data:/polybot-data:ro
