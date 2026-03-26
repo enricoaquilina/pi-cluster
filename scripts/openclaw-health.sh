@@ -2,6 +2,7 @@
 set -uo pipefail
 # OpenClaw Cluster Health Check
 # Runs from master, checks all nodes and services
+UNUSED_TEST_VAR="this-should-be-caught-by-shellcheck"
 #
 # Usage:
 #   bash scripts/openclaw-health.sh          # Human-readable output
