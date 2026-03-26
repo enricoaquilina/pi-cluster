@@ -42,9 +42,38 @@ if _env_file.is_file():
                 os.environ.setdefault(_k.strip(), _v.strip())
 
 import aiosqlite
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
+
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+    _HAS_SLOWAPI = True
+except ImportError:
+    _HAS_SLOWAPI = False
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+
+RATE_LIMIT_READ = os.environ.get("RATE_LIMIT_READ", "120/minute")
+RATE_LIMIT_WRITE = os.environ.get("RATE_LIMIT_WRITE", "60/minute")
+
+
+def _noop_limit(_limit_str):
+    """No-op decorator when slowapi is not installed."""
+    def decorator(func):
+        return func
+    return decorator
+
+
+if _HAS_SLOWAPI:
+    limiter = Limiter(key_func=get_remote_address)
+    rate_limit = limiter.limit
+else:
+    limiter = None
+    rate_limit = _noop_limit
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
@@ -437,6 +466,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+if limiter is not None:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 @app.get("/health")
 @app.get("/nodes")
@@ -446,7 +479,8 @@ def get_nodes():
 
 
 @app.get("/route/{task_type}")
-def get_route(task_type: TaskType):
+@rate_limit(RATE_LIMIT_READ)
+def get_route(request: Request, task_type: TaskType):
     """Select best node + model for a task type."""
     node = route_task(task_type.value)
     model = MODEL_CONFIG.get(task_type.value, MODEL_CONFIG["any"])
@@ -457,7 +491,8 @@ def get_route(task_type: TaskType):
 
 
 @app.post("/dispatch", dependencies=[Depends(require_api_key)])
-async def post_dispatch(req: DispatchRequest):
+@rate_limit(RATE_LIMIT_WRITE)
+async def post_dispatch(request: Request, req: DispatchRequest):
     """Execute command on the best node for the task type. Logged."""
     result = await execute_dispatch(req.task_type.value, req.command, req.cwd)
     if "error" in result:
@@ -498,7 +533,8 @@ async def post_task_end(req: TaskNode):
 
 
 @app.get("/dispatch-log")
-async def get_dispatch_log(limit: int = 50):
+@rate_limit(RATE_LIMIT_READ)
+async def get_dispatch_log(request: Request, limit: int = 50):
     """Recent dispatch history."""
     async with aiosqlite.connect(LOG_DB) as db:
         db.row_factory = aiosqlite.Row
