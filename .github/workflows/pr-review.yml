@@ -36,3 +36,7 @@ jobs:
             Ansible best practices, systemd service correctness,
             NFS mount safety, and shell script robustness.
             Flag any hardcoded IPs that should be variables.
+            Python best practices: prefer specific exception types over bare
+            except Exception. Do NOT suggest broadening exception handling
+            (e.g., replacing psycopg2.Error with Exception). Narrow catches
+            are intentional — they prevent masking unrelated errors.

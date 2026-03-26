@@ -125,9 +125,13 @@ jobs:
           prompt: |
             Review PR #${{ steps.pr.outputs.number }}.
             The automated reviewer (PR-Agent) posted code suggestions.
-            For each valid suggestion, make the fix directly.
-            Skip false positives.
-            Commit with clear messages, then push: git push origin HEAD
+            For each suggestion, critically evaluate whether it IMPROVES the code:
+            - REJECT suggestions that broaden exception handling (e.g., replacing specific exceptions with bare Exception)
+            - REJECT suggestions that are cosmetic-only or reduce code specificity
+            - REJECT suggestions rated below 5/10 importance by the reviewer itself
+            - APPLY only suggestions that fix real bugs, security issues, or clear improvements
+            If no suggestions are worth applying, do nothing — do NOT make changes just to make changes.
+            If you do make fixes, commit with clear messages, then push: git push origin HEAD
           claude_args: "--model claude-sonnet-4-20250514 --max-turns 30"
 
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
