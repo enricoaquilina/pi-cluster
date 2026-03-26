@@ -2,62 +2,24 @@
 name: Enable Auto-Merge
 
 on:
-  # Only enable auto-merge after AI review completes (not on PR open)
-  workflow_run:
-    workflows: ["AI PR Review"]
-    types: [completed]
+  pull_request:
+    types: [opened, reopened]
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  approve-and-enable:
-    name: Bot approve + enable auto-merge
+  enable:
+    name: Enable auto-merge
     runs-on: ubuntu-latest
-    # Only after successful review, on non-master branches
-    if: |
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch != 'master' &&
-      github.event.workflow_run.head_branch != 'main'
     steps:
-      - name: Get PR number
-        id: pr
-        run: |
-          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
-          PR_NUMBER=$(gh pr list -R "${{ github.repository }}" \
-            --head "$HEAD_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || echo "")
-          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "Found PR #${PR_NUMBER} from branch ${HEAD_BRANCH}"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Approve PR
-        if: steps.pr.outputs.number != ''
-        run: |
-          PR_NUMBER="${{ steps.pr.outputs.number }}"
-          REPO="${{ github.repository }}"
-
-          # Check if already approved by this bot (avoid duplicate approvals)
-          EXISTING=$(gh pr reviews "$PR_NUMBER" -R "$REPO" \
-            --json author,state --jq '[.[] | select(.author.login == "github-actions[bot]" and .state == "APPROVED")] | length' 2>/dev/null || echo "0")
-
-          if [ "$EXISTING" -gt 0 ]; then
-            echo "Already approved, skipping"
-          else
-            gh pr review "$PR_NUMBER" -R "$REPO" --approve \
-              --body "AI review passed. Approved for merge once all CI checks pass." \
-              || echo "::warning::Could not approve PR (may need elevated permissions)"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Enable squash auto-merge
-        if: steps.pr.outputs.number != ''
         run: |
-          gh pr merge "${{ steps.pr.outputs.number }}" \
+          echo "Enabling auto-merge for PR #${{ github.event.pull_request.number }}..."
+          gh pr merge "${{ github.event.pull_request.number }}" \
             -R "${{ github.repository }}" \
             --squash --auto --delete-branch \
-            || echo "::warning::Could not enable auto-merge (branch protection may not be configured)"
+            || echo "::warning::Could not enable auto-merge"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
