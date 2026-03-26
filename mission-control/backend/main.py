@@ -17,6 +17,7 @@ from typing import Optional
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import websockets
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -98,13 +99,17 @@ event_bus = EventBus()
 
 psycopg2.extras.register_uuid()
 
+_pool = psycopg2.pool.ThreadedConnectionPool(
+    minconn=1, maxconn=10, dsn=DATABASE_URL
+)
+
 
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL)
+    conn = _pool.getconn()
     try:
         yield conn
     finally:
-        conn.close()
+        _pool.putconn(conn)
 
 
 def init_db():
@@ -331,7 +336,7 @@ class NodeCreate(BaseModel):
     hostname: str
     hardware: str = ""
     framework: str = ""
-    status: str = "offline"
+    status: NodeStatus = NodeStatus.offline
     ram_total_mb: int = 0
     ram_used_mb: int = 0
     cpu_percent: float = 0
@@ -343,7 +348,7 @@ class NodeUpdate(BaseModel):
     hostname: Optional[str] = None
     hardware: Optional[str] = None
     framework: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[NodeStatus] = None
     ram_total_mb: Optional[int] = None
     ram_used_mb: Optional[int] = None
     cpu_percent: Optional[float] = None
@@ -357,7 +362,7 @@ class NodeResponse(BaseModel):
     hostname: str
     hardware: str
     framework: str
-    status: str
+    status: NodeStatus
     ram_total_mb: int
     ram_used_mb: int
     cpu_percent: float
@@ -377,9 +382,21 @@ NODE_COLUMNS = [
 # ── Service Monitoring Models ────────────────────────────────────────────────
 
 
+class ServiceStatus(str, Enum):
+    up = "up"
+    degraded = "degraded"
+    down = "down"
+
+
+class AlertStatus(str, Enum):
+    down = "down"
+    degraded = "degraded"
+    recovered = "recovered"
+
+
 class ServiceCheckIn(BaseModel):
     service: str
-    status: str  # 'up', 'degraded', 'down'
+    status: ServiceStatus
     response_ms: Optional[int] = None
     error: Optional[str] = None
     checked_at: Optional[datetime] = None
@@ -391,7 +408,7 @@ class ServiceCheckBulk(BaseModel):
 
 class ServiceAlertIn(BaseModel):
     service: str
-    status: str  # 'down', 'degraded', 'recovered'
+    status: AlertStatus
     message: Optional[str] = None
     downtime_seconds: Optional[int] = None
 
