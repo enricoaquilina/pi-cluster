@@ -96,5 +96,5 @@ def cleanup_test_data():
             cur.execute("DELETE FROM dispatch_log WHERE persona = 'test'")
         conn.commit()
         conn.close()
-    except Exception:
+    except psycopg2.Error:
         pass  # Tables may not exist in CI if tests failed early
