@@ -1,0 +1,26 @@
+---
+name: Enable Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable:
+    name: Enable auto-merge
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable squash auto-merge
+        run: |
+          echo "Enabling auto-merge for PR #${{ github.event.pull_request.number }}..."
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            -R "${{ github.repository }}" \
+            --squash --auto \
+            --delete-branch \
+            || echo "::warning::Could not enable auto-merge (branch protection may not be configured)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
