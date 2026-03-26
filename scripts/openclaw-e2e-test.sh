@@ -307,6 +307,93 @@ if $FULL_MODE; then
     fi
 fi
 
+# ── Test 16: Echo detection patch ────────────────────────────────────────────
+echo "16. Echo detection patch"
+patch_count=$(docker exec "$GATEWAY" grep -c "^[[:space:]]*group &&" \
+  /app/extensions/whatsapp/src/inbound/monitor.ts 2>/dev/null)
+fromMe_count=$(docker exec "$GATEWAY" grep -c "Boolean(msg.key?.fromMe)" \
+  /app/extensions/whatsapp/src/inbound/monitor.ts 2>/dev/null)
+if [ "${patch_count:-1}" -eq 0 ] && [ "${fromMe_count:-0}" -ge 1 ]; then
+    pass "Echo detection patch applied (group && removed, fromMe check present)"
+else
+    fail "Echo detection patch" "group && count=$patch_count, fromMe count=$fromMe_count"
+fi
+
+# ── Test 17: Echo loop detection ─────────────────────────────────────────────
+echo "17. Echo loop detection"
+echo_chains=$(docker logs --since 10m "$GATEWAY" 2>&1 | python3 -c "
+import sys, re
+from datetime import datetime
+events = []
+for line in sys.stdin:
+    line = line.strip()
+    ts_match = re.match(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2})', line)
+    if not ts_match: continue
+    try: ts = datetime.fromisoformat(ts_match.group(1))
+    except: continue
+    if 'Auto-replied to' in line: events.append(('reply', ts))
+    elif 'Inbound message' in line and 'direct' in line: events.append(('inbound', ts))
+echoes = 0
+for i in range(len(events) - 1):
+    if events[i][0] == 'reply' and events[i+1][0] == 'inbound':
+        delta = (events[i+1][1] - events[i][1]).total_seconds()
+        if 0 < delta < 2: echoes += 1
+replies = sum(1 for e in events if e[0] == 'reply')
+inbounds = sum(1 for e in events if e[0] == 'inbound')
+print(f'{echoes} {replies} {inbounds}')
+" 2>/dev/null)
+read -r echo_count reply_count inbound_count <<< "${echo_chains:-0 0 0}"
+if [ -z "$echo_count" ] || [ "$echo_count" = "0" ]; then
+    if [ "${reply_count:-0}" -gt 0 ]; then
+        pass "No echo loops detected (${reply_count} replies, ${inbound_count} inbounds, 0 echoes)"
+    else
+        pass "No echo loops (no recent activity)"
+    fi
+else
+    fail "Echo loop active" "$echo_count echoes in last 10m ($reply_count replies, $inbound_count inbounds)"
+fi
+
+# ── Test 18: Token consistency ───────────────────────────────────────────────
+echo "18. Token consistency"
+gw_token=$(docker exec "$GATEWAY" python3 -c "
+import json
+with open('/home/node/.openclaw/openclaw.json') as f:
+    print(json.load(f)['gateway']['auth']['token'])
+" 2>/dev/null)
+env_token="${OPENCLAW_GATEWAY_TOKEN:-}"
+if [ -n "$gw_token" ] && [ -n "$env_token" ] && [ "$gw_token" = "$env_token" ]; then
+    pass "Gateway token matches env"
+else
+    fail "Token mismatch" "gateway='${gw_token:0:8}...' env='${env_token:0:8}...'"
+fi
+
+# ── Test 19: WhatsApp debounce ───────────────────────────────────────────────
+echo "19. WhatsApp debounce"
+debounce=$(docker exec "$GATEWAY" python3 -c "
+import json
+with open('/home/node/.openclaw/openclaw.json') as f:
+    print(json.load(f).get('channels',{}).get('whatsapp',{}).get('debounceMs', 0))
+" 2>/dev/null)
+if [ "${debounce:-0}" -gt 0 ]; then
+    pass "WhatsApp debounce set (${debounce}ms)"
+else
+    fail "WhatsApp debounce" "disabled — echo race condition risk"
+fi
+
+# ── Test 20: File permissions ────────────────────────────────────────────────
+echo "20. File permissions"
+for f in "$HOME/openclaw/.env" "$HOME/.openclaw/openclaw.json" \
+         "$SCRIPT_DIR/.env.cluster"; do
+    [ ! -f "$f" ] && continue
+    perms=$(stat -c '%a' "$f" 2>/dev/null)
+    name=$(basename "$f")
+    if [ "$perms" = "600" ]; then
+        pass "Perms $name"
+    else
+        fail "Perms $name" "$perms (should be 600)"
+    fi
+done
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Results ==="
