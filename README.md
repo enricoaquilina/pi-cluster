@@ -80,10 +80,17 @@ Tasks are routed to the best-fit node based on role affinity and real-time healt
 ## CI/CD Pipeline
 
 ```
-PR opened → AI Review (Gemini Flash) → Claude Fix (auto-applies suggestions)
-         → Lint + Validate + Security Scan
-         → Auto-Merge (all checks pass) → Auto-Deploy (5min cron on master)
+PR opened → Auto-merge armed (gh pr merge --auto)
+         → AI Review (MiniMax 2.7 via OpenRouter/PR-Agent)
+         → Lint (ShellCheck, ruff, yamllint, gitleaks) + Validate + Security Scan
+         → If CI fails → Claude Sonnet 4.6 auto-fixes + pushes (via GitHub App token)
+         → All 6 required checks pass → GitHub native auto-merge → MERGED
+         → Auto-Deploy (5min cron on master)
 ```
+
+**Branch protection on `master`:** requires ShellCheck, YAML Lint, Ansible Syntax Check, Python Lint, Script Smoke Test, AI Code Review.
+
+**GitHub App:** `pi-cluster-bot` generates tokens for Claude fix commits that re-trigger CI workflows.
 
 ## Monitoring & Alerting
 
@@ -93,6 +100,7 @@ Alerts via Telegram:
 - Node disconnections (auto-recovery attempted)
 - Heavy node unreachable (auto-restore after 6min)
 - Service restarts (mc-watchdog on heavy)
+- Structured JSON logging via `scripts/lib/log.sh` (bash) and `_JsonFormatter` (Python)
 
 ## Project Structure
 

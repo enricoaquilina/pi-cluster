@@ -20,18 +20,22 @@
 | 16 | Security hardening: token extraction, permissions, audit | 2026-03-25 |
 | 17 | Monitoring: resource alerts, IP centralization, silent failure hardening | 2026-03-25 |
 | 18 | Auto-deploy, failover tests, documentation overhaul | 2026-03-25 |
+| 19 | WhatsApp hardening, agent diagnostics, nightly auto-update | 2026-03-26 |
+| 20 | Security: API key rotation, git history scrub, repo made public | 2026-03-26 |
+| 21 | CI/CD overhaul: MiniMax 2.7 review, Claude auto-fix, native auto-merge | 2026-03-26 |
+| 22 | Code quality: connection pooling, enum enforcement, JSON logging, pre-commit | 2026-03-26 |
 
 ## Future Ideas (Prioritized)
 
 ### Near-term
 - **Cloud backup** — Add B2/S3 as 3rd backup location (currently master + heavy only)
+- **Monitoring stack** — VictoriaMetrics + Grafana for time-series metrics
 - **Mac SSH direct** — SSH from Mac to heavy via LAN IP
-- **API rate limiting** — Prevent abuse of cluster service endpoints
 
 ### Medium-term
 - **E2E failover expansion** — NFS mount loss recovery, concurrent dispatch under load
 - **Agent performance dashboard** — success/fail rates, avg duration, model comparison
-- **Structured logging** (JSON) — replace text logs for better parsing
+- **Voice/STT** — n8n middleware + Whisper API for WhatsApp/Telegram voice notes
 - **Pre-deploy validation** — CI validates inventory matches actual network
 
 ### Long-term
