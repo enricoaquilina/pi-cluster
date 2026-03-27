@@ -1,5 +1,4 @@
 #!/bin/bash
-set -uo pipefail
 # Lightweight per-node resource monitor with Telegram alerts
 # Runs via cron every 5 minutes on each node
 # Only alerts on state CHANGE to avoid alert fatigue
@@ -16,9 +15,10 @@ SWAP_THRESHOLD=50   # alert when swap > 50% used
 TEMP_THRESHOLD=75   # alert when temp > 75°C
 
 # Load env for Telegram
-ENV_FILE="$SCRIPT_DIR/.env.cluster"
 # shellcheck source=scripts/.env.cluster
-[ -f "$ENV_FILE" ] && source "$ENV_FILE"
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh"
 
 alerts=()
 
@@ -61,25 +61,14 @@ echo "$current_state" > "$STATE_FILE"
 
 # Alert only on state change
 if [ "$current_state" != "$prev_state" ] && [ "$current_state" != "OK" ]; then
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-        ram_avail=$(free -m | awk '/^Mem:/ {print $7}')
-        message="⚠️ *Resource Alert: $HOSTNAME*
+    ram_avail=$(free -m | awk '/^Mem:/ {print $7}')
+    send_telegram "⚠️ *Resource Alert: $HOSTNAME*
 ${alerts[*]}
 RAM available: ${ram_avail}MB
 ${temp:+Temp: ${temp}°C}"
-        curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=$message" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1
-    fi
 fi
 
 # Recovery alert
 if [ "$current_state" = "OK" ] && [ -n "$prev_state" ] && [ "$prev_state" != "OK" ]; then
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-        curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=✅ *Resource OK: $HOSTNAME* — recovered" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1
-    fi
+    send_telegram "✅ *Resource OK: $HOSTNAME* — recovered"
 fi

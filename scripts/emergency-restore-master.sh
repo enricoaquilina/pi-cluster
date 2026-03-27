@@ -23,14 +23,10 @@ LOG="/var/log/emergency-restore.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/.env.cluster" 2>/dev/null || true
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh"
 
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG"; }
-
-send_telegram() {
-    local msg="$1"
-    curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d "chat_id=${TELEGRAM_CHAT_ID}&text=$msg" >/dev/null 2>&1 || true
-}
 
 log "=== Emergency restore to master ==="
 send_telegram "🔄 Emergency restore STARTING on master..."

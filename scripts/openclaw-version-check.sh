@@ -15,22 +15,14 @@ UPGRADE_MODE=false
 [ "${1:-}" = "--upgrade" ] && UPGRADE_MODE=true
 
 PINNED_VERSION="2026.3.11"
-SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NODES=("slave0" "slave1" "heavy")
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 
-# Telegram config
 # shellcheck source=scripts/.env.cluster
-[ -f "$SCRIPTS_DIR/.env.cluster" ] && source "$SCRIPTS_DIR/.env.cluster"
-
-send_telegram() {
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=$1" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1
-    fi
-}
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh"
 
 echo "=== OpenClaw Version Check ==="
 echo "Pinned: $PINNED_VERSION"
@@ -71,7 +63,7 @@ echo "Installed: $installed"
 # Re-pair and test interpreter command
 ssh "$test_node" "sudo systemctl restart openclaw-node" 2>/dev/null
 sleep 15
-bash "$SCRIPTS_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
+bash "$SCRIPT_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
 sleep 5
 
 # The critical test: does python3 work?
@@ -89,10 +81,10 @@ if echo "$test_result" | grep -q "VERSION_TEST_OK"; then
     done
 
     # Re-pair all
-    bash "$SCRIPTS_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
+    bash "$SCRIPT_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
 
     # Update the pin in vars
-    sed -i "s/openclaw_version: \"$PINNED_VERSION\"/openclaw_version: \"$latest\"/" "$SCRIPTS_DIR/../vars/openclaw-nodes.yml"
+    sed -i "s/openclaw_version: \"$PINNED_VERSION\"/openclaw_version: \"$latest\"/" "$SCRIPT_DIR/../vars/openclaw-nodes.yml"
 
     echo ""
     echo "All nodes upgraded to $latest"
@@ -105,7 +97,7 @@ else
 
     ssh "$test_node" "sudo bash -c 'rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$PINNED_VERSION'" 2>/dev/null | tail -1
     ssh "$test_node" "sudo systemctl restart openclaw-node" 2>/dev/null
-    bash "$SCRIPTS_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
+    bash "$SCRIPT_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
 
     echo "Rolled back. Staying on $PINNED_VERSION."
     send_telegram "⚠️ *OpenClaw Upgrade Failed*
