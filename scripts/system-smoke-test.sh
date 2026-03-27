@@ -158,27 +158,44 @@ check_n8n_staging() {
     check_service "n8n-staging" "up" "" "0"  # No longer exists, skip
 }
 
-# 9-10b. OpenClaw nodes (single API call for all three)
-_OPENCLAW_NODES_CACHE=""
-_fetch_openclaw_nodes() {
-    if [ -z "$_OPENCLAW_NODES_CACHE" ]; then
-        _OPENCLAW_NODES_CACHE=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null || echo '{"nodes":[]}')
+# 9-10b. OpenClaw nodes (single API call + single Python parse)
+_OPENCLAW_NODE_STATUS=""
+_check_all_openclaw_nodes() {
+    if [ -z "$_OPENCLAW_NODE_STATUS" ]; then
+        _OPENCLAW_NODE_STATUS=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+nodes = {n['name']: n.get('connected', False) for n in data.get('nodes', [])}
+for name in ['build', 'light', 'heavy']:
+    print(name, 'true' if nodes.get(name) else 'false')
+" 2>/dev/null || echo "build false
+light false
+heavy false")
     fi
-    echo "$_OPENCLAW_NODES_CACHE"
+    echo "$_OPENCLAW_NODE_STATUS"
 }
 
-_check_openclaw_node() {
-    local service_name="$1" node_name="$2"
-    if _fetch_openclaw_nodes | python3 -c "import json,sys; nodes=json.load(sys.stdin).get('nodes',[]); exit(0 if any(n['name']=='$node_name' and n.get('connected') for n in nodes) else 1)" 2>/dev/null; then
-        check_service "$service_name" "up"
+check_openclaw_slave0() {
+    if _check_all_openclaw_nodes | grep -q "^build true"; then
+        check_service "openclaw-slave0" "up"
     else
-        check_service "$service_name" "down" "Node not connected to gateway"
+        check_service "openclaw-slave0" "down" "Node not connected to gateway"
     fi
 }
-
-check_openclaw_slave0() { _check_openclaw_node "openclaw-slave0" "build"; }
-check_openclaw_slave1() { _check_openclaw_node "openclaw-slave1" "light"; }
-check_openclaw_heavy()  { _check_openclaw_node "openclaw-heavy" "heavy"; }
+check_openclaw_slave1() {
+    if _check_all_openclaw_nodes | grep -q "^light true"; then
+        check_service "openclaw-slave1" "up"
+    else
+        check_service "openclaw-slave1" "down" "Node not connected to gateway"
+    fi
+}
+check_openclaw_heavy() {
+    if _check_all_openclaw_nodes | grep -q "^heavy true"; then
+        check_service "openclaw-heavy" "up"
+    else
+        check_service "openclaw-heavy" "down" "Node not connected to gateway"
+    fi
+}
 
 # 10c. Router API
 check_router_api() {
