@@ -14,13 +14,9 @@ GATEWAY_PORT="18789"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/.env.cluster" 2>/dev/null || true
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh"
 HEAVY_IP="${HEAVY_IP:-192.168.0.5}"
-
-send_telegram() {
-    local msg="$1"
-    curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d "chat_id=${TELEGRAM_CHAT_ID}&text=$msg" >/dev/null 2>&1 || true
-}
 
 # Check if heavy is reachable (ping + gateway health)
 if ping -c1 -W3 "$HEAVY_IP" >/dev/null 2>&1 && \

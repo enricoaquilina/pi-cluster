@@ -21,7 +21,7 @@ STATE_DIR="/var/run/cluster-health/services"
 FAIL_COUNT_DIR="/var/run/cluster-health/fail-counts"
 RESULTS_FILE="/tmp/smoke-test-latest.json"
 LOG_FILE="/tmp/smoke-test.log"
-ALERT_INTERVAL=600  # 30 minutes
+ALERT_INTERVAL=600  # 10 minutes
 
 RESTART_COUNT_FILE="/var/run/cluster-health/restart-count"
 MAX_RESTARTS_PER_HOUR=3
@@ -158,32 +158,27 @@ check_n8n_staging() {
     check_service "n8n-staging" "up" "" "0"  # No longer exists, skip
 }
 
-# 9. ZeroClaw slave0
-check_openclaw_slave0() {
-    if curl -sf --max-time 5 http://${HEAVY_IP}:8520/nodes 2>/dev/null | python3 -c "import json,sys; nodes=json.load(sys.stdin).get('nodes',[]); exit(0 if any(n['name']=='build' and n.get('connected') for n in nodes) else 1)" 2>/dev/null; then
-        check_service "openclaw-slave0" "up"
+# 9-10b. OpenClaw nodes (single API call for all three)
+_OPENCLAW_NODES_CACHE=""
+_fetch_openclaw_nodes() {
+    if [ -z "$_OPENCLAW_NODES_CACHE" ]; then
+        _OPENCLAW_NODES_CACHE=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null || echo '{"nodes":[]}')
+    fi
+    echo "$_OPENCLAW_NODES_CACHE"
+}
+
+_check_openclaw_node() {
+    local service_name="$1" node_name="$2"
+    if _fetch_openclaw_nodes | python3 -c "import json,sys; nodes=json.load(sys.stdin).get('nodes',[]); exit(0 if any(n['name']=='$node_name' and n.get('connected') for n in nodes) else 1)" 2>/dev/null; then
+        check_service "$service_name" "up"
     else
-        check_service "openclaw-slave0" "down" "Node not connected to gateway"
+        check_service "$service_name" "down" "Node not connected to gateway"
     fi
 }
 
-# 10. ZeroClaw slave1
-check_openclaw_slave1() {
-    if curl -sf --max-time 5 http://${HEAVY_IP}:8520/nodes 2>/dev/null | python3 -c "import json,sys; nodes=json.load(sys.stdin).get('nodes',[]); exit(0 if any(n['name']=='light' and n.get('connected') for n in nodes) else 1)" 2>/dev/null; then
-        check_service "openclaw-slave1" "up"
-    else
-        check_service "openclaw-slave1" "down" "Node not connected to gateway"
-    fi
-}
-
-# 10b. OpenClaw heavy node
-check_openclaw_heavy() {
-    if curl -sf --max-time 5 http://${HEAVY_IP}:8520/nodes 2>/dev/null | python3 -c "import json,sys; nodes=json.load(sys.stdin).get('nodes',[]); exit(0 if any(n['name']=='heavy' and n.get('connected') for n in nodes) else 1)" 2>/dev/null; then
-        check_service "openclaw-heavy" "up"
-    else
-        check_service "openclaw-heavy" "down" "Node not connected to gateway"
-    fi
-}
+check_openclaw_slave0() { _check_openclaw_node "openclaw-slave0" "build"; }
+check_openclaw_slave1() { _check_openclaw_node "openclaw-slave1" "light"; }
+check_openclaw_heavy()  { _check_openclaw_node "openclaw-heavy" "heavy"; }
 
 # 10c. Router API
 check_router_api() {
@@ -345,7 +340,7 @@ fi
 # shellcheck disable=SC2034  # used for reference/future alerting tiers
 declare -A CRITICAL=(
     [openclaw-gateway]=1 [openclaw-telegram]=1 [openclaw-whatsapp]=1
-    [mission-control-api]=1 [postgresql]=1 [zeroclaw-slave0]=1
+    [mission-control-api]=1 [postgresql]=1 [openclaw-slave0]=1
     [polymarket-bot]=1 [pihole-dns]=1
 )
 

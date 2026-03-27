@@ -7,27 +7,19 @@ set -uo pipefail
 
 CACHE_FILE="/tmp/openclaw-node-stats.json"
 STATE_FILE="/tmp/openclaw-watchdog-state.json"
-SCRIPTS_DIR="/home/enrico/homelab/scripts"
+SCRIPT_DIR="/home/enrico/homelab/scripts"
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 LOG_FILE="/var/log/openclaw-watchdog.log"
 
 # shellcheck source=scripts/.env.cluster
-[ -f "$SCRIPTS_DIR/.env.cluster" ] && source "$SCRIPTS_DIR/.env.cluster"
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh"
 
 EXPECTED_NODES=("build" "light" "heavy")
 
 log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"
-}
-
-send_telegram() {
-    local message="$1"
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=${message}" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1
-    fi
 }
 
 load_state() {
@@ -64,64 +56,58 @@ if echo "$gateway_status" | grep -qi "restarting"; then
 fi
 
 # Step 2: Refresh stats cache
-bash "$SCRIPTS_DIR/openclaw-stats-collector.sh" 2>/dev/null
+bash "$SCRIPT_DIR/openclaw-stats-collector.sh" 2>/dev/null
 
 if [ ! -f "$CACHE_FILE" ]; then
     log "ERROR: Stats cache not available"
     exit 1
 fi
 
-# Step 3: Check node connectivity
+# Step 3: Check node connectivity (single Python call for all nodes)
 disconnected=()
 connected=()
 
-for node_name in "${EXPECTED_NODES[@]}"; do
-    is_connected=$(python3 -c "
+node_status=$(python3 -c "
 import json
 with open('$CACHE_FILE') as f:
     data = json.load(f)
-for n in data.get('nodes', []):
-    if n['name'] == '$node_name':
-        print('true' if n.get('connected') else 'false')
-        exit()
-print('false')
+status = {n['name']: n.get('connected', False) for n in data.get('nodes', [])}
+for name in '${EXPECTED_NODES[*]}'.split():
+    print(name, 'true' if status.get(name) else 'false')
 " 2>/dev/null)
 
+while read -r node_name is_connected; do
     if [ "$is_connected" = "true" ]; then
         connected+=("$node_name")
     else
         disconnected+=("$node_name")
     fi
-done
+done <<< "$node_status"
 
 log "Connected: ${connected[*]:-none} | Disconnected: ${disconnected[*]:-none}"
 
 # Step 4: Auto-recovery for disconnected nodes
 if [ ${#disconnected[@]} -gt 0 ]; then    log "Attempting auto-recovery for: ${disconnected[*]}"
 
-    bash "$SCRIPTS_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
+    bash "$SCRIPT_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
     repair_status=$?
 
     if [ $repair_status -eq 0 ]; then
         sleep 5
-        bash "$SCRIPTS_DIR/openclaw-stats-collector.sh" 2>/dev/null
+        bash "$SCRIPT_DIR/openclaw-stats-collector.sh" 2>/dev/null
 
         still_disconnected=()
-        for node_name in "${disconnected[@]}"; do
-            is_now_connected=$(python3 -c "
+        recheck=$(python3 -c "
 import json
 with open('$CACHE_FILE') as f:
     data = json.load(f)
-for n in data.get('nodes', []):
-    if n['name'] == '$node_name':
-        print('true' if n.get('connected') else 'false')
-        exit()
-print('false')
+status = {n['name']: n.get('connected', False) for n in data.get('nodes', [])}
+for name in '${disconnected[*]}'.split():
+    print(name, 'true' if status.get(name) else 'false')
 " 2>/dev/null)
-            if [ "$is_now_connected" != "true" ]; then
-                still_disconnected+=("$node_name")
-            fi
-        done
+        while read -r node_name is_now; do
+            [ "$is_now" != "true" ] && still_disconnected+=("$node_name")
+        done <<< "$recheck"
 
         if [ ${#still_disconnected[@]} -eq 0 ]; then            log "Recovery successful: all nodes reconnected"
             save_state '{"gateway_alert":"false","node_alert":"false"}'
