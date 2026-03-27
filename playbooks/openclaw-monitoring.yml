@@ -78,6 +78,18 @@
         job: "find /home/enrico/.openclaw/ -name 'openclaw.json.bak.*' -mtime +7 -delete"
         cron_file: openclaw-backup
 
+    - name: Deploy workspace ownership watchdog cron
+      ansible.builtin.cron:
+        name: "openclaw workspace ownership fix"
+        minute: "*/30"
+        user: enrico
+        job: >-
+          sudo find /mnt/external/openclaw/workspace -user root
+          -exec chown 1000:1000 {} + 2>/dev/null;
+          sudo find /mnt/external/openclaw/workspace -maxdepth 0
+          ! -perm -g+s -exec chmod g+ws {} + 2>/dev/null
+        cron_file: openclaw-workspace
+
     - name: Deploy stats collector service
       ansible.builtin.template:
         src: ../templates/openclaw-stats-collector.service.j2

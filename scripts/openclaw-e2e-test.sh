@@ -409,15 +409,22 @@ fi
 
 # ── Test 20: File permissions ────────────────────────────────────────────────
 echo "20. File permissions"
+expected_owner=$(id -un)
 for f in "$HOME/openclaw/.env" "$HOME/.openclaw/openclaw.json" \
          "$SCRIPT_DIR/.env.cluster"; do
     [ ! -f "$f" ] && continue
     perms=$(stat -c '%a' "$f" 2>/dev/null)
+    owner=$(stat -c '%U' "$f" 2>/dev/null)
     name=$(basename "$f")
     if [ "$perms" = "600" ]; then
         pass "Perms $name"
     else
         fail "Perms $name" "$perms (should be 600)"
+    fi
+    if [ "$owner" = "$expected_owner" ]; then
+        pass "Owner $name"
+    else
+        fail "Owner $name" "owned by $owner (should be $expected_owner)"
     fi
 done
 
