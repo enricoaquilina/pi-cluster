@@ -22,11 +22,10 @@
 
 set -uo pipefail
 
-PASS=0
-FAIL=0
-TESTS=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/test-harness.sh
+source "$SCRIPT_DIR/lib/test-harness.sh"
 # shellcheck source=scripts/lib/telegram.sh
 source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 API="http://127.0.0.1:8520"
@@ -38,18 +37,6 @@ NODES=("control:master" "build:slave0" "light:slave1" "heavy:heavy")
 
 TELEGRAM_MODE=false
 [ "${1:-}" = "--telegram" ] && TELEGRAM_MODE=true
-
-pass() {
-    PASS=$((PASS + 1))
-    TESTS+=("PASS  $1")
-    echo "  PASS  $1"
-}
-
-fail() {
-    FAIL=$((FAIL + 1))
-    TESTS+=("FAIL  $1: $2")
-    echo "  FAIL  $1: $2"
-}
 
 echo "=== OpenClaw E2E Test Suite ==="
 date
@@ -417,19 +404,7 @@ for f in "$HOME/openclaw/.env" "$HOME/.openclaw/openclaw.json" \
 done
 
 # ── Summary ──────────────────────────────────────────────────────────────────
-echo ""
-echo "=== Results ==="
-echo "Passed: $PASS"
-echo "Failed: $FAIL"
-echo "Total:  $((PASS + FAIL))"
-
-if [ "$FAIL" -gt 0 ]; then
-    echo ""
-    echo "Failures:"
-    for t in "${TESTS[@]}"; do
-        echo "$t" | grep "^FAIL" || true
-    done
-fi
+test_summary
 
 # Telegram notification on failure
 if $TELEGRAM_MODE && [ "$FAIL" -gt 0 ]; then
@@ -441,4 +416,3 @@ fi
 
 echo ""
 echo "=== E2E Test Complete $(date +%H:%M:%S) ==="
-[ "$FAIL" -eq 0 ]
