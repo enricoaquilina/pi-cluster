@@ -409,15 +409,21 @@ fi
 
 # ── Test 20: File permissions ────────────────────────────────────────────────
 echo "20. File permissions"
+expected_owner=$(id -un)
 for f in "$HOME/openclaw/.env" "$HOME/.openclaw/openclaw.json" \
          "$SCRIPT_DIR/.env.cluster"; do
     [ ! -f "$f" ] && continue
-    perms=$(stat -c '%a' "$f" 2>/dev/null)
+    read -r perms owner < <(stat -c '%a %U' "$f" 2>/dev/null)
     name=$(basename "$f")
     if [ "$perms" = "600" ]; then
         pass "Perms $name"
     else
         fail "Perms $name" "$perms (should be 600)"
+    fi
+    if [ "$owner" = "$expected_owner" ]; then
+        pass "Owner $name"
+    else
+        fail "Owner $name" "owned by $owner (should be $expected_owner)"
     fi
 done
 
@@ -435,7 +441,7 @@ fi
 
 # Check gateway container can write to workspace
 ws_test="/home/node/.openclaw/workspace/.perm-test-$$"
-if docker exec "$GATEWAY" sh -c "touch $ws_test && rm -f $ws_test" 2>/dev/null; then
+if timeout 10 docker exec "$GATEWAY" sh -c "touch $ws_test && rm -f $ws_test" 2>/dev/null; then
     pass "Gateway can write to workspace"
 else
     fail "Gateway workspace write" "container cannot write (check NFS ownership)"
