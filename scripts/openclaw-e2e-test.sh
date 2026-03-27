@@ -29,6 +29,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 # shellcheck source=scripts/lib/telegram.sh
 source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
+# shellcheck source=scripts/lib/ssh.sh
+source "$SCRIPT_DIR/lib/ssh.sh"
 API="http://127.0.0.1:8520"
 MC_API="${MC_API_URL:-http://192.168.0.5:8000/api}"
 GATEWAY="openclaw-openclaw-gateway-1"
@@ -59,7 +61,7 @@ echo ""
 echo "1. SSH connectivity"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name ssh_host <<< "$entry"
-    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$ssh_host" "echo ok" > /dev/null 2>&1; then
+    if cluster_ssh "$ssh_host" "echo ok" > /dev/null 2>&1; then
         pass "SSH $name"
     else
         fail "SSH $name" "unreachable"
@@ -132,7 +134,7 @@ echo "6. NFS read/write"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name ssh_host <<< "$entry"
     test_file="/opt/workspace/scripts/.e2e-test-$name"
-    result=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$ssh_host" \
+    result=$(cluster_ssh "$ssh_host" \
         "echo 'e2e_test' > $test_file && cat $test_file && rm -f $test_file" 2>/dev/null)
     if [ "$result" = "e2e_test" ]; then
         pass "NFS $name"
@@ -240,7 +242,7 @@ fi
 echo "11. Disk space"
 for entry in "${NODES[@]}"; do
     IFS=: read -r name ssh_host <<< "$entry"
-    disk_pct=$(ssh -o ConnectTimeout=3 -o BatchMode=yes "$ssh_host" "df / | awk 'NR==2 {gsub(/%/,\"\"); print \$5}'" 2>/dev/null)
+    disk_pct=$(cluster_ssh "$ssh_host" "df / | awk 'NR==2 {gsub(/%/,\"\"); print \$5}'" 2>/dev/null)
     if [ -n "$disk_pct" ] && [ "$disk_pct" -lt 90 ]; then
         pass "Disk $name (${disk_pct}%)"
     elif [ -n "$disk_pct" ]; then
@@ -252,7 +254,7 @@ done
 
 # ── Test 12: Backup freshness + size ───────────────────────────────────────
 echo "12. Backup health"
-backup_info=$(ssh -o ConnectTimeout=3 -o BatchMode=yes master "
+backup_info=$(cluster_ssh master "
     latest=\$(find /mnt/external/backups -name 'backup-*.tar.gz' -printf '%T@ %s %p\n' 2>/dev/null | sort -rn | head -1)
     if [ -n \"\$latest\" ]; then
         ts=\$(echo \$latest | cut -d' ' -f1 | cut -d. -f1)
@@ -279,12 +281,12 @@ fi
 
 # ── Test 13: MC API reachable from master ──────────────────────────────────
 echo "13. Cross-node connectivity"
-if ssh -o ConnectTimeout=3 -o BatchMode=yes master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:8000/health" > /dev/null 2>&1; then
+if cluster_ssh master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:8000/health" > /dev/null 2>&1; then
     pass "MC API reachable from master"
 else
     fail "MC API from master" "unreachable (check binding)"
 fi
-if ssh -o ConnectTimeout=3 -o BatchMode=yes master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:8520/health" > /dev/null 2>&1; then
+if cluster_ssh master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:8520/health" > /dev/null 2>&1; then
     pass "Router API reachable from master"
 else
     fail "Router API from master" "unreachable"
