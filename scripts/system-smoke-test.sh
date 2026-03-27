@@ -541,9 +541,11 @@ fi
 
 # ── Post Results to API ──────────────────────────────────────────────────────
 
-post_to_api
+if ! post_to_api; then
+    bash "$ALERT_SCRIPT" "SMOKE TEST: Failed to post results to MC API" 2>/dev/null || true
+fi
 
-# Save JSON locally as fallback
+# Save JSON locally (always — serves as fallback if API post fails)
 build_json > "$RESULTS_FILE"
 
 echo "[${NOW}] Smoke test complete — mode=${MODE}" >> "$LOG_FILE"

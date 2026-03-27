@@ -186,6 +186,16 @@
         state: started
         daemon_reload: true
 
+- name: Deploy cluster alert script on all nodes
+  hosts: cluster
+  become: true
+  tasks:
+    - name: Deploy cluster-alert.sh
+      ansible.builtin.copy:
+        src: ../scripts/cluster-alert.sh
+        dest: /usr/local/bin/cluster-alert.sh
+        mode: "0755"
+
 - name: Deploy resource monitor on all nodes
   hosts: cluster
   become: true
