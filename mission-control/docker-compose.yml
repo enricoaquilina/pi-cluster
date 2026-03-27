@@ -75,8 +75,14 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./frontend:/srv/frontend:ro
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
     logging:
       driver: json-file
       options:
