@@ -111,8 +111,8 @@
         daemon_reload: true
 
     - name: Deploy cluster watchdog script
-      ansible.builtin.template:
-        src: ../templates/openclaw-watchdog-cluster.sh.j2
+      ansible.builtin.copy:
+        src: ../scripts/openclaw-watchdog-cluster.sh
         dest: /home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh
         mode: "0755"
         owner: enrico
