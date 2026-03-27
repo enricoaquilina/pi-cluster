@@ -194,7 +194,9 @@
       ansible.builtin.copy:
         src: ../scripts/cluster-alert.sh
         dest: /usr/local/bin/cluster-alert.sh
-        mode: "0755"
+        mode: "0750"
+        owner: root
+        group: enrico
 
 - name: Deploy resource monitor on all nodes
   hosts: cluster
@@ -232,3 +234,18 @@
         user: enrico
         job: "/usr/local/bin/resource-monitor.sh"
         cron_file: openclaw-resource-monitor
+
+- name: Ensure critical services on master
+  hosts: masters
+  become: true
+  tasks:
+    - name: Cloudflare tunnel enabled and running
+      ansible.builtin.systemd:
+        name: cloudflared
+        state: started
+        enabled: true
+    - name: Polymarket bot enabled and running
+      ansible.builtin.systemd:
+        name: polymarket-bot
+        state: started
+        enabled: true

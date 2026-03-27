@@ -215,6 +215,22 @@ else
         "ln -s /home/enrico/pi-cluster/mission-control /home/enrico/mission-control"
 fi
 
+# ── 9. UFW Port Validation ────────────────────────────────────────────────
+echo "9. UFW port validation"
+ufw_status=$(cluster_ssh heavy "sudo ufw status" 2>/dev/null)
+if echo "$ufw_status" | grep -q "Status: active"; then
+    for port in 8520 18789 18790 22; do
+        echo "$ufw_status" | grep -q "$port/tcp.*ALLOW" && pass "UFW allows port $port" || \
+            fail "UFW port $port" "not allowed on heavy" "ssh heavy 'sudo ufw allow from 192.168.0.0/24 to any port $port proto tcp'"
+    done
+fi
+
+# ── 10. Cloudflare Tunnel ─────────────────────────────────────────────────
+echo "10. Cloudflare tunnel"
+cf_active=$(cluster_ssh master "systemctl is-active cloudflared" 2>/dev/null)
+[ "$cf_active" = "active" ] && pass "Cloudflared running" || \
+    fail "Cloudflared" "not running ($cf_active)" "ssh master 'sudo systemctl start cloudflared && sudo systemctl enable cloudflared'"
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 test_summary
 result=$?
