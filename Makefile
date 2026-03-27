@@ -137,7 +137,7 @@ security-scan:
 	@echo "=== Docker Image Security Scan ==="
 	@command -v trivy > /dev/null 2>&1 || { echo "Install trivy: https://aquasecurity.github.io/trivy/"; exit 1; }
 	trivy image --severity CRITICAL,HIGH openclaw-custom:local
-	trivy image --severity CRITICAL,HIGH mongo:7
+	trivy image --severity CRITICAL,HIGH mongo:7.0
 
 security-audit:
 	@bash scripts/openclaw-security-audit.sh
