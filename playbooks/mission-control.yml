@@ -44,6 +44,7 @@
       when: sync_result.changed
 
     - name: Rebuild and restart MC containers
+      become: true
       become_user: enrico
       command: docker compose up -d --build
       args:

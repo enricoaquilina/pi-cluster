@@ -48,7 +48,7 @@
 
   tasks:
     - name: Run auto-pairing script
-      ansible.builtin.shell: bash /home/enrico/homelab/scripts/openclaw-pair-nodes.sh
+      ansible.builtin.command: bash /home/enrico/homelab/scripts/openclaw-pair-nodes.sh
       register: pairing_result
       changed_when: "'Paired:' in pairing_result.stdout"
 
