@@ -19,7 +19,7 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 import websockets
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
@@ -69,10 +69,6 @@ class EventBus:
         with self._lock:
             self._subscribers.discard(q)
             logger.info("SSE client disconnected (%d total)", len(self._subscribers))
-
-    @property
-    def subscriber_count(self) -> int:
-        return len(self._subscribers)
 
     def publish(self, event: str):
         """Thread-safe publish — uses call_soon_threadsafe for sync endpoints."""
@@ -515,7 +511,7 @@ class ServiceAlertIn(BaseModel):
 
 
 @app.get("/health")
-def health():
+def health(response: Response):
     result = {"status": "ok", "uptime_seconds": int(time.time() - _start_time), "sse_subscribers": event_bus.subscriber_count}
     try:
         with psycopg2.connect(DATABASE_URL) as conn:
@@ -525,6 +521,7 @@ def health():
     except Exception as e:
         result["db"] = f"error: {e}"
         result["status"] = "degraded"
+        response.status_code = 503
     return result
 
 

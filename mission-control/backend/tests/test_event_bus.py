@@ -123,3 +123,12 @@ def test_thread_safety(bus):
     assert not errors, f"Thread safety errors: {errors}"
     # Queue should have received some events (not all due to timing)
     assert q.qsize() > 0
+
+
+def test_subscriber_count_is_locked():
+    """subscriber_count must use self._lock — guards against re-introducing the unlocked copy."""
+    import inspect
+    from main import EventBus
+    prop = EventBus.__dict__["subscriber_count"]
+    src = inspect.getsource(prop.fget)
+    assert "_lock" in src, "subscriber_count must use self._lock (thread-safe version only)"
