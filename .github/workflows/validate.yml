@@ -102,3 +102,36 @@ jobs:
           --check --diff
           --connection local
         continue-on-error: true
+
+  python-tests:
+    name: Mission Control Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: missioncontrol
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: missioncontrol
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U missioncontrol"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r mission-control/backend/requirements.txt
+
+      - name: Run MC backend tests
+        run: pytest mission-control/backend/tests/ -v --tb=short
+        env:
+          DATABASE_URL: postgresql://missioncontrol:testpassword@localhost:5432/missioncontrol
+          POSTGRES_PASSWORD: testpassword

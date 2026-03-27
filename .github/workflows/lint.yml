@@ -142,6 +142,32 @@ jobs:
           done
           exit $failed
 
+      - name: Timeout + shell function misuse
+        run: |
+          failed=0
+          for f in scripts/*.sh; do
+            [ -f "$f" ] || continue
+            # timeout cannot call shell functions (uses execvp, exit 127)
+            # Allow timed_ssh which is designed for this purpose
+            if grep -nP 'timeout\s+\d+\s+(?!ssh\b|docker\b|curl\b|bash\b|python3?\b|node\b|timed_ssh\b)\w+' "$f" 2>/dev/null | grep -v '#'; then
+              echo "ERROR: $f uses timeout with a shell function (use timed_ssh or inline the command)"
+              failed=1
+            fi
+          done
+          exit $failed
+
+      - name: Docker Compose syntax check
+        run: |
+          failed=0
+          for f in $(find . -name 'docker-compose*.yml' -not -path './.claude/*' -not -path './.git/*'); do
+            echo "=== $f ==="
+            if ! docker compose -f "$f" config --quiet 2>/dev/null; then
+              echo "ERROR: Invalid docker-compose file: $f"
+              failed=1
+            fi
+          done
+          exit $failed
+
   gitleaks:
     name: Credential Scan
     runs-on: ubuntu-latest
