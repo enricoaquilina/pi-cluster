@@ -14,6 +14,9 @@
 		reverse_proxy api:8000 {
 			header_up X-Api-Key {$API_KEY}
 			flush_interval -1
+			transport http {
+				dial_timeout 10s
+			}
 		}
 	}
 
@@ -23,11 +26,18 @@
 		}
 		reverse_proxy api:8000 {
 			header_up X-Api-Key {$API_KEY}
+			transport http {
+				dial_timeout 10s
+			}
 		}
 	}
 
 	handle /health {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			transport http {
+				dial_timeout 10s
+			}
+		}
 	}
 
 	handle /trading/* {
