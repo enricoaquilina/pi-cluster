@@ -305,6 +305,14 @@ else
     fail "Telegram provider" "no startup in last 2h (run: channels add --channel telegram --token <TOKEN>)"
 fi
 
+tg_configured=$(docker exec "$GATEWAY" python3 -c "
+import json
+with open('/home/node/.openclaw/openclaw.json') as f:
+    t = json.load(f).get('channels',{}).get('telegram',{})
+    print('yes' if t.get('botToken') else 'no')
+" 2>/dev/null)
+[ "$tg_configured" = "yes" ] && pass "Telegram token persisted in config" || fail "Telegram token" "missing from gateway config"
+
 # ── Test 15: Gateway restart recovery (--full only) ────────────────────────
 FULL_MODE=false
 [ "${1:-}" = "--full" ] && FULL_MODE=true
