@@ -217,29 +217,19 @@ fi
 
 # ── 9. UFW Port Validation ────────────────────────────────────────────────
 echo "9. UFW port validation"
-if [[ "$SKIP_RUNTIME" == "true" ]]; then
-    warn "UFW check" "skipped (SKIP_RUNTIME=true)"
-else
-    ufw_status=$(cluster_ssh heavy "sudo ufw status" 2>/dev/null)
-    if echo "$ufw_status" | grep -q "Status: active"; then
-        for port in 8520 18789 18790 22; do
-            echo "$ufw_status" | grep -q "$port/tcp.*ALLOW" && pass "UFW allows port $port" || \
-                fail "UFW port $port" "not allowed on heavy" "ssh heavy 'sudo ufw allow from 192.168.0.0/24 to any port $port proto tcp'"
-        done
-    else
-        warn "UFW" "not active on heavy"
-    fi
+ufw_status=$(cluster_ssh heavy "sudo ufw status" 2>/dev/null)
+if echo "$ufw_status" | grep -q "Status: active"; then
+    for port in 8520 18789 18790 22; do
+        echo "$ufw_status" | grep -q "$port/tcp.*ALLOW" && pass "UFW allows port $port" || \
+            fail "UFW port $port" "not allowed on heavy" "ssh heavy 'sudo ufw allow from 192.168.0.0/24 to any port $port proto tcp'"
+    done
 fi
 
 # ── 10. Cloudflare Tunnel ─────────────────────────────────────────────────
 echo "10. Cloudflare tunnel"
-if [[ "$SKIP_RUNTIME" == "true" ]]; then
-    warn "Cloudflared" "skipped (SKIP_RUNTIME=true)"
-else
-    cf_active=$(cluster_ssh master "systemctl is-active cloudflared" 2>/dev/null)
-    [ "$cf_active" = "active" ] && pass "Cloudflared running" || \
-        fail "Cloudflared" "not running (${cf_active:-unreachable})" "ssh master 'sudo systemctl start cloudflared && sudo systemctl enable cloudflared'"
-fi
+cf_active=$(cluster_ssh master "systemctl is-active cloudflared" 2>/dev/null)
+[ "$cf_active" = "active" ] && pass "Cloudflared running" || \
+    fail "Cloudflared" "not running ($cf_active)" "ssh master 'sudo systemctl start cloudflared && sudo systemctl enable cloudflared'"
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 test_summary
