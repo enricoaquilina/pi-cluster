@@ -22,36 +22,10 @@ ENV_CLUSTER="${OPENCLAW_ENV_CLUSTER:-$SCRIPT_DIR/.env.cluster}"
 GATEWAY="${OPENCLAW_GATEWAY_CONTAINER:-openclaw-openclaw-gateway-1}"
 SKIP_RUNTIME="${OPENCLAW_PREFLIGHT_SKIP_RUNTIME:-false}"
 
-PASS=0
-FAIL=0
-WARN=0
-TESTS=()
-
-CI_MODE=false
-FIX_HINTS=false
-[[ "${1:-}" == "--ci" ]] && CI_MODE=true
-[[ "${1:-}" == "--fix-hints" ]] && FIX_HINTS=true
-
-pass() {
-    PASS=$((PASS + 1))
-    TESTS+=("PASS  $1")
-    $CI_MODE || echo "  PASS  $1"
-}
-
-fail() {
-    FAIL=$((FAIL + 1))
-    TESTS+=("FAIL  $1: $2")
-    echo "  FAIL  $1: $2"
-    if $FIX_HINTS && [ -n "${3:-}" ]; then
-        echo "        Fix: $3"
-    fi
-}
-
-warn() {
-    WARN=$((WARN + 1))
-    TESTS+=("WARN  $1: $2")
-    $CI_MODE || echo "  WARN  $1: $2"
-}
+[[ "${1:-}" == "--ci" ]] && _HARNESS_CI=true
+[[ "${1:-}" == "--fix-hints" ]] && _HARNESS_FIX_HINTS=true
+# shellcheck source=scripts/lib/test-harness.sh
+source "$SCRIPT_DIR/lib/test-harness.sh"
 
 # ── 1. Docker Compose Syntax ────────────────────────────────────────────────
 echo "1. Docker compose validation"
@@ -242,23 +216,10 @@ else
 fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
-echo ""
-echo "=== Preflight Results ==="
-echo "Passed: $PASS"
-echo "Warned: $WARN"
-echo "Failed: $FAIL"
-echo "Total:  $((PASS + FAIL + WARN))"
-
-if [ "$FAIL" -gt 0 ]; then
+test_summary
+result=$?
+if [ "$FAIL" -gt 0 ] && ! $_HARNESS_FIX_HINTS; then
     echo ""
-    echo "Failures:"
-    for t in "${TESTS[@]}"; do
-        echo "$t" | grep "^FAIL" || true
-    done
-    echo ""
-    if ! $FIX_HINTS; then
-        echo "Run with --fix-hints to see fix commands."
-    fi
+    echo "Run with --fix-hints to see fix commands."
 fi
-
-[ "$FAIL" -eq 0 ]
+exit $result
