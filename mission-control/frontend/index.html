@@ -787,6 +787,7 @@ function renderCluster(nodes) {
           <div class="bar-container"><div class="bar-fill ${tempClass}" style="width:${Math.min(tempC, 100)}%"></div></div>
         </div>
       </div>
+      <div class="node-metrics-spark" id="spark-${esc(n.name)}"></div>
       <div class="node-footer">
         <span>Uptime: ${uptimeD}d ${uptimeH}h</span>
         <span>Heartbeat: ${heartbeat}</span>
@@ -794,6 +795,26 @@ function renderCluster(nodes) {
       </div>
     </div>`;
   }).join('');
+  // Load sparklines async
+  nodes.forEach(n => loadNodeSparkline(n.name));
+}
+
+async function loadNodeSparkline(name) {
+  const el = document.getElementById('spark-' + name);
+  if (!el) return;
+  try {
+    const res = await fetch(`${API}/nodes/${encodeURIComponent(name)}/metrics?days=1`);
+    const data = await res.json();
+    if (data.length < 2) { el.innerHTML = '<span style="font-size:0.7rem;color:var(--muted)">collecting...</span>'; return; }
+    const values = data.map(d => d.ram_total_mb > 0 ? Math.round(d.ram_used_mb / d.ram_total_mb * 100) : 0);
+    const max = 100;
+    const w = 120, h = 24;
+    const step = w / Math.max(values.length - 1, 1);
+    const points = values.map((v, i) => `${(i * step).toFixed(1)},${(h - v / max * h).toFixed(1)}`).join(' ');
+    el.innerHTML = `<svg width="${w}" height="${h}" style="display:block;margin-top:0.25rem">
+      <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.7"/>
+    </svg><span style="font-size:0.65rem;color:var(--muted)">RAM 24h</span>`;
+  } catch(e) { el.innerHTML = ''; }
 }
 
 function timeAgo(iso) {

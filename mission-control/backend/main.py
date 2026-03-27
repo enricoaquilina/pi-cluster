@@ -212,6 +212,19 @@ def init_db():
                 );
                 CREATE INDEX IF NOT EXISTS idx_budget_snapshots_at
                     ON budget_snapshots (snapshot_at DESC);
+
+                CREATE TABLE IF NOT EXISTS node_snapshots (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    node_name TEXT NOT NULL,
+                    ram_used_mb INT,
+                    ram_total_mb INT,
+                    cpu_percent FLOAT,
+                    disk_pct INT,
+                    temp_c INT,
+                    snapshot_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                CREATE INDEX IF NOT EXISTS idx_node_snapshots_lookup
+                    ON node_snapshots (node_name, snapshot_at DESC);
             """)
         conn.commit()
     finally:
@@ -278,15 +291,45 @@ async def _budget_snapshot():
         await asyncio.sleep(3600)
 
 
+async def _node_snapshot():
+    """Store node metrics snapshot hourly. First snapshot 15s after startup."""
+    await asyncio.sleep(15)
+    while True:
+        conn = _pool.getconn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT name, ram_used_mb, ram_total_mb, cpu_percent, metadata FROM nodes")
+                for name, ram_used, ram_total, cpu, meta in cur.fetchall():
+                    meta = meta or {}
+                    cur.execute(
+                        """INSERT INTO node_snapshots
+                           (node_name, ram_used_mb, ram_total_mb, cpu_percent, disk_pct, temp_c)
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+                        (name, ram_used, ram_total, cpu,
+                         meta.get("disk_pct", 0), meta.get("temp_c", 0)),
+                    )
+                cur.execute(
+                    "DELETE FROM node_snapshots WHERE snapshot_at < now() - interval '90 days'"
+                )
+            conn.commit()
+        except Exception as e:
+            logger.warning("Node snapshot error: %s", e)
+        finally:
+            _pool.putconn(conn)
+        await asyncio.sleep(3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     event_bus.set_loop(asyncio.get_running_loop())
     init_db()
     sweep_task = asyncio.create_task(_heartbeat_sweep())
     budget_task = asyncio.create_task(_budget_snapshot())
+    node_task = asyncio.create_task(_node_snapshot())
     yield
     sweep_task.cancel()
     budget_task.cancel()
+    node_task.cancel()
 
 
 app = FastAPI(title="Mission Control", version="1.0.0", lifespan=lifespan)
@@ -1421,6 +1464,24 @@ def budget_history(days: int = Query(7, ge=1, le=90), conn=Depends(get_db)):
                 "daily_limit", "weekly_limit", "monthly_limit", "snapshot_at"]
         rows = cur.fetchall()
     return [{**dict(zip(cols, r)), "snapshot_at": r[7].isoformat()} for r in rows]
+
+
+@app.get("/api/nodes/{name}/metrics")
+def node_metrics(name: str, days: int = Query(7, ge=1, le=90), conn=Depends(get_db)):
+    """Historical node metrics for trend analysis."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT node_name, ram_used_mb, ram_total_mb, cpu_percent,
+                   disk_pct, temp_c, snapshot_at
+            FROM node_snapshots
+            WHERE node_name = %s AND snapshot_at > now() - interval '1 day' * %s
+            ORDER BY snapshot_at ASC
+            LIMIT 500
+        """, (name, days))
+        cols = ["node_name", "ram_used_mb", "ram_total_mb", "cpu_percent",
+                "disk_pct", "temp_c", "snapshot_at"]
+        rows = cur.fetchall()
+    return [{**dict(zip(cols, r)), "snapshot_at": r[6].isoformat()} for r in rows]
 
 
 # ── Trading Dashboard Endpoints ──────────────────────────────────────────────

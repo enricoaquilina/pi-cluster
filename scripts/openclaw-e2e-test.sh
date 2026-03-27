@@ -222,6 +222,13 @@ else
     fail "Budget API" "no spend data"
 fi
 
+node_metrics=$(curl -sf "$MC_API/nodes/heavy/metrics?days=1" 2>/dev/null)
+if echo "$node_metrics" | python3 -c "import json,sys; d=json.load(sys.stdin); exit(0 if isinstance(d, list) else 1)" 2>/dev/null; then
+    pass "Node metrics API responds"
+else
+    fail "Node metrics API" "not responding"
+fi
+
 budget_history=$(curl -sf "$MC_API/budget/history?days=1" 2>/dev/null)
 if echo "$budget_history" | python3 -c "import json,sys; d=json.load(sys.stdin); exit(0 if isinstance(d, list) else 1)" 2>/dev/null; then
     pass "Budget history API responds"
