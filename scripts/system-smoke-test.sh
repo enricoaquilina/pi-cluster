@@ -191,27 +191,33 @@ check_openclaw_slave0() {
     case "$_OPENCLAW_NODE_STATUS" in
         api_unreachable) check_service "openclaw-slave0" "down" "Router API unreachable" ;;
         parse_error)     check_service "openclaw-slave0" "down" "Router API returned invalid JSON" ;;
-        *) echo "$_OPENCLAW_NODE_STATUS" | grep -q "^build true" \
-               && check_service "openclaw-slave0" "up" \
-               || check_service "openclaw-slave0" "down" "Node not connected to gateway" ;;
+        *) if echo "$_OPENCLAW_NODE_STATUS" | grep -q "^build true"; then
+               check_service "openclaw-slave0" "up"
+           else
+               check_service "openclaw-slave0" "down" "Node not connected to gateway"
+           fi ;;
     esac
 }
 check_openclaw_slave1() {
     case "$_OPENCLAW_NODE_STATUS" in
         api_unreachable) check_service "openclaw-slave1" "down" "Router API unreachable" ;;
         parse_error)     check_service "openclaw-slave1" "down" "Router API returned invalid JSON" ;;
-        *) echo "$_OPENCLAW_NODE_STATUS" | grep -q "^light true" \
-               && check_service "openclaw-slave1" "up" \
-               || check_service "openclaw-slave1" "down" "Node not connected to gateway" ;;
+        *) if echo "$_OPENCLAW_NODE_STATUS" | grep -q "^light true"; then
+               check_service "openclaw-slave1" "up"
+           else
+               check_service "openclaw-slave1" "down" "Node not connected to gateway"
+           fi ;;
     esac
 }
 check_openclaw_heavy() {
     case "$_OPENCLAW_NODE_STATUS" in
         api_unreachable) check_service "openclaw-heavy" "down" "Router API unreachable" ;;
         parse_error)     check_service "openclaw-heavy" "down" "Router API returned invalid JSON" ;;
-        *) echo "$_OPENCLAW_NODE_STATUS" | grep -q "^heavy true" \
-               && check_service "openclaw-heavy" "up" \
-               || check_service "openclaw-heavy" "down" "Node not connected to gateway" ;;
+        *) if echo "$_OPENCLAW_NODE_STATUS" | grep -q "^heavy true"; then
+               check_service "openclaw-heavy" "up"
+           else
+               check_service "openclaw-heavy" "down" "Node not connected to gateway"
+           fi ;;
     esac
 }
 
