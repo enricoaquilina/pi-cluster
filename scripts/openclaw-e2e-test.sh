@@ -77,6 +77,19 @@ else
     fail "Stats API" "unreachable"
 fi
 
+# ── Test 2b: Push freshness ──────────────────────────────────────────────────
+if [ -n "$stats" ]; then
+    stale_pushes=$(echo "$stats" | python3 -c "
+import json, sys, time
+d = json.load(sys.stdin)
+now = time.time()
+stale = [n['name'] for n in d.get('nodes', []) if now - n.get('push_ts', 0) > 120]
+print(','.join(stale) if stale else '')
+" 2>/dev/null)
+    [ -z "$stale_pushes" ] && pass "All node agent pushes fresh (<120s)" || \
+        fail "Node agent push stale" "$stale_pushes (check UFW port 8520)"
+fi
+
 # ── Test 3: Gateway connectivity ─────────────────────────────────────────────
 echo "3. Gateway connectivity"
 gw_status=$(docker ps --filter "name=$GATEWAY" --format '{{.Status}}' 2>/dev/null)
@@ -286,6 +299,22 @@ if cluster_ssh master "curl -sf --max-time 3 http://${HEAVY_IP:-192.168.0.5}:852
 else
     fail "Router API from master" "unreachable"
 fi
+
+# ── Test 13b: Port accessibility ──────────────────────────────────────────
+echo "13b. Port accessibility"
+HEAVY_LAN="${HEAVY_IP:-192.168.0.5}"
+HEAVY_TS="${HEAVY_TAILSCALE_IP:-100.85.234.128}"
+for node_entry in "slave1:light:${HEAVY_LAN}" "slave0:build:${HEAVY_TS}"; do
+    IFS=: read -r ssh_host node_name target_ip <<< "$node_entry"
+    port_results=$(cluster_ssh "$ssh_host" bash -c "
+        curl -sf --max-time 5 http://${target_ip}:8520/health >/dev/null 2>&1 && echo 'OK:8520' || echo 'FAIL:8520'
+        curl -sf --max-time 5 http://${target_ip}:18789/healthz >/dev/null 2>&1 && echo 'OK:18789' || echo 'FAIL:18789'
+    " 2>/dev/null)
+    for line in $port_results; do
+        IFS=: read -r result port <<< "$line"
+        [ "$result" = "OK" ] && pass "Port $port from $node_name" || fail "Port $port from $node_name" "unreachable (check UFW)"
+    done
+done
 
 # ── Test 14: Channel providers ────────────────────────────────────────────
 echo "14. Channel providers"

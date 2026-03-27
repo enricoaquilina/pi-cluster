@@ -303,15 +303,14 @@ async def _node_snapshot():
         try:
             with conn.cursor() as cur:
                 cur.execute("SELECT name, ram_used_mb, ram_total_mb, cpu_percent, metadata FROM nodes")
-                for name, ram_used, ram_total, cpu, meta in cur.fetchall():
-                    meta = meta or {}
-                    cur.execute(
-                        """INSERT INTO node_snapshots
-                           (node_name, ram_used_mb, ram_total_mb, cpu_percent, disk_pct, temp_c)
-                           VALUES (%s, %s, %s, %s, %s, %s)""",
-                        (name, ram_used, ram_total, cpu,
-                         meta.get("disk_pct", 0), meta.get("temp_c", 0)),
-                    )
+                rows = cur.fetchall()
+                data = [(name, ram_used, ram_total, cpu,
+                         (meta or {}).get("disk_pct", 0), (meta or {}).get("temp_c", 0))
+                        for name, ram_used, ram_total, cpu, meta in rows]
+                cur.executemany(
+                    """INSERT INTO node_snapshots
+                       (node_name, ram_used_mb, ram_total_mb, cpu_percent, disk_pct, temp_c)
+                       VALUES (%s, %s, %s, %s, %s, %s)""", data)
                 cur.execute(
                     "DELETE FROM node_snapshots WHERE snapshot_at < now() - interval '90 days'"
                 )
@@ -1087,7 +1086,7 @@ PERSONA_ROUTING = {
 
 # ── Failover Config ──────────────────────────────────────────────────────────
 
-NODE_MODELS = {"slave0": "claude-sonnet", "slave1": "deepseek", "heavy": "gemini-flash", "master": "gemini-flash"}
+NODE_MODELS = {"slave0": "openrouter/google/gemini-2.5-flash", "slave1": "openrouter/google/gemini-2.5-flash", "heavy": "openrouter/google/gemini-2.5-flash", "master": "openrouter/google/gemini-2.5-flash"}
 FALLBACK_NODES = {"slave0": "slave1", "slave1": "slave0"}
 FALLBACK_DELEGATE_MAP = {
     ("slave0", "slave1"): {"coder": "assistant", "architect": "assistant"},
@@ -1240,7 +1239,8 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
             logger.info("Failover: %s → %s for persona %s", original_node, node, req.persona)
         else:
             _log_dispatch(req.persona, node, delegate, False, req.prompt, "",
-                          0, "error", "All nodes unavailable", original_node=None)
+                          0, "error", "All nodes unavailable", original_node=None,
+                          model=NODE_MODELS.get(node))
             raise HTTPException(status_code=503, detail="All dispatch nodes are unavailable")
 
     cfg = ZEROCLAW_NODES[node]
@@ -1252,7 +1252,8 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
         rate_limiter.check(node)
     except HTTPException as rate_exc:
         _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      0, "rate_limited", rate_exc.detail, original_node=original_node)
+                      0, "rate_limited", rate_exc.detail, original_node=original_node,
+                      model=NODE_MODELS.get(node))
         raise
 
     start = datetime.now(timezone.utc)
@@ -1262,12 +1263,14 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
         logger.error("Dispatch to %s failed: %s", node, e)
         _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      elapsed_ms, "error", str(e), original_node=original_node)
+                      elapsed_ms, "error", str(e), original_node=original_node,
+                      model=NODE_MODELS.get(node))
         raise HTTPException(status_code=502, detail=f"Cannot reach {node}: {e}")
     except HTTPException as e:
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
         _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      elapsed_ms, "error", e.detail, original_node=original_node)
+                      elapsed_ms, "error", e.detail, original_node=original_node,
+                      model=NODE_MODELS.get(node))
         raise
 
     elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
