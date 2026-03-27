@@ -290,17 +290,24 @@ fi
 
 # ── Test 14: Channel providers ────────────────────────────────────────────
 echo "14. Channel providers"
-# Use log-based check — gateway CLI is too slow (~16s) for reliable testing
-recent_logs=$(docker logs --since 2h "$GATEWAY" 2>&1)
-if echo "$recent_logs" | grep -q "\[whatsapp\].*starting provider"; then
+channel_status=$(docker exec "$GATEWAY" sh -c 'OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 20 node dist/index.js channels status 2>&1' || true)
+if echo "$channel_status" | grep -qi "WhatsApp.*running"; then
     pass "WhatsApp provider running"
 else
-    fail "WhatsApp provider" "no startup in last 2h"
+    fail "WhatsApp provider" "not running"
 fi
-if echo "$recent_logs" | grep -q "\[telegram\].*starting provider"; then
+if echo "$channel_status" | grep -qi "Telegram.*running"; then
     pass "Telegram provider running"
+elif echo "$channel_status" | grep -qi "Telegram.*not configured"; then
+    fail "Telegram provider" "not configured (run: channels add --channel telegram --token <TOKEN>)"
 else
-    fail "Telegram provider" "no startup in last 2h (run: channels add --channel telegram --token <TOKEN>)"
+    # CLI may have timed out — fall back to log check
+    tg_logs=$(docker logs --since 60m "$GATEWAY" 2>&1 | grep -c "\[telegram\].*starting provider")
+    if [ "$tg_logs" -gt 0 ]; then
+        pass "Telegram provider started (log-based)"
+    else
+        fail "Telegram provider" "not running"
+    fi
 fi
 
 # ── Test 15: Gateway restart recovery (--full only) ────────────────────────
