@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/.env.cluster" 2>/dev/null || true
 # shellcheck source=scripts/lib/telegram.sh
-source "$SCRIPT_DIR/lib/telegram.sh"
+source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 HEAVY_IP="${HEAVY_IP:-192.168.0.5}"
 
 # Check if heavy is reachable (ping + gateway health)

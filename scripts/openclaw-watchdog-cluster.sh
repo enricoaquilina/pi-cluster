@@ -14,7 +14,7 @@ LOG_FILE="/var/log/openclaw-watchdog.log"
 # shellcheck source=scripts/.env.cluster
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 # shellcheck source=scripts/lib/telegram.sh
-source "$SCRIPT_DIR/lib/telegram.sh"
+source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 
 EXPECTED_NODES=("build" "light" "heavy")
 

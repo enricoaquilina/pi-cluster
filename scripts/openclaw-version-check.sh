@@ -22,7 +22,7 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 # shellcheck source=scripts/.env.cluster
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 # shellcheck source=scripts/lib/telegram.sh
-source "$SCRIPT_DIR/lib/telegram.sh"
+source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 
 echo "=== OpenClaw Version Check ==="
 echo "Pinned: $PINNED_VERSION"
