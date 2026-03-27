@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="auto-deploy"
 
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 
 log() { logger -t "$LOG_TAG" "$1"; }
 
@@ -41,11 +43,5 @@ ansible-playbook "$REPO_DIR/playbooks/openclaw-monitoring.yml" --quiet 2>&1 | wh
 
 log "Deploy complete"
 
-# Telegram notification
-if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-    curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d "chat_id=${TELEGRAM_CHAT_ID}" \
-        -d "text=🚀 *Auto-Deploy*
-$COMMITS" \
-        -d "parse_mode=Markdown" > /dev/null 2>&1 || true
-fi
+send_telegram "🚀 *Auto-Deploy*
+$COMMITS"

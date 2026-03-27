@@ -1,5 +1,4 @@
 #!/bin/bash
-set -uo pipefail
 # OpenClaw Disaster Recovery Validation
 # Verifies backups exist, are recent, and contain valid data.
 # Usage: bash scripts/openclaw-dr-test.sh
@@ -12,6 +11,9 @@ BACKUP_ROOT="/mnt/external/backups"
 REMOTE_HOST="${HEAVY_IP:-192.168.0.5}"
 REMOTE_DIR="/home/enrico/backups"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 TMP_DIR=$(mktemp -d /tmp/openclaw-dr-test.XXXXXX)
 
 PASS=0
@@ -179,21 +181,10 @@ if [ "$FAIL" -gt 0 ]; then
         echo "$t" | grep "^FAIL" || true
     done
 
-    # Send Telegram alert on failure if env available
-    ENV_FILE="$SCRIPT_DIR/.env.cluster"
-    if [ -f "$ENV_FILE" ]; then
-        # shellcheck source=/dev/null
-        source "$ENV_FILE"
-    fi
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
-        failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
-        curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=🔴 *DR Validation Failed*
+    failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
+    send_telegram "🔴 *DR Validation Failed*
 Passed: $PASS / Failed: $FAIL
-$failures" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1
-    fi
+$failures"
 fi
 
 echo ""
