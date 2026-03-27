@@ -1,0 +1,5 @@
+# Files to copy into new Claude Code worktrees
+# Uses .gitignore syntax — matches gitignored files that worktrees need
+scripts/.env.cluster
+secrets/
+secrets-vault-password

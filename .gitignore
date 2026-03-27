@@ -19,6 +19,7 @@ scripts/.env.cluster
 
 # Secrets - never commit
 secrets/
+secrets-vault-password
 *.pem
 *.key
 !tests/secrets/
