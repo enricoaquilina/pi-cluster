@@ -13,6 +13,8 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/ssh.sh
+source "$SCRIPT_DIR/lib/ssh.sh"
 COMPOSE_DIR="${OPENCLAW_COMPOSE_DIR:-/home/enrico/openclaw}"
 COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
 ENV_FILE="$COMPOSE_DIR/.env"
@@ -163,7 +165,7 @@ if [[ "$SKIP_RUNTIME" == "true" ]]; then
 elif [ -n "$env_token" ]; then
     for node in "master:control" "slave0:build" "slave1:light" "heavy:heavy"; do
         IFS=: read -r host name <<< "$node"
-        node_token=$(ssh -o ConnectTimeout=2 -o BatchMode=yes "$host" \
+        node_token=$(cluster_ssh "$host" \
             "grep 'OPENCLAW_GATEWAY_TOKEN=' /etc/systemd/system/openclaw-node.service 2>/dev/null | cut -d= -f3" 2>/dev/null)
         if [ -z "$node_token" ]; then
             continue  # Node unreachable or no service file
