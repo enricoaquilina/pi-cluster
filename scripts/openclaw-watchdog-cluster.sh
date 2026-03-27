@@ -11,8 +11,8 @@ SCRIPTS_DIR="/home/enrico/homelab/scripts"
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 LOG_FILE="/var/log/openclaw-watchdog.log"
 
-TELEGRAM_BOT_TOKEN="8799078317:AAGGtKj6ZXH0C3Zwyob5EgjMIEPmgA36CjA"
-TELEGRAM_CHAT_ID="1630148884"
+# shellcheck source=scripts/.env.cluster
+[ -f "$SCRIPTS_DIR/.env.cluster" ] && source "$SCRIPTS_DIR/.env.cluster"
 
 EXPECTED_NODES=("build" "light" "heavy")
 
@@ -22,10 +22,12 @@ log() {
 
 send_telegram() {
     local message="$1"
-    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-        -d "chat_id=${TELEGRAM_CHAT_ID}" \
-        -d "text=${message}" \
-        -d "parse_mode=Markdown" > /dev/null 2>&1
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
+            -d "text=${message}" \
+            -d "parse_mode=Markdown" > /dev/null 2>&1
+    fi
 }
 
 load_state() {
