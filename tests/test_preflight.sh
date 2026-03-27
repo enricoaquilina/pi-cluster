@@ -194,6 +194,87 @@ else
     fail "Fix hints" "no 'Fix:' lines in output"
 fi
 
+# ── Tests 8-10: SSH-unavailable paths ────────────────────────────────────────
+# Inject a fake ssh that always exits 1 (simulates unreachable host).
+# Run preflight with SKIP_RUNTIME=false — valid config + unreachable SSH
+# should warn on checks 8-10 but NOT fail (exit 0).
+make_fake_ssh() {
+    local bin="$1"
+    mkdir -p "$bin"
+    cat > "$bin/ssh" <<'EOF'
+#!/bin/bash
+exit 1
+EOF
+    chmod +x "$bin/ssh"
+}
+
+echo "8. SSH unreachable: exit 0 with warnings only"
+tmpdir=$(mktemp -d); fakebin=$(mktemp -d)
+setup_mock_env "$tmpdir"; make_fake_ssh "$fakebin"
+# OPENCLAW_GATEWAY_CONTAINER=nonexistent so checks 4/5 (docker inspect) skip gracefully
+output=$(OPENCLAW_COMPOSE_DIR="$tmpdir" OPENCLAW_ENV_CLUSTER="$tmpdir/.env.cluster" \
+    OPENCLAW_GATEWAY_CONTAINER=nonexistent-test-container \
+    OPENCLAW_PREFLIGHT_SKIP_RUNTIME=false \
+    PATH="$fakebin:$PATH" \
+    bash "$PREFLIGHT" --ci 2>&1)
+exit_code=$?
+rm -rf "$tmpdir" "$fakebin"
+
+if [ "$exit_code" -eq 0 ]; then
+    pass "SSH-unreachable: exits 0 (warnings only)"
+else
+    fail "SSH-unreachable exit code" "exited $exit_code (expected 0)"
+fi
+if echo "$output" | grep -q "^  FAIL"; then
+    fail "SSH-unreachable output" "contains FAIL lines (should be WARN only): $(echo "$output" | grep '^  FAIL')"
+else
+    pass "SSH-unreachable: no FAIL lines in output"
+fi
+
+echo "9. SSH unreachable: UFW warns unreachable, not fails"
+tmpdir=$(mktemp -d); fakebin=$(mktemp -d)
+setup_mock_env "$tmpdir"; make_fake_ssh "$fakebin"
+# No --ci flag so warn() messages are printed (--ci suppresses them)
+output=$(OPENCLAW_COMPOSE_DIR="$tmpdir" OPENCLAW_ENV_CLUSTER="$tmpdir/.env.cluster" \
+    OPENCLAW_GATEWAY_CONTAINER=nonexistent-test-container \
+    OPENCLAW_PREFLIGHT_SKIP_RUNTIME=false \
+    PATH="$fakebin:$PATH" \
+    bash "$PREFLIGHT" 2>&1)
+rm -rf "$tmpdir" "$fakebin"
+
+if echo "$output" | grep -qiE "WARN.*UFW.*unreachable|WARN.*UFW check.*unreachable|WARN.*UFW.*skip"; then
+    pass "UFW: warns unreachable"
+else
+    fail "UFW unreachable" "expected WARN about UFW/unreachable, got: $(echo "$output" | grep -i ufw)"
+fi
+if echo "$output" | grep -qE "FAIL.*UFW"; then
+    fail "UFW unreachable" "FAIL line found for UFW (should be WARN)"
+else
+    pass "UFW: no FAIL line"
+fi
+
+echo "10. SSH unreachable: Cloudflared warns unreachable, not fails"
+tmpdir=$(mktemp -d); fakebin=$(mktemp -d)
+setup_mock_env "$tmpdir"; make_fake_ssh "$fakebin"
+# No --ci flag so warn() messages are printed (--ci suppresses them)
+output=$(OPENCLAW_COMPOSE_DIR="$tmpdir" OPENCLAW_ENV_CLUSTER="$tmpdir/.env.cluster" \
+    OPENCLAW_GATEWAY_CONTAINER=nonexistent-test-container \
+    OPENCLAW_PREFLIGHT_SKIP_RUNTIME=false \
+    PATH="$fakebin:$PATH" \
+    bash "$PREFLIGHT" 2>&1)
+rm -rf "$tmpdir" "$fakebin"
+
+if echo "$output" | grep -qiE "WARN.*Cloudflared.*unreachable|WARN.*Cloudflared.*skip"; then
+    pass "Cloudflared: warns unreachable"
+else
+    fail "Cloudflared unreachable" "expected WARN about Cloudflared/unreachable, got: $(echo "$output" | grep -i cloudflare)"
+fi
+if echo "$output" | grep -qE "FAIL.*Cloudflared"; then
+    fail "Cloudflared unreachable" "FAIL line found for Cloudflared (should be WARN)"
+else
+    pass "Cloudflared: no FAIL line"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Preflight Test Results ==="
