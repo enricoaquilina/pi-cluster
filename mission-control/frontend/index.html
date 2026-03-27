@@ -275,6 +275,7 @@
   <div id="budget-section" style="padding: 1rem 2rem;">
     <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:0.75rem">Budget</h2>
     <div id="budget-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;"></div>
+    <div id="budget-history" style="margin-top:0.75rem;"></div>
   </div>
   <div class="services-header">
     <h2>Services</h2>
@@ -672,8 +673,52 @@ async function loadBudget() {
     grid.innerHTML = bar('Daily', d.usage.daily_usd, d.limits.daily, d.remaining.daily)
                    + bar('Weekly', d.usage.weekly_usd, d.limits.weekly, d.remaining.weekly)
                    + bar('Monthly', d.usage.monthly_usd, d.limits.monthly, d.remaining.monthly);
+    // Show 7-day summary if available
+    if (d.history && d.history.snapshots_7d > 0) {
+      const h = d.history;
+      grid.innerHTML += `<div style="grid-column:1/-1;font-size:0.8rem;color:var(--muted);margin-top:0.25rem">
+        7d avg: $${h.avg_daily_7d.toFixed(4)}/day &middot; peak: $${h.peak_daily_7d.toFixed(4)}/day &middot; ${h.snapshots_7d} snapshots
+      </div>`;
+    }
+    loadBudgetHistory();
   } catch (e) {
     document.getElementById('budget-grid').innerHTML = '<div style="color:var(--muted)">Budget data unavailable</div>';
+  }
+}
+
+async function loadBudgetHistory() {
+  const container = document.getElementById('budget-history');
+  try {
+    const res = await fetch(`${API}/budget/history?days=7`);
+    const data = await res.json();
+    if (data.length < 2) {
+      container.innerHTML = '<div style="font-size:0.8rem;color:var(--muted)">Collecting budget history...</div>';
+      return;
+    }
+    // Group snapshots by day, take max daily_usd per day
+    const byDay = {};
+    data.forEach(s => {
+      const day = s.snapshot_at.substring(0, 10);
+      if (!byDay[day] || s.daily_usd > byDay[day]) byDay[day] = s.daily_usd;
+    });
+    const days = Object.keys(byDay).sort();
+    const values = days.map(d => byDay[d]);
+    const max = Math.max(...values, 0.01);
+    // SVG bar chart
+    const w = 300, h = 60, barW = Math.floor((w - 10) / Math.max(days.length, 1));
+    let svg = `<svg width="${w}" height="${h + 20}" style="display:block">`;
+    values.forEach((v, i) => {
+      const barH = Math.max(2, (v / max) * h);
+      const x = 5 + i * barW;
+      const y = h - barH;
+      const cls = v >= max * 0.8 ? 'var(--red)' : v >= max * 0.6 ? 'var(--yellow)' : 'var(--green)';
+      svg += `<rect x="${x}" y="${y}" width="${barW - 2}" height="${barH}" rx="2" fill="${cls}" opacity="0.8"/>`;
+      svg += `<text x="${x + barW/2}" y="${h + 14}" text-anchor="middle" fill="var(--muted)" font-size="9">${days[i].slice(5)}</text>`;
+    });
+    svg += '</svg>';
+    container.innerHTML = `<div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.25rem">Daily Spend (7d)</div>${svg}`;
+  } catch(e) {
+    container.innerHTML = '';
   }
 }
 

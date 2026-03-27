@@ -220,6 +220,20 @@ else
     fail "Budget API" "no spend data"
 fi
 
+budget_history=$(curl -sf "$MC_API/budget/history?days=1" 2>/dev/null)
+if echo "$budget_history" | python3 -c "import json,sys; d=json.load(sys.stdin); exit(0 if isinstance(d, list) else 1)" 2>/dev/null; then
+    pass "Budget history API responds"
+else
+    fail "Budget history API" "not responding"
+fi
+
+mc_budget=$(curl -sf "$MC_API/budget" 2>/dev/null)
+if echo "$mc_budget" | python3 -c "import json,sys; d=json.load(sys.stdin); exit(0 if 'history' in d else 1)" 2>/dev/null; then
+    pass "Budget includes history summary"
+else
+    fail "Budget history summary" "missing from MC /api/budget response"
+fi
+
 # ── Test 11: Disk space ─────────────────────────────────────────────────────
 echo "11. Disk space"
 for entry in "${NODES[@]}"; do
@@ -274,13 +288,26 @@ else
     fail "Router API from master" "unreachable"
 fi
 
-# ── Test 14: WhatsApp provider active ──────────────────────────────────────
-echo "14. WhatsApp provider"
-wa_listening=$(docker logs --since 10m "$GATEWAY" 2>&1 | grep -c "Listening for personal WhatsApp")
-if [ "$wa_listening" -gt 0 ]; then
-    pass "WhatsApp provider active (${wa_listening} listen events)"
+# ── Test 14: Channel providers ────────────────────────────────────────────
+echo "14. Channel providers"
+channel_status=$(docker exec "$GATEWAY" sh -c 'OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 20 node dist/index.js channels status 2>&1' || true)
+if echo "$channel_status" | grep -qi "WhatsApp.*running"; then
+    pass "WhatsApp provider running"
 else
-    fail "WhatsApp provider" "no listening events in last 10min"
+    fail "WhatsApp provider" "not running"
+fi
+if echo "$channel_status" | grep -qi "Telegram.*running"; then
+    pass "Telegram provider running"
+elif echo "$channel_status" | grep -qi "Telegram.*not configured"; then
+    fail "Telegram provider" "not configured (run: channels add --channel telegram --token <TOKEN>)"
+else
+    # CLI may have timed out — fall back to log check
+    tg_logs=$(docker logs --since 60m "$GATEWAY" 2>&1 | grep -c "\[telegram\].*starting provider")
+    if [ "$tg_logs" -gt 0 ]; then
+        pass "Telegram provider started (log-based)"
+    else
+        fail "Telegram provider" "not running"
+    fi
 fi
 
 # ── Test 15: Gateway restart recovery (--full only) ────────────────────────
@@ -419,7 +446,7 @@ if $TELEGRAM_MODE && [ "$FAIL" -gt 0 ]; then
     if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
         failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
         curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID:-1630148884}" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
             -d "text=🔴 *E2E Test Failed*
 Passed: $PASS / Failed: $FAIL
 $failures" \
