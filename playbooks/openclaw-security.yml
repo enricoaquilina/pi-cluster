@@ -1,0 +1,45 @@
+---
+# OpenClaw Security — UFW firewall rules on heavy
+# Manages required port access for cluster communication.
+#
+# Usage: ansible-playbook playbooks/openclaw-security.yml
+#
+# NOTE: Docker-published ports (18789, 5678, etc.) bypass UFW via iptables
+# DOCKER chain. Only non-Docker services (Router API on 8520) require
+# explicit UFW rules.
+#
+# Required ports:
+#   22   — SSH (LAN + Tailscale)
+#   8520 — Router API / node agent push (LAN + Tailscale)
+#   18789 — OpenClaw gateway (LAN + Tailscale)
+#   18790 — OpenClaw gateway WebSocket (LAN + Tailscale)
+
+- name: UFW firewall rules on heavy
+  hosts: heavy
+  become: true
+  vars:
+    ufw_networks:
+      - { cidr: "192.168.0.0/24", label: "LAN" }
+      - { cidr: "100.64.0.0/10", label: "Tailscale" }
+    ufw_ports:
+      - { port: "22", comment: "SSH" }
+      - { port: "8520", comment: "Router API" }
+      - { port: "18789", comment: "OpenClaw gateway" }
+      - { port: "18790", comment: "OpenClaw gateway WS" }
+  tasks:
+    - name: Enable UFW with default deny
+      community.general.ufw:
+        state: enabled
+        default: deny
+        direction: incoming
+
+    - name: Allow required ports from trusted networks
+      community.general.ufw:
+        rule: allow
+        from: "{{ item.0.cidr }}"
+        to_port: "{{ item.1.port }}"
+        proto: tcp
+        comment: "{{ item.1.comment }} - {{ item.0.label }}"
+      loop: "{{ ufw_networks | product(ufw_ports) | list }}"
+      loop_control:
+        label: "{{ item.1.port }}/tcp from {{ item.0.label }}"
