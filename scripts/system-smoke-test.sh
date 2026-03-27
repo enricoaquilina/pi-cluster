@@ -24,6 +24,7 @@ LOG_FILE="/tmp/smoke-test.log"
 ALERT_INTERVAL=600  # 10 minutes
 
 RESTART_COUNT_FILE="/var/run/cluster-health/restart-count"
+CIRCUIT_LOCK_FILE="/var/run/cluster-health/restart-count.lock"
 MAX_RESTARTS_PER_HOUR=3
 
 mkdir -p "$STATE_DIR" "$FAIL_COUNT_DIR"
@@ -160,43 +161,58 @@ check_n8n_prod() {
 
 # 8. n8n Staging (removed — consolidated to single instance)
 
-# 9-10b. OpenClaw nodes (single API call + single Python parse)
+# 9-10b. OpenClaw nodes — fetched once, checked three times
+# _fetch_openclaw_node_status must be called before the three check functions below.
+# Sentinels: "api_unreachable" = curl failed; "parse_error" = invalid JSON from API.
 _OPENCLAW_NODE_STATUS=""
-_check_all_openclaw_nodes() {
-    if [ -z "$_OPENCLAW_NODE_STATUS" ]; then
-        _OPENCLAW_NODE_STATUS=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null | python3 -c "
+_fetch_openclaw_node_status() {
+    [ -n "$_OPENCLAW_NODE_STATUS" ] && return  # idempotent
+    local raw parsed
+    raw=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null)
+    if [ -z "$raw" ]; then
+        _OPENCLAW_NODE_STATUS="api_unreachable"
+        return
+    fi
+    parsed=$(echo "$raw" | python3 -c "
 import json, sys
 data = json.load(sys.stdin)
 nodes = {n['name']: n.get('connected', False) for n in data.get('nodes', [])}
 for name in ['build', 'light', 'heavy']:
     print(name, 'true' if nodes.get(name) else 'false')
-" 2>/dev/null || echo "build false
-light false
-heavy false")
+" 2>/dev/null)
+    if [ -z "$parsed" ]; then
+        _OPENCLAW_NODE_STATUS="parse_error"
+    else
+        _OPENCLAW_NODE_STATUS="$parsed"
     fi
-    echo "$_OPENCLAW_NODE_STATUS"
 }
 
 check_openclaw_slave0() {
-    if _check_all_openclaw_nodes | grep -q "^build true"; then
-        check_service "openclaw-slave0" "up"
-    else
-        check_service "openclaw-slave0" "down" "Node not connected to gateway"
-    fi
+    case "$_OPENCLAW_NODE_STATUS" in
+        api_unreachable) check_service "openclaw-slave0" "down" "Router API unreachable" ;;
+        parse_error)     check_service "openclaw-slave0" "down" "Router API returned invalid JSON" ;;
+        *) echo "$_OPENCLAW_NODE_STATUS" | grep -q "^build true" \
+               && check_service "openclaw-slave0" "up" \
+               || check_service "openclaw-slave0" "down" "Node not connected to gateway" ;;
+    esac
 }
 check_openclaw_slave1() {
-    if _check_all_openclaw_nodes | grep -q "^light true"; then
-        check_service "openclaw-slave1" "up"
-    else
-        check_service "openclaw-slave1" "down" "Node not connected to gateway"
-    fi
+    case "$_OPENCLAW_NODE_STATUS" in
+        api_unreachable) check_service "openclaw-slave1" "down" "Router API unreachable" ;;
+        parse_error)     check_service "openclaw-slave1" "down" "Router API returned invalid JSON" ;;
+        *) echo "$_OPENCLAW_NODE_STATUS" | grep -q "^light true" \
+               && check_service "openclaw-slave1" "up" \
+               || check_service "openclaw-slave1" "down" "Node not connected to gateway" ;;
+    esac
 }
 check_openclaw_heavy() {
-    if _check_all_openclaw_nodes | grep -q "^heavy true"; then
-        check_service "openclaw-heavy" "up"
-    else
-        check_service "openclaw-heavy" "down" "Node not connected to gateway"
-    fi
+    case "$_OPENCLAW_NODE_STATUS" in
+        api_unreachable) check_service "openclaw-heavy" "down" "Router API unreachable" ;;
+        parse_error)     check_service "openclaw-heavy" "down" "Router API returned invalid JSON" ;;
+        *) echo "$_OPENCLAW_NODE_STATUS" | grep -q "^heavy true" \
+               && check_service "openclaw-heavy" "up" \
+               || check_service "openclaw-heavy" "down" "Node not connected to gateway" ;;
+    esac
 }
 
 # 10c. Router API
@@ -298,6 +314,7 @@ check_mc_api
 check_postgres
 check_mongodb
 check_n8n_prod
+_fetch_openclaw_node_status
 check_openclaw_slave0
 check_openclaw_slave1
 check_openclaw_heavy
@@ -367,19 +384,23 @@ send_alert() {
     bash "$ALERT_SCRIPT" "$msg" 2>/dev/null || true
 }
 
-# Circuit breaker: cap auto-recovery restarts per hour
+# Circuit breaker: cap auto-recovery restarts per hour (flock prevents TOCTOU race)
 check_circuit_breaker() {
-    if [ -f "$RESTART_COUNT_FILE" ]; then
-        AGE=$(( $(date +%s) - $(stat -c %Y "$RESTART_COUNT_FILE") ))
-        [ "$AGE" -gt 3600 ] && echo 0 > "$RESTART_COUNT_FILE"
-    fi
-    COUNT=$(cat "$RESTART_COUNT_FILE" 2>/dev/null || echo 0)
-    if [ "$COUNT" -ge "$MAX_RESTARTS_PER_HOUR" ]; then
-        send_alert "Circuit breaker: $COUNT restarts this hour, skipping auto-recovery"
-        return 1
-    fi
-    echo $((COUNT + 1)) > "$RESTART_COUNT_FILE"
-    return 0
+    (
+        flock -x 200
+        if [ -f "$RESTART_COUNT_FILE" ]; then
+            AGE=$(( $(date +%s) - $(stat -c %Y "$RESTART_COUNT_FILE") ))
+            [ "$AGE" -gt 3600 ] && echo 0 > "$RESTART_COUNT_FILE"
+        fi
+        COUNT=$(cat "$RESTART_COUNT_FILE" 2>/dev/null || echo 0)
+        if [ "$COUNT" -ge "$MAX_RESTARTS_PER_HOUR" ]; then
+            send_alert "Circuit breaker: $COUNT restarts this hour, skipping auto-recovery"
+            exit 1
+        fi
+        echo $((COUNT + 1)) > "$RESTART_COUNT_FILE"
+        exit 0
+    ) 200>"$CIRCUIT_LOCK_FILE"
+    return $?
 }
 
 post_to_api() {

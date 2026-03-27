@@ -70,9 +70,11 @@ jobs:
             curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
               --data-urlencode "text=${MSG}" \
-              -d "parse_mode=Markdown" > /dev/null 2>&1 || true
+              -d "parse_mode=Markdown" > /dev/null 2>&1 \
+              || echo "::warning::Telegram notification failed (check TELEGRAM_BOT_TOKEN secret)"
             gh pr comment "$PR_NUM" --body "🤖 **Auto-fixer modified files:**
-          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null || true
+          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null \
+              || echo "::warning::PR comment failed for PR #${PR_NUM}"
           fi
 
   # ── Auto: fix PR-Agent review suggestions ───────────────────────────────────
@@ -151,9 +153,11 @@ jobs:
             curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
               --data-urlencode "text=${MSG}" \
-              -d "parse_mode=Markdown" > /dev/null 2>&1 || true
+              -d "parse_mode=Markdown" > /dev/null 2>&1 \
+              || echo "::warning::Telegram notification failed (check TELEGRAM_BOT_TOKEN secret)"
             gh pr comment "$PR_NUM" --body "🤖 **Auto-fixer modified files:**
-          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null || true
+          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null \
+              || echo "::warning::PR comment failed for PR #${PR_NUM}"
           fi
 
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
@@ -268,7 +272,9 @@ jobs:
             curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
               --data-urlencode "text=${MSG}" \
-              -d "parse_mode=Markdown" > /dev/null 2>&1 || true
+              -d "parse_mode=Markdown" > /dev/null 2>&1 \
+              || echo "::warning::Telegram notification failed (check TELEGRAM_BOT_TOKEN secret)"
             gh pr comment "$PR_NUM" --body "🤖 **Auto-fixer modified files:**
-          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null || true
+          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null \
+              || echo "::warning::PR comment failed for PR #${PR_NUM}"
           fi

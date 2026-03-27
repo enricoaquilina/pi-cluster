@@ -1,6 +1,7 @@
 """Regression tests: existing REST endpoints are unchanged after SSE changes."""
 
 import pytest
+from unittest.mock import patch
 
 
 async def test_health_endpoint(client):
@@ -114,3 +115,17 @@ async def test_api_key_not_required_on_reads(client):
 
     resp = await client.get("/api/stats")
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_health_returns_503_when_db_down(app):
+    """Health endpoint must return 503 (not 200) when database is unreachable."""
+    from httpx import ASGITransport, AsyncClient
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        with patch("main.psycopg2.connect", side_effect=Exception("DB connection refused")):
+            resp = await c.get("/health")
+    assert resp.status_code == 503, f"Expected 503 but got {resp.status_code}: {resp.json()}"
+    body = resp.json()
+    assert body["status"] == "degraded"
+    assert "error" in body["db"]

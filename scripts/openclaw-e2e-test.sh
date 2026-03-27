@@ -477,6 +477,21 @@ else
     fail "Gateway workspace write" "container cannot write (check NFS ownership)"
 fi
 
+# ── Test 22: Circuit breaker flock serialization ─────────────────────────────
+echo "22. Circuit breaker flock serialization"
+_cb_file=$(mktemp)
+_cb_lock=$(mktemp)
+echo 0 > "$_cb_file"
+# Two concurrent increments with sleep inside critical section — must serialize to 2
+(flock -x 200; c=$(cat "$_cb_file"); sleep 0.05; echo $((c+1)) > "$_cb_file") 200>"$_cb_lock" &
+(flock -x 200; c=$(cat "$_cb_file"); sleep 0.05; echo $((c+1)) > "$_cb_file") 200>"$_cb_lock" &
+wait
+_final=$(cat "$_cb_file")
+rm -f "$_cb_file" "$_cb_lock"
+[ "$_final" = "2" ] \
+    && pass "Circuit breaker flock serializes increments" \
+    || fail "Circuit breaker flock" "got $_final (expected 2 — race condition present)"
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 test_summary
 
