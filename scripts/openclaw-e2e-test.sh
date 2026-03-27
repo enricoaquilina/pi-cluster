@@ -446,7 +446,7 @@ if $TELEGRAM_MODE && [ "$FAIL" -gt 0 ]; then
     if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
         failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
         curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID:-1630148884}" \
+            -d "chat_id=${TELEGRAM_CHAT_ID}" \
             -d "text=🔴 *E2E Test Failed*
 Passed: $PASS / Failed: $FAIL
 $failures" \
