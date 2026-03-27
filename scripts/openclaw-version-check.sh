@@ -1,5 +1,4 @@
 #!/bin/bash
-set -uo pipefail
 # OpenClaw Version Check & Safe Upgrade
 # Checks if a newer version is available, tests it, and upgrades if the
 # SYSTEM_RUN_DENIED bug is fixed. Rolls back if the bug persists.
@@ -25,7 +24,7 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 [ -f "$SCRIPTS_DIR/.env.cluster" ] && source "$SCRIPTS_DIR/.env.cluster"
 
 send_telegram() {
-    if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
         curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d "chat_id=${TELEGRAM_CHAT_ID}" \
             -d "text=$1" \
