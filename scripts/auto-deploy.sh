@@ -41,6 +41,20 @@ ansible-playbook "$REPO_DIR/playbooks/log-maintenance.yml" --quiet 2>&1 | while 
 log "Running openclaw-monitoring playbook..."
 ansible-playbook "$REPO_DIR/playbooks/openclaw-monitoring.yml" --quiet 2>&1 | while read -r line; do log "monitoring: $line"; done
 
+# Sync heavy's clone and rebuild MC if needed (single SSH call)
+log "Syncing heavy clone..."
+mc_result=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy bash -s "$LOCAL" "$REMOTE" <<'HEAVY_SYNC' 2>&1) || true
+  cd /home/enrico/pi-cluster || exit 0
+  git pull --ff-only origin master --quiet 2>/dev/null || exit 0
+  if git diff --name-only "$1..$2" 2>/dev/null | grep -q '^mission-control/'; then
+    cd /home/enrico/mission-control && docker compose up -d --build 2>&1
+    echo "MC_REBUILT"
+  fi
+HEAVY_SYNC
+if echo "$mc_result" | grep -q "MC_REBUILT"; then
+    log "Mission Control rebuilt on heavy"
+fi
+
 log "Deploy complete"
 
 send_telegram "🚀 *Auto-Deploy*

@@ -228,6 +228,17 @@ if [ -f "$COMPOSE_FILE" ] && [ -f "$ENV_FILE" ]; then
     [ "$missing_count" -eq 0 ] && pass "All compose env vars covered in .env"
 fi
 
+# ── 8. MC Deployment Symlink ──────────────────────────────────────────────
+echo "8. MC deployment symlink"
+if [[ "$SKIP_RUNTIME" == "true" ]]; then
+    warn "MC symlink" "skipped (SKIP_RUNTIME=true)"
+elif ssh -o ConnectTimeout=3 -o BatchMode=yes heavy "test -L /home/enrico/mission-control" 2>/dev/null; then
+    pass "MC deployed via symlink"
+else
+    fail "MC deployment" "not a symlink (risk of code drift)" \
+        "ln -s /home/enrico/pi-cluster/mission-control /home/enrico/mission-control"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Preflight Results ==="
