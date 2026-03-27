@@ -19,6 +19,7 @@
 #  13. MC/Router API reachable from master (cross-node connectivity)
 #  14. WhatsApp provider active
 #  15. Gateway restart recovery (--full only)
+#  21. Workspace write permissions (NFS ownership)
 
 set -uo pipefail
 
@@ -419,6 +420,26 @@ for f in "$HOME/openclaw/.env" "$HOME/.openclaw/openclaw.json" \
         fail "Perms $name" "$perms (should be 600)"
     fi
 done
+
+# ── Test 21: Workspace write permissions ─────────────────────────────────────
+echo "21. Workspace write permissions"
+WS="/mnt/external/openclaw/workspace"
+
+# Check no root-owned .md files in workspace root (root-owned = unwritable via NFS all_squash)
+root_count=$(find "$WS" -maxdepth 1 -user root -name "*.md" 2>/dev/null | wc -l)
+if [ "$root_count" -eq 0 ]; then
+    pass "No root-owned workspace .md files"
+else
+    fail "Workspace ownership" "$root_count .md files owned by root (NFS squash blocks writes)"
+fi
+
+# Check gateway container can write to workspace
+ws_test="/home/node/.openclaw/workspace/.perm-test-$$"
+if docker exec "$GATEWAY" sh -c "touch $ws_test && rm -f $ws_test" 2>/dev/null; then
+    pass "Gateway can write to workspace"
+else
+    fail "Gateway workspace write" "container cannot write (check NFS ownership)"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 test_summary
