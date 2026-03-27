@@ -1044,7 +1044,7 @@ PERSONA_ROUTING = {
 
 # ── Failover Config ──────────────────────────────────────────────────────────
 
-NODE_MODELS = {"slave0": "claude-sonnet", "slave1": "deepseek", "heavy": "gemini-flash", "master": "gemini-flash"}
+NODE_MODELS = {"slave0": "openrouter/anthropic/claude-sonnet-4.6", "slave1": "openrouter/deepseek/deepseek-v3.2", "heavy": "openrouter/google/gemini-2.5-flash", "master": "openrouter/google/gemini-2.5-flash"}
 FALLBACK_NODES = {"slave0": "slave1", "slave1": "slave0"}
 FALLBACK_DELEGATE_MAP = {
     ("slave0", "slave1"): {"coder": "assistant", "architect": "assistant"},
@@ -1197,7 +1197,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
             logger.info("Failover: %s → %s for persona %s", original_node, node, req.persona)
         else:
             _log_dispatch(req.persona, node, delegate, False, req.prompt, "",
-                          0, "error", "All nodes unavailable", original_node=None)
+                          0, "error", "All nodes unavailable", original_node=None, model=NODE_MODELS.get(node))
             raise HTTPException(status_code=503, detail="All dispatch nodes are unavailable")
 
     cfg = ZEROCLAW_NODES[node]
@@ -1209,7 +1209,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
         rate_limiter.check(node)
     except HTTPException as rate_exc:
         _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      0, "rate_limited", rate_exc.detail, original_node=original_node)
+                      0, "rate_limited", rate_exc.detail, original_node=original_node, model=NODE_MODELS.get(node))
         raise
 
     start = datetime.now(timezone.utc)
@@ -1219,12 +1219,12 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
         logger.error("Dispatch to %s failed: %s", node, e)
         _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      elapsed_ms, "error", str(e), original_node=original_node)
+                      elapsed_ms, "error", str(e), original_node=original_node, model=NODE_MODELS.get(node))
         raise HTTPException(status_code=502, detail=f"Cannot reach {node}: {e}")
     except HTTPException as e:
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
         _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      elapsed_ms, "error", e.detail, original_node=original_node)
+                      elapsed_ms, "error", e.detail, original_node=original_node, model=NODE_MODELS.get(node))
         raise
 
     elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
