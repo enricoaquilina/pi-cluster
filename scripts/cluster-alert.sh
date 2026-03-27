@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Cluster alert — sends message to Telegram + syslog.
 # Deployed to /usr/local/bin/cluster-alert.sh by openclaw-monitoring.yml.
 # Referenced by system-smoke-test.sh via ALERT_SCRIPT.
