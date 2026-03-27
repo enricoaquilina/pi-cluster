@@ -306,9 +306,9 @@ HEAVY_LAN="${HEAVY_IP:-192.168.0.5}"
 HEAVY_TS="${HEAVY_TAILSCALE_IP:-100.85.234.128}"
 for node_entry in "slave1:light:${HEAVY_LAN}" "slave0:build:${HEAVY_TS}"; do
     IFS=: read -r ssh_host node_name target_ip <<< "$node_entry"
-    port_results=$(cluster_ssh "$ssh_host" bash -c "
-        curl -sf --max-time 5 http://${target_ip}:8520/health >/dev/null 2>&1 && echo 'OK:8520' || echo 'FAIL:8520'
-        curl -sf --max-time 5 http://${target_ip}:18789/healthz >/dev/null 2>&1 && echo 'OK:18789' || echo 'FAIL:18789'
+    port_results=$(cluster_ssh "$ssh_host" "
+        curl -sf --max-time 5 http://${target_ip}:8520/health >/dev/null 2>&1 && echo OK:8520 || echo FAIL:8520;
+        curl -sf --max-time 5 http://${target_ip}:18789/healthz >/dev/null 2>&1 && echo OK:18789 || echo FAIL:18789
     " 2>/dev/null)
     for line in $port_results; do
         IFS=: read -r result port <<< "$line"

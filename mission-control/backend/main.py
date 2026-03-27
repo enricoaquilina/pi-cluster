@@ -307,10 +307,10 @@ async def _node_snapshot():
                 data = [(name, ram_used, ram_total, cpu,
                          (meta or {}).get("disk_pct", 0), (meta or {}).get("temp_c", 0))
                         for name, ram_used, ram_total, cpu, meta in rows]
-                cur.executemany(
+                psycopg2.extras.execute_values(cur,
                     """INSERT INTO node_snapshots
                        (node_name, ram_used_mb, ram_total_mb, cpu_percent, disk_pct, temp_c)
-                       VALUES (%s, %s, %s, %s, %s, %s)""", data)
+                       VALUES %s""", data)
                 cur.execute(
                     "DELETE FROM node_snapshots WHERE snapshot_at < now() - interval '90 days'"
                 )
