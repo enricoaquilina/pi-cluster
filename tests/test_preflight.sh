@@ -27,9 +27,9 @@ services:
 YAML
     # Valid .env with all required keys
     cat > "$tmpdir/.env" <<'ENV'
-OPENCLAW_GATEWAY_TOKEN=test-token-abc123
-OPENROUTER_API_KEY=sk-or-test-key
-GOOGLE_AI_API_KEY=AIzaSy-test-key
+OPENCLAW_GATEWAY_TOKEN=fake-test-token-123
+OPENROUTER_API_KEY=fake-test-key-456
+GOOGLE_AI_API_KEY=fake-test-key-789
 ENV
     chmod 600 "$tmpdir/.env"
     # Matching .env.cluster
@@ -88,8 +88,8 @@ tmpdir=$(mktemp -d)
 setup_mock_env "$tmpdir"
 # Create .env.cluster with different token
 cat > "$tmpdir/.env.cluster" <<'ENV'
-OPENCLAW_GATEWAY_TOKEN=different-token-xyz
-OPENROUTER_API_KEY=sk-or-test-key
+OPENCLAW_GATEWAY_TOKEN=fake-different-token-xyz
+OPENROUTER_API_KEY=fake-test-key-456
 ENV
 chmod 600 "$tmpdir/.env.cluster"
 
