@@ -29,6 +29,9 @@ MAX_RESTARTS_PER_HOUR=3
 mkdir -p "$STATE_DIR" "$FAIL_COUNT_DIR"
 
 _ssh() { ssh -o ConnectTimeout=3 -o BatchMode=yes "$@"; }
+# NOTE: Do NOT use `timeout X _ssh` — timeout uses execvp() which only finds
+# external commands, not shell functions (silent exit 127). Use timed_ssh instead.
+timed_ssh() { local t="$1"; shift; timeout "$t" ssh -o ConnectTimeout=3 -o BatchMode=yes "$@"; }
 
 # Colors for interactive mode
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; NC='\033[0m'; BOLD='\033[1m'
@@ -79,13 +82,13 @@ check_openclaw_telegram() {
         return
     fi
     # Check if container can resolve Telegram API
-    if ! timeout 8 _ssh ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
+    if ! timed_ssh 8 ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
         check_service "openclaw-telegram" "down" "DNS resolution for api.telegram.org failed inside container"
         return
     fi
     # Check recent logs for polling activity (successful getUpdates within last 5 min)
     local recent_logs
-    recent_logs=$(timeout 10 _ssh ${HEAVY_HOST} "docker logs --since 5m openclaw-openclaw-gateway-1" 2>&1 | tail -50)
+    recent_logs=$(timed_ssh 10 ${HEAVY_HOST} "docker logs --since 5m openclaw-openclaw-gateway-1" 2>&1 | tail -50)
     if echo "$recent_logs" | grep -v "409: Conflict" | grep -qi "getUpdates.*failed\|error.*telegram\|ENOTFOUND\|ETIMEDOUT\|telegram.*ECONNREFUSED" 2>/dev/null; then
         check_service "openclaw-telegram" "down" "Telegram polling errors in recent logs"
         return
@@ -96,7 +99,7 @@ check_openclaw_telegram() {
 # 3. OpenClaw WhatsApp — positive signal check (active listening)
 check_openclaw_whatsapp() {
     local recent_logs
-    recent_logs=$(timeout 10 _ssh ${HEAVY_HOST} "docker logs --since 10m openclaw-openclaw-gateway-1" 2>&1 | tail -100)
+    recent_logs=$(timed_ssh 10 ${HEAVY_HOST} "docker logs --since 10m openclaw-openclaw-gateway-1" 2>&1 | tail -100)
     # Positive signal: provider is actively listening
     if echo "$recent_logs" | grep -qi "Listening for personal WhatsApp" 2>/dev/null; then
         check_service "openclaw-whatsapp" "up"
@@ -126,7 +129,7 @@ check_mc_api() {
 
 # 5. PostgreSQL
 check_postgres() {
-    if timeout 8 _ssh ${HEAVY_HOST} "docker exec mission-control-db pg_isready -U missioncontrol" >/dev/null 2>&1; then
+    if timed_ssh 8 ${HEAVY_HOST} "docker exec mission-control-db pg_isready -U missioncontrol" >/dev/null 2>&1; then
         check_service "postgresql" "up"
     else
         check_service "postgresql" "down" "pg_isready failed"
@@ -135,7 +138,7 @@ check_postgres() {
 
 # 6. MongoDB
 check_mongodb() {
-    if timeout 8 _ssh ${HEAVY_HOST} 'docker exec mongodb mongosh --quiet --eval "db.runCommand({ping:1}).ok"' >/dev/null 2>&1; then
+    if timed_ssh 8 ${HEAVY_HOST} 'docker exec mongodb mongosh --quiet --eval "db.runCommand({ping:1}).ok"' >/dev/null 2>&1; then
         check_service "mongodb" "up"
     else
         check_service "mongodb" "down" "mongosh ping failed"
@@ -252,7 +255,7 @@ check_docker_dns() {
         check_service "docker-dns" "down" "No running containers"
         return
     fi
-    if timeout 8 _ssh ${HEAVY_HOST} "docker exec mongodb getent hosts google.com" >/dev/null 2>&1; then
+    if timed_ssh 8 ${HEAVY_HOST} "docker exec mongodb getent hosts google.com" >/dev/null 2>&1; then
         check_service "docker-dns" "up"
     else
         check_service "docker-dns" "down" "Container DNS failed (${test_container})"
@@ -484,7 +487,7 @@ if [[ "$openclaw_tg_fails" -ge 3 ]] || [[ "$openclaw_gw_fails" -ge 3 ]]; then
         cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
         sleep 30
         # Re-check
-        if timeout 8 _ssh ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
+        if timed_ssh 8 ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
             send_alert "AUTO-RECOVERY SUCCESS: OpenClaw gateway restarted, Telegram DNS resolving"
             echo "0" > "$FAIL_COUNT_DIR/openclaw-telegram.count"
             echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway.count"
@@ -527,7 +530,7 @@ if [[ "$docker_dns_fails" -ge 3 ]]; then
         send_alert "AUTO-RECOVERY: Docker container DNS broken for 15+ min — restarting OpenClaw gateway"
         cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
         sleep 10
-        if timeout 5 _ssh ${HEAVY_HOST} docker exec openclaw-openclaw-gateway-1 sh -c "getent hosts google.com" >/dev/null 2>&1; then
+        if timed_ssh 5 ${HEAVY_HOST} docker exec openclaw-openclaw-gateway-1 sh -c "getent hosts google.com" >/dev/null 2>&1; then
             send_alert "AUTO-RECOVERY SUCCESS: Docker container DNS restored after gateway restart"
             echo "0" > "$FAIL_COUNT_DIR/docker-dns.count"
             echo "up" > "$STATE_DIR/docker-dns.status"
