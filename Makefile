@@ -1,4 +1,4 @@
-.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test log-maintenance logs deploy security-scan security-audit dr-test lint test validate
+.PHONY: ping update reboot status disk memory docker-ps vpn vpn-status pihole-ha pihole-whitelist pihole-status pihole-update doctor common pihole-maintenance openclaw-nodes openclaw-nfs openclaw-status openclaw-health openclaw-doctor openclaw-monitoring openclaw-recovery openclaw-pair openclaw-dispatch openclaw-route openclaw-version openclaw-upgrade openclaw-test log-maintenance logs deploy security-scan security-audit dr-test lint test validate rotate-secrets
 
 ping:
 	ansible all -m ping
@@ -175,6 +175,9 @@ test:
 openclaw-preflight:
 	@echo "=== OpenClaw Pre-Deploy Validation ==="
 	bash scripts/openclaw-preflight.sh
+
+rotate-secrets:
+	ansible-playbook playbooks/secret-rotation.yml --vault-password-file secrets-vault-password
 
 validate: lint test
 	@echo ""
