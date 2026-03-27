@@ -22,12 +22,10 @@ log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG_FILE"
 }
 
-load_state() {
-    if [ -f "$STATE_FILE" ]; then
-        cat "$STATE_FILE"
-    else
-        echo '{}'
-    fi
+get_state() {
+    local val
+    val=$(grep -o "\"$1\":\"[^\"]*\"" "$STATE_FILE" 2>/dev/null | cut -d'"' -f4)
+    echo "${val:-false}"
 }
 
 save_state() {
@@ -39,9 +37,7 @@ gateway_status=$(docker ps --filter "name=$GATEWAY_CONTAINER" --format '{{.Statu
 
 if [ -z "$gateway_status" ]; then
     log "CRITICAL: Gateway container not found"
-    prev_state=$(load_state)
-    already_alerted=$(echo "$prev_state" | python3 -c "import json,sys; print(json.load(sys.stdin).get('gateway_alert','false'))" 2>/dev/null || echo "false")
-    if [ "$already_alerted" != "true" ]; then
+    if [ "$(get_state gateway_alert)" != "true" ]; then
         send_telegram "🔴 *OpenClaw Gateway DOWN*
 Container \`$GATEWAY_CONTAINER\` not found.
 Manual intervention required."
@@ -116,9 +112,7 @@ Detected disconnected: ${disconnected[*]}
 Auto-repaired successfully — all nodes back online."
         else
             log "Recovery partial: still disconnected: ${still_disconnected[*]}"
-            prev_state=$(load_state)
-            already_alerted=$(echo "$prev_state" | python3 -c "import json,sys; print(json.load(sys.stdin).get('node_alert','false'))" 2>/dev/null || echo "false")
-            if [ "$already_alerted" != "true" ]; then
+            if [ "$(get_state node_alert)" != "true" ]; then
                 send_telegram "🟡 *OpenClaw Nodes Disconnected*
 Failed to reconnect: ${still_disconnected[*]}
 Connected: ${connected[*]}
@@ -130,9 +124,7 @@ Auto-repair attempted but failed."
         log "Recovery failed: pair script returned $repair_status"
     fi
 else
-    prev_state=$(load_state)
-    was_alerted=$(echo "$prev_state" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('node_alert','false') == 'true' or d.get('gateway_alert','false') == 'true')" 2>/dev/null || echo "false")
-    if [ "$was_alerted" = "True" ]; then
+    if [ "$(get_state node_alert)" = "true" ] || [ "$(get_state gateway_alert)" = "true" ]; then
         send_telegram "🟢 *OpenClaw Cluster Healthy*
 All nodes connected: ${connected[*]}"
     fi

@@ -27,6 +27,8 @@ FAIL=0
 TESTS=()
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/telegram.sh
+source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 API="http://127.0.0.1:8520"
 MC_API="${MC_API_URL:-http://192.168.0.5:8000/api}"
 GATEWAY="openclaw-openclaw-gateway-1"
@@ -431,20 +433,10 @@ fi
 
 # Telegram notification on failure
 if $TELEGRAM_MODE && [ "$FAIL" -gt 0 ]; then
-    ENV_FILE="$SCRIPT_DIR/.env.cluster"
-    if [ -f "$ENV_FILE" ]; then
-        # shellcheck source=/dev/null
-        source "$ENV_FILE"
-    fi
-    if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-        failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
-        curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d "chat_id=${TELEGRAM_CHAT_ID}" \
-            -d "text=🔴 *E2E Test Failed*
+    failures=$(printf '%s\n' "${TESTS[@]}" | grep "^FAIL" | head -5)
+    send_telegram "🔴 *E2E Test Failed*
 Passed: $PASS / Failed: $FAIL
-$failures" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1
-    fi
+$failures"
 fi
 
 echo ""
