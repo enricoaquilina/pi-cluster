@@ -198,6 +198,20 @@ def init_db():
                 );
                 CREATE INDEX IF NOT EXISTS idx_service_alerts_lookup
                     ON service_alerts (created_at DESC);
+
+                CREATE TABLE IF NOT EXISTS budget_snapshots (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    daily_usd DOUBLE PRECISION NOT NULL,
+                    weekly_usd DOUBLE PRECISION NOT NULL,
+                    monthly_usd DOUBLE PRECISION NOT NULL,
+                    total_usd DOUBLE PRECISION NOT NULL,
+                    daily_limit DOUBLE PRECISION NOT NULL,
+                    weekly_limit DOUBLE PRECISION NOT NULL,
+                    monthly_limit DOUBLE PRECISION NOT NULL,
+                    snapshot_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                CREATE INDEX IF NOT EXISTS idx_budget_snapshots_at
+                    ON budget_snapshots (snapshot_at DESC);
             """)
         conn.commit()
     finally:
@@ -234,13 +248,45 @@ async def _heartbeat_sweep():
             _pool.putconn(conn)
 
 
+async def _budget_snapshot():
+    """Store budget snapshot hourly. Takes initial snapshot 10s after startup."""
+    for delay in [10, *([3600] * 999999)]:
+        await asyncio.sleep(delay)
+        conn = _pool.getconn()
+        try:
+            usage = _fetch_openrouter_usage()
+            if "error" in usage:
+                continue
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO budget_snapshots
+                       (daily_usd, weekly_usd, monthly_usd, total_usd,
+                        daily_limit, weekly_limit, monthly_limit)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (usage["daily_usd"], usage["weekly_usd"],
+                     usage["monthly_usd"], usage["total_usd"],
+                     BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY),
+                )
+                cur.execute(
+                    "DELETE FROM budget_snapshots WHERE snapshot_at < now() - interval '90 days'"
+                )
+            conn.commit()
+            logger.info("Budget snapshot stored: $%.4f daily", usage["daily_usd"])
+        except Exception as e:
+            logger.warning("Budget snapshot error: %s", e)
+        finally:
+            _pool.putconn(conn)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     event_bus.set_loop(asyncio.get_running_loop())
     init_db()
-    task = asyncio.create_task(_heartbeat_sweep())
+    sweep_task = asyncio.create_task(_heartbeat_sweep())
+    budget_task = asyncio.create_task(_budget_snapshot())
     yield
-    task.cancel()
+    sweep_task.cancel()
+    budget_task.cancel()
 
 
 app = FastAPI(title="Mission Control", version="1.0.0", lifespan=lifespan)
@@ -1321,11 +1367,11 @@ def _fetch_openrouter_usage() -> dict:
 
 @app.get("/api/budget")
 def get_budget():
-    """Current OpenRouter spend vs budget limits."""
+    """Current OpenRouter spend vs budget limits, with 7-day history summary."""
     usage = _fetch_openrouter_usage()
     if "error" in usage:
         raise HTTPException(503, detail=usage["error"])
-    return {
+    result = {
         "usage": usage,
         "limits": {"daily": BUDGET_DAILY, "weekly": BUDGET_WEEKLY, "monthly": BUDGET_MONTHLY},
         "remaining": {
@@ -1339,6 +1385,43 @@ def get_budget():
             "monthly": usage["monthly_usd"] >= BUDGET_MONTHLY * BUDGET_ALERT_THRESHOLD,
         },
     }
+    conn = _pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT COALESCE(MAX(daily_usd), 0),
+                       COALESCE(AVG(daily_usd), 0),
+                       COUNT(*)
+                FROM budget_snapshots
+                WHERE snapshot_at > now() - interval '7 days'
+            """)
+            peak, avg, count = cur.fetchone()
+        result["history"] = {
+            "peak_daily_7d": round(float(peak), 4),
+            "avg_daily_7d": round(float(avg), 4),
+            "snapshots_7d": count,
+        }
+    except Exception:
+        result["history"] = {"peak_daily_7d": 0, "avg_daily_7d": 0, "snapshots_7d": 0}
+    finally:
+        _pool.putconn(conn)
+    return result
+
+
+@app.get("/api/budget/history")
+def budget_history(days: int = Query(7, ge=1, le=90), conn=Depends(get_db)):
+    """Historical budget snapshots for trend analysis."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT daily_usd, weekly_usd, monthly_usd, total_usd,
+                   daily_limit, weekly_limit, monthly_limit, snapshot_at
+            FROM budget_snapshots
+            WHERE snapshot_at > now() - interval '1 day' * %s
+            ORDER BY snapshot_at ASC
+        """, (days,))
+        cols = ["daily_usd", "weekly_usd", "monthly_usd", "total_usd",
+                "daily_limit", "weekly_limit", "monthly_limit", "snapshot_at"]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
 # ── Trading Dashboard Endpoints ──────────────────────────────────────────────
