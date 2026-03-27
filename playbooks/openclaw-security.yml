@@ -27,9 +27,9 @@
       - { port: "18789", comment: "OpenClaw gateway" }
       - { port: "18790", comment: "OpenClaw gateway WS" }
   tasks:
-    - name: Enable UFW with default deny
+    # Set policy and allow rules BEFORE enabling — prevents SSH lockout on first run
+    - name: Set default deny policy
       community.general.ufw:
-        state: enabled
         default: deny
         direction: incoming
 
@@ -43,3 +43,7 @@
       loop: "{{ ufw_networks | product(ufw_ports) | list }}"
       loop_control:
         label: "{{ item.1.port }}/tcp from {{ item.0.label }}"
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
