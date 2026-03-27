@@ -154,9 +154,6 @@ check_n8n_prod() {
 }
 
 # 8. n8n Staging (removed — consolidated to single instance)
-check_n8n_staging() {
-    check_service "n8n-staging" "up" "" "0"  # No longer exists, skip
-}
 
 # 9-10b. OpenClaw nodes (single API call + single Python parse)
 _OPENCLAW_NODE_STATUS=""
@@ -296,7 +293,6 @@ check_mc_api
 check_postgres
 check_mongodb
 check_n8n_prod
-check_n8n_staging
 check_openclaw_slave0
 check_openclaw_slave1
 check_openclaw_heavy
@@ -313,7 +309,7 @@ if [[ "$MODE" == "interactive" ]]; then
     echo ""
     printf "${BOLD}%-25s %-10s %-8s %s${NC}\n" "SERVICE" "STATUS" "MS" "ERROR"
     echo "────────────────────────────────────────────────────────────────"
-    for svc in openclaw-gateway openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-slave0 openclaw-slave1 openclaw-heavy router-api polymarket-bot pihole-dns cloudflared docker-dns tailscale-dns; do
+    for svc in openclaw-gateway openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production openclaw-slave0 openclaw-slave1 openclaw-heavy router-api polymarket-bot pihole-dns cloudflared docker-dns tailscale-dns; do
         status="${RESULTS[$svc]:-unknown}"
         ms="${RESPONSE_MS[$svc]:-}"
         err="${ERRORS[$svc]:-}"

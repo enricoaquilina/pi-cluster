@@ -154,9 +154,13 @@ def init_db():
                     error_detail TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                 );
-                -- Add original_node column if upgrading from older schema
+                -- Add columns if upgrading from older schema
                 DO $$ BEGIN
                     ALTER TABLE dispatch_log ADD COLUMN original_node TEXT;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
+                DO $$ BEGIN
+                    ALTER TABLE dispatch_log ADD COLUMN model TEXT;
                 EXCEPTION WHEN duplicate_column THEN NULL;
                 END $$;
                 CREATE INDEX IF NOT EXISTS idx_dispatch_log_created ON dispatch_log(created_at DESC);
@@ -1040,6 +1044,7 @@ PERSONA_ROUTING = {
 
 # ── Failover Config ──────────────────────────────────────────────────────────
 
+NODE_MODELS = {"slave0": "claude-sonnet", "slave1": "deepseek", "heavy": "gemini-flash", "master": "gemini-flash"}
 FALLBACK_NODES = {"slave0": "slave1", "slave1": "slave0"}
 FALLBACK_DELEGATE_MAP = {
     ("slave0", "slave1"): {"coder": "assistant", "architect": "assistant"},
@@ -1147,7 +1152,7 @@ def _is_node_dispatchable(node_name: str) -> bool:
 def _log_dispatch(persona: str, node: str, delegate: str, fallback: bool,
                   prompt: str, response: str, elapsed_ms: int,
                   status: str = "success", error_detail: Optional[str] = None,
-                  original_node: Optional[str] = None):
+                  original_node: Optional[str] = None, model: Optional[str] = None):
     """Log a dispatch attempt to the database."""
     conn = _pool.getconn()
     try:
@@ -1155,11 +1160,11 @@ def _log_dispatch(persona: str, node: str, delegate: str, fallback: bool,
             cur.execute(
                 """INSERT INTO dispatch_log
                    (persona, node, delegate, fallback, original_node, prompt_preview,
-                    response_preview, elapsed_ms, status, error_detail)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    response_preview, elapsed_ms, status, error_detail, model)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (persona, node, delegate, fallback, original_node,
                  prompt[:500], response[:500],
-                 elapsed_ms, status, error_detail),
+                 elapsed_ms, status, error_detail, model),
             )
         conn.commit()
     except Exception as e:
@@ -1224,7 +1229,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
 
     elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
     _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, response,
-                  elapsed_ms, original_node=original_node)
+                  elapsed_ms, original_node=original_node, model=NODE_MODELS.get(node))
 
     event_bus.publish("dispatch")
     return DispatchResponse(
