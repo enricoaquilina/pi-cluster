@@ -15,12 +15,15 @@ jobs:
   test:
     name: MC Backend Tests
     runs-on: ubuntu-latest
+    env:
+      TEST_DB_PASS: ${{ secrets.TEST_DB_PASSWORD || 'ci-only-not-prod' }}
+
     services:
       postgres:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: missioncontrol
-          POSTGRES_PASSWORD: testpassword
+          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD || 'ci-only-not-prod' }}
           POSTGRES_DB: missioncontrol
         ports:
           - 5432:5432
@@ -44,9 +47,8 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql://missioncontrol:testpassword@localhost:5432/missioncontrol
+          DATABASE_URL: postgresql://missioncontrol:${{ env.TEST_DB_PASS }}@localhost:5432/missioncontrol
           API_KEY: test-api-key
-          POSTGRES_PASSWORD: testpassword
           OPENCLAW_DIR: /tmp
           POLYBOT_DATA_DIR: /tmp
         run: |

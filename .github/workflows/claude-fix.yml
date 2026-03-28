@@ -44,6 +44,13 @@ jobs:
           bot_app_id: ${{ vars.BOT_APP_ID }}
           bot_private_key: ${{ secrets.BOT_PRIVATE_KEY }}
           prompt: |
+            CRITICAL RULES:
+            - NEVER delete files that were added in this PR
+            - NEVER remove functions, classes, or imports that were intentionally added
+            - NEVER revert changes that are part of the PR's stated purpose
+            - If a suggestion contradicts an explicit change in the PR diff, SKIP it
+            - The human author's intent takes priority over automated suggestions
+
             Review the PR comments posted by the automated reviewer (PR-Agent).
             Look for the "Code Suggestions" comment with specific code improvements.
             For each suggestion:
@@ -133,8 +140,12 @@ jobs:
             For each suggestion, critically evaluate whether it IMPROVES the code:
             - REJECT suggestions that broaden exception handling (e.g., replacing specific exceptions with bare Exception)
             - REJECT suggestions that are cosmetic-only or reduce code specificity
-            - REJECT suggestions rated below 5/10 importance by the reviewer itself
+            - REJECT suggestions rated below 6/10 importance by the reviewer itself
             - APPLY only suggestions that fix real bugs, security issues, or clear improvements
+            - When fixing a bash &&/|| anti-pattern, scan the entire file for similar occurrences
+            - Consult .github/best_practices.md for known good patterns in this codebase
+            - APPLY fixes for: bash &&/|| chains, grep basic-regex patterns, port matching precision,
+              hardcoded CI passwords, mutable action tags, SSH empty-result handling
             If no suggestions are worth applying, do nothing — do NOT make changes just to make changes.
             If you do make fixes, commit with clear messages, then push: git push origin HEAD
 
@@ -206,7 +217,7 @@ jobs:
           fi
 
           # Get failed logs — extract only error-relevant lines
-          FAILED_LOG=$(gh run view "$RUN_ID" -R "$REPO" --log-failed 2>&1 | grep -E 'SC[0-9]+|error|warning|FAIL|Error|WARN' | tail -40)
+          FAILED_LOG=$(gh run view "$RUN_ID" -R "$REPO" --log-failed 2>&1 | grep -E 'SC[0-9]+|Error|FAIL|error:' | tail -40)
 
           # Check for transient failures
           if echo "$FAILED_LOG" | grep -qi "502: Bad Gateway\|ETIMEDOUT\|rate limit\|network error\|Could not resolve host"; then
