@@ -52,7 +52,12 @@ def test_row_to_task_gone():
 
 def test_no_dead_copybot_pass_loop():
     """copybot_traders should not contain a dead pass loop."""
-    path = os.path.join(os.path.dirname(__file__), "..", "main.py")
+    # After module split, function lives in app/routes/trading.py
+    for filename in ["main.py", os.path.join("app", "routes", "trading.py")]:
+        candidate = os.path.join(os.path.dirname(__file__), "..", filename)
+        if os.path.exists(candidate):
+            path = candidate
+            break
     tree = ast.parse(open(path).read())
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "copybot_traders":
@@ -63,12 +68,15 @@ def test_no_dead_copybot_pass_loop():
 
 def test_lifespan_calls_closeall():
     """Lifespan shutdown should call _pool.closeall()."""
-    path = os.path.join(os.path.dirname(__file__), "..", "main.py")
-    tree = ast.parse(open(path).read())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifespan":
-            src = ast.dump(node)
-            assert "closeall" in src, "lifespan missing _pool.closeall()"
-            break
-    else:
-        pytest.fail("lifespan function not found")
+    # After module split, lifespan lives in app/__init__.py
+    for filename in ["main.py", os.path.join("app", "__init__.py")]:
+        path = os.path.join(os.path.dirname(__file__), "..", filename)
+        if not os.path.exists(path):
+            continue
+        tree = ast.parse(open(path).read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifespan":
+                src = ast.dump(node)
+                assert "closeall" in src, "lifespan missing _pool.closeall()"
+                return
+    pytest.fail("lifespan function not found in main.py or app/__init__.py")
