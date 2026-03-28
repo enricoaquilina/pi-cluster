@@ -85,6 +85,36 @@ else
   ok "pr-review.yml inline config.model removed"
 fi
 
+# Test 11: pr_actions includes synchronize (fix for force-push review skip)
+if grep -q 'synchronize' .pr_agent.toml; then
+  ok "pr_actions includes synchronize"
+else
+  fail "pr_actions missing synchronize — force-push reviews will be skipped"
+fi
+
+# Test 12: ticket compliance disabled (removes noise)
+if grep -q 'require_ticket_analysis_review.*=.*false' .pr_agent.toml; then
+  ok "ticket compliance disabled"
+else
+  fail "require_ticket_analysis_review not set to false"
+fi
+
+# Test 13: auto_improve explicitly enabled
+if grep -q 'auto_improve.*=.*true' .pr_agent.toml; then
+  ok "auto_improve explicitly enabled"
+else
+  fail "auto_improve not explicitly set to true"
+fi
+
+# Test 14: best_practices.md contains key enforcement patterns
+for pattern in "&&/||" "grep -E" "testpassword" "503" "psycopg2"; do
+  if grep -q "$pattern" .github/best_practices.md; then
+    ok "best_practices.md documents '$pattern' pattern"
+  else
+    fail "best_practices.md missing '$pattern' pattern"
+  fi
+done
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

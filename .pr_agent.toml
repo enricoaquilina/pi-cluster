@@ -6,6 +6,8 @@ model_weak = "openrouter/qwen/qwen3-coder:free"
 require_score_review = true
 num_code_suggestions = 2
 best_practices_path = ".github/best_practices.md"
+require_ticket_analysis_review = false
+persistent_comment = true
 extra_instructions = """
 This is an Ansible-managed Raspberry Pi homelab cluster running on Linux.
 All nodes are Linux (Debian/Ubuntu) — do NOT flag Linux-specific commands as portability issues.
@@ -31,7 +33,13 @@ Rate every suggestion. Only surface HIGH (8-10) or MEDIUM (6-7) severity.
 Include: severity, exact file:line, one-line concrete fix.
 """
 
+[pr_code_suggestions]
+commitable_code_suggestions = true
+persistent_comment = true
+
 [github_action_config]
 auto_review = true
 auto_describe = true
+auto_improve = true
 auto_label = false
+pr_actions = ["opened", "reopened", "ready_for_review", "review_requested", "synchronize"]
