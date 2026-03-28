@@ -17,9 +17,6 @@ from .helpers import row_to_dict
 
 logger = logging.getLogger("mission-control")
 
-# Keep row_to_dict accessible as app-level export for backward compat
-row_to_dict = row_to_dict
-
 
 @asynccontextmanager
 async def lifespan(a: FastAPI):

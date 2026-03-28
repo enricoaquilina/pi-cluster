@@ -20,12 +20,12 @@ def _read_json_cached(filename: str, subdir: str = "") -> any:
     if cached and now - cached[0] < TRADING_CACHE_TTL:
         return cached[1]
     path = POLYBOT_DATA / subdir / filename if subdir else POLYBOT_DATA / filename
-    if not path.is_file():
-        return None
     try:
         data = json.loads(path.read_text())
         _trading_cache[key] = (now, data)
         return data
+    except FileNotFoundError:
+        return None
     except Exception as e:
         logger.warning("Failed to read %s: %s", path, e)
         return None

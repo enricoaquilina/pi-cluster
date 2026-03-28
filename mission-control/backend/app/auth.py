@@ -25,9 +25,16 @@ class GlobalRateLimiter:
 
     def check(self, client_ip: str):
         now = time.monotonic()
-        window = self._windows.setdefault(client_ip, deque())
-        while window and window[0] < now - 60:
-            window.popleft()
+        window = self._windows.get(client_ip)
+        if window:
+            while window and window[0] < now - 60:
+                window.popleft()
+            if not window:
+                del self._windows[client_ip]
+                window = None
+        if window is None:
+            window = deque()
+            self._windows[client_ip] = window
         if len(window) >= self._max:
             raise HTTPException(status_code=429, detail="Rate limit exceeded")
         window.append(now)

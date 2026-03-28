@@ -82,7 +82,6 @@ class RateLimiter:
 
 
 rate_limiter = RateLimiter()
-_last_smoke_trigger = 0.0
 
 
 async def _zeroclaw_chat(node: str, prompt: str, system_prompt: str, timeout: int) -> str:
