@@ -335,13 +335,15 @@ check_tailscale_dns() {
 check_nfs_workspace() {
     local ws="/mnt/external/openclaw/workspace"
     # Check mount exists and is responsive
-    timeout 5 stat "$ws" >/dev/null 2>&1 \
-        && check_service "nfs-workspace" "up" \
-        || check_service "nfs-workspace" "down" "NFS mount unresponsive or missing"
+    if timeout 5 stat "$ws" >/dev/null 2>&1; then
+        check_service "nfs-workspace" "up"
+    else
+        check_service "nfs-workspace" "down" "NFS mount unresponsive or missing"
+    fi
 
     # Check for stale root-owned files (NFS all_squash issue)
     local stale_count
-    stale_count=$(find "$ws" -maxdepth 2 -user root 2>/dev/null | grep -c "." || echo "0")
+    stale_count=$(find "$ws" -maxdepth 2 -user root 2>/dev/null | wc -l)
     if [ "${stale_count:-0}" -gt 0 ]; then
         check_service "nfs-workspace" "degraded" "${stale_count} root-owned files (NFS squash issue)"
     fi
