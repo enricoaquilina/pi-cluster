@@ -4,39 +4,52 @@ import ast
 import os
 
 
+def _app_source_files():
+    """Return all .py files in the app/ package."""
+    app_dir = os.path.join(os.path.dirname(__file__), "..", "app")
+    files = []
+    for root, _dirs, filenames in os.walk(app_dir):
+        for fn in filenames:
+            if fn.endswith(".py"):
+                files.append(os.path.join(root, fn))
+    return files
+
+
 def test_no_raw_psycopg2_connect():
     """All DB access should use _pool or context manager, not raw psycopg2.connect().close()."""
-    main_path = os.path.join(os.path.dirname(__file__), "..", "main.py")
-    content = open(main_path).read()
-    lines = content.splitlines()
-    # Find psycopg2.connect() calls that are NOT in pool init and NOT in a with-statement
-    bad = []
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        if "psycopg2.connect(" in stripped and "ThreadedConnectionPool" not in stripped:
-            # Allow 'with psycopg2.connect(...)' (context manager — handles close)
-            if stripped.startswith("with "):
-                continue
-            bad.append((i + 1, stripped))
-    assert not bad, (
-        f"Found {len(bad)} raw psycopg2.connect() call(s) — use _pool.getconn() instead:\n"
-        + "\n".join(f"  line {n}: {line}" for n, line in bad)
-    )
+    for filepath in _app_source_files():
+        content = open(filepath).read()
+        lines = content.splitlines()
+        bad = []
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if "psycopg2.connect(" in stripped and "ThreadedConnectionPool" not in stripped:
+                # Allow 'with psycopg2.connect(...)' (context manager — handles close)
+                if stripped.startswith("with "):
+                    continue
+                bad.append((i + 1, stripped, filepath))
+        assert not bad, (
+            f"Found {len(bad)} raw psycopg2.connect() call(s) — use _pool.getconn() instead:\n"
+            + "\n".join(f"  {fp} line {n}: {line}" for n, line, fp in bad)
+        )
 
 
 def test_db_functions_use_try_finally():
     """Functions that get pool connections must use try/finally to return them."""
-    main_path = os.path.join(os.path.dirname(__file__), "..", "main.py")
-    tree = ast.parse(open(main_path).read())
     target_funcs = {"_heartbeat_sweep", "_is_node_dispatchable", "_log_dispatch",
                     "init_db", "_budget_snapshot", "_node_snapshot"}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in target_funcs:
-            has_finally = any(
-                isinstance(n, ast.Try) and n.finalbody
-                for n in ast.walk(node)
-            )
-            assert has_finally, f"{node.name} uses DB connection without try/finally — pool connections will leak"
+    found = set()
+    for filepath in _app_source_files():
+        tree = ast.parse(open(filepath).read())
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in target_funcs:
+                found.add(node.name)
+                has_finally = any(
+                    isinstance(n, ast.Try) and n.finalbody
+                    for n in ast.walk(node)
+                )
+                assert has_finally, f"{node.name} in {filepath} uses DB connection without try/finally — pool connections will leak"
+    assert found == target_funcs, f"Missing functions: {target_funcs - found}"
 
 
 def test_node_status_enum_used_in_models():

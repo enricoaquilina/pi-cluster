@@ -1,4 +1,4 @@
-"""Tests for Phase 1 improvements: middleware, timeout cap, rename, code quality."""
+"""Tests for improvements: middleware, timeout cap, rename, code quality, rate limiting."""
 
 import ast
 import logging
@@ -52,7 +52,12 @@ def test_row_to_task_gone():
 
 def test_no_dead_copybot_pass_loop():
     """copybot_traders should not contain a dead pass loop."""
-    path = os.path.join(os.path.dirname(__file__), "..", "main.py")
+    # After module split, function lives in app/routes/trading.py
+    for filename in ["main.py", os.path.join("app", "routes", "trading.py")]:
+        candidate = os.path.join(os.path.dirname(__file__), "..", filename)
+        if os.path.exists(candidate):
+            path = candidate
+            break
     tree = ast.parse(open(path).read())
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == "copybot_traders":
@@ -63,12 +68,48 @@ def test_no_dead_copybot_pass_loop():
 
 def test_lifespan_calls_closeall():
     """Lifespan shutdown should call _pool.closeall()."""
-    path = os.path.join(os.path.dirname(__file__), "..", "main.py")
-    tree = ast.parse(open(path).read())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifespan":
-            src = ast.dump(node)
-            assert "closeall" in src, "lifespan missing _pool.closeall()"
-            break
-    else:
-        pytest.fail("lifespan function not found")
+    # After module split, lifespan lives in app/__init__.py
+    for filename in ["main.py", os.path.join("app", "__init__.py")]:
+        path = os.path.join(os.path.dirname(__file__), "..", filename)
+        if not os.path.exists(path):
+            continue
+        tree = ast.parse(open(path).read())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AsyncFunctionDef) and node.name == "lifespan":
+                src = ast.dump(node)
+                assert "closeall" in src, "lifespan missing _pool.closeall()"
+                return
+    pytest.fail("lifespan function not found in main.py or app/__init__.py")
+
+
+# ── Rate limiting ───────────────────────────────────────────────────────────
+
+
+async def test_rate_limit_triggers_429(client, auth_headers):
+    """Mutation endpoints return 429 after exceeding rate limit."""
+    from main import _global_limiter
+    old_max = _global_limiter._max
+    _global_limiter._max = 2
+    try:
+        for i in range(3):
+            resp = await client.post("/api/tasks", json={
+                "title": f"rate test {i}", "status": "todo", "priority": "low",
+            }, headers=auth_headers)
+        assert resp.status_code == 429
+    finally:
+        _global_limiter._max = old_max
+        _global_limiter._windows.clear()
+
+
+async def test_rate_limit_does_not_affect_reads(client):
+    """Read endpoints are not rate-limited."""
+    from main import _global_limiter
+    old_max = _global_limiter._max
+    _global_limiter._max = 1
+    try:
+        for _ in range(5):
+            resp = await client.get("/api/tasks")
+        assert resp.status_code == 200
+    finally:
+        _global_limiter._max = old_max
+        _global_limiter._windows.clear()
