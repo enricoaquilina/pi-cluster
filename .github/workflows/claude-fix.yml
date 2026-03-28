@@ -103,9 +103,10 @@ jobs:
           echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
 
           if [ -n "$PR_NUMBER" ]; then
-            HAS_SUGGESTIONS=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
-              --json comments --jq '.comments[] | select(.author.login == "github-actions") | select(.body | contains("Code Suggestions")) | .id' 2>/dev/null | head -1)
-            if [ -n "$HAS_SUGGESTIONS" ]; then
+            # Check for /improve "Code Suggestions" OR /review "Recommended focus areas"
+            HAS_FINDINGS=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
+              --json comments --jq '[.comments[] | select(.author.login == "github-actions") | select(.body | (contains("Code Suggestions") or contains("Recommended focus areas")))] | length' 2>/dev/null || echo "0")
+            if [ "${HAS_FINDINGS:-0}" -gt 0 ]; then
               echo "has_suggestions=true" >> "$GITHUB_OUTPUT"
             else
               echo "has_suggestions=false" >> "$GITHUB_OUTPUT"
@@ -136,17 +137,21 @@ jobs:
             - The human author's intent takes priority over automated suggestions
 
             Review PR #${{ steps.pr.outputs.number }}.
-            The automated reviewer (PR-Agent) posted code suggestions.
-            For each suggestion, critically evaluate whether it IMPROVES the code:
+            The automated reviewer (PR-Agent) posted findings in TWO places — check BOTH:
+            1. "PR Code Suggestions" comment — inline code suggestions with diffs
+            2. "PR Reviewer Guide" comment — "Recommended focus areas" with bug descriptions
+
+            For each finding, critically evaluate whether it IMPROVES the code:
             - REJECT suggestions that broaden exception handling (e.g., replacing specific exceptions with bare Exception)
             - REJECT suggestions that are cosmetic-only or reduce code specificity
             - REJECT suggestions rated below 6/10 importance by the reviewer itself
-            - APPLY only suggestions that fix real bugs, security issues, or clear improvements
+            - APPLY only findings that fix real bugs, security issues, or clear improvements
+            - Pay special attention to: missing imports, missing dependencies, NameError/ImportError risks
             - When fixing a bash &&/|| anti-pattern, scan the entire file for similar occurrences
             - Consult .github/best_practices.md for known good patterns in this codebase
             - APPLY fixes for: bash &&/|| chains, grep basic-regex patterns, port matching precision,
               hardcoded CI passwords, mutable action tags, SSH empty-result handling
-            If no suggestions are worth applying, do nothing — do NOT make changes just to make changes.
+            If no findings are worth applying, do nothing — do NOT make changes just to make changes.
             If you do make fixes, commit with clear messages, then push: git push origin HEAD
 
       - name: Notify of auto-fix changes
