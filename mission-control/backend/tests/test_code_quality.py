@@ -28,7 +28,8 @@ def test_db_functions_use_try_finally():
     """Functions that get pool connections must use try/finally to return them."""
     main_path = os.path.join(os.path.dirname(__file__), "..", "main.py")
     tree = ast.parse(open(main_path).read())
-    target_funcs = {"_heartbeat_sweep", "_is_node_dispatchable", "_log_dispatch", "init_db"}
+    target_funcs = {"_heartbeat_sweep", "_is_node_dispatchable", "_log_dispatch",
+                    "init_db", "_budget_snapshot", "_node_snapshot"}
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in target_funcs:
             has_finally = any(
