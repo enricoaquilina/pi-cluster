@@ -4,7 +4,7 @@ import logging
 
 import psycopg2  # noqa: F401 — needed for test patches (e.g. mock psycopg2.connect)
 
-from app import app, row_to_dict  # noqa: F401
+from app import app  # noqa: F401
 from app.db import _pool, init_db, get_db  # noqa: F401
 from app.event_bus import EventBus, event_bus  # noqa: F401
 from app.auth import verify_api_key, _global_limiter  # noqa: F401
@@ -25,13 +25,9 @@ from app.dispatch_engine import (  # noqa: F401
     PERSONA_ROUTING, ZEROCLAW_NODES, RateLimiter,
     rate_limiter, _zeroclaw_chat, _is_node_dispatchable, _log_dispatch,
     NODE_MODELS, FALLBACK_NODES, FALLBACK_DELEGATE_MAP,
-    _last_smoke_trigger,
 )
 from app.trading_helpers import TEAM_ROSTER  # noqa: F401
 from app.budget_helpers import _fetch_openrouter_usage, _budget_cache  # noqa: F401
 from app.background import _heartbeat_sweep, _budget_snapshot, _node_snapshot  # noqa: F401
-
-# Re-export the helper under both names for backward compat
-row_to_dict = row_to_dict  # noqa: F811
 
 logger = logging.getLogger("mission-control")
