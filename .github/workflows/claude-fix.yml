@@ -103,9 +103,16 @@ jobs:
           echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
 
           if [ -n "$PR_NUMBER" ]; then
-            # Check for /improve "Code Suggestions" OR /review "Recommended focus areas"
-            HAS_FINDINGS=$(gh pr view "$PR_NUMBER" -R "${{ github.repository }}" \
-              --json comments --jq '[.comments[] | select(.author.login == "github-actions") | select(.body | (contains("Code Suggestions") or contains("Recommended focus areas")))] | length' 2>/dev/null || echo "0")
+            # Check for /improve suggestions OR /review focus areas
+            JQ='[.comments[]
+              | select(.author.login == "github-actions")
+              | select(.body | (contains("Code Suggestions")
+                  or contains("Recommended focus areas")))]
+              | length'
+            HAS_FINDINGS=$(gh pr view "$PR_NUMBER" \
+              -R "${{ github.repository }}" \
+              --json comments --jq "$JQ" \
+              2>/dev/null || echo "0")
             if [ "${HAS_FINDINGS:-0}" -gt 0 ]; then
               echo "has_suggestions=true" >> "$GITHUB_OUTPUT"
             else
