@@ -171,6 +171,18 @@ jobs:
               || echo "::warning::PR comment failed for PR #${PR_NUM}"
           fi
 
+      - name: Enable auto-merge after review fixes
+        if: always() && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.number }}"
+          echo "Enabling auto-merge for PR #${PR_NUM} (after review fix pass)..."
+          gh pr merge "$PR_NUM" \
+            -R "${{ github.repository }}" \
+            --squash --auto --delete-branch \
+            || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
+
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
   claude-fix-on-ci-failure:
     name: Claude Fix (CI failure)
