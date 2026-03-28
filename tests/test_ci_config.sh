@@ -115,6 +115,14 @@ for pattern in "&&" "||" "grep -E" "testpassword" "503" "psycopg2"; do
   fi
 done
 
+# Test 15: No YAML lines > 200 chars (ansible-lint enforces this)
+long_lines=$(awk 'length > 200 {print FILENAME":"NR": "length" chars"}' .github/workflows/*.yml 2>/dev/null || true)
+if [[ -z "$long_lines" ]]; then
+  ok "No workflow YAML lines exceed 200 chars"
+else
+  fail "Lines > 200 chars (ansible-lint will fail): $long_lines"
+fi
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
