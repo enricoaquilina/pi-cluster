@@ -10,9 +10,10 @@ from ..auth import verify_api_key, rate_limit
 from ..db import get_db
 from ..event_bus import event_bus
 from ..models.services import ServiceCheckBulk, ServiceAlertIn
-from .. import dispatch_engine
 
 router = APIRouter()
+
+_last_smoke_trigger = 0.0
 
 
 @router.post("/api/services/check", status_code=201)
@@ -40,26 +41,33 @@ def list_services(conn=Depends(get_db)):
         """)
         latest = {r[0]: {"service": r[0], "current_status": r[1], "last_response_ms": r[2], "last_checked": r[3].isoformat() if r[3] else None} for r in cur.fetchall()}
 
-        # Uptime calculations
-        for svc in latest:
-            for label, hours in [("uptime_24h", 24), ("uptime_7d", 168)]:
-                cur.execute("""
-                    SELECT COUNT(*) FILTER (WHERE status IN ('up', 'degraded')) AS ok,
-                           COUNT(*) AS total
-                    FROM service_checks
-                    WHERE service = %s AND checked_at > now() - interval '%s hours'
-                """, (svc, hours))
-                row = cur.fetchone()
-                latest[svc][label] = round(row[0] / row[1] * 100, 1) if row[1] > 0 else None
+        # Uptime calculations — single query instead of N*2
+        cur.execute("""
+            SELECT service,
+                   COUNT(*) FILTER (WHERE status IN ('up', 'degraded') AND checked_at > now() - interval '24 hours') AS ok_24h,
+                   COUNT(*) FILTER (WHERE checked_at > now() - interval '24 hours') AS total_24h,
+                   COUNT(*) FILTER (WHERE status IN ('up', 'degraded') AND checked_at > now() - interval '168 hours') AS ok_7d,
+                   COUNT(*) FILTER (WHERE checked_at > now() - interval '168 hours') AS total_7d
+            FROM service_checks
+            WHERE checked_at > now() - interval '168 hours'
+            GROUP BY service
+        """)
+        for svc, ok_24, total_24, ok_7d, total_7d in cur.fetchall():
+            if svc in latest:
+                latest[svc]["uptime_24h"] = round(ok_24 / total_24 * 100, 1) if total_24 > 0 else None
+                latest[svc]["uptime_7d"] = round(ok_7d / total_7d * 100, 1) if total_7d > 0 else None
 
-        # Last incident per service
+        # Last incident per service — single query instead of N
+        cur.execute("""
+            SELECT DISTINCT ON (service) service, created_at
+            FROM service_alerts
+            ORDER BY service, created_at DESC
+        """)
+        incidents = {r[0]: r[1].isoformat() for r in cur.fetchall()}
         for svc in latest:
-            cur.execute("""
-                SELECT created_at FROM service_alerts
-                WHERE service = %s ORDER BY created_at DESC LIMIT 1
-            """, (svc,))
-            row = cur.fetchone()
-            latest[svc]["last_incident"] = row[0].isoformat() if row else None
+            latest[svc].setdefault("uptime_24h", None)
+            latest[svc].setdefault("uptime_7d", None)
+            latest[svc]["last_incident"] = incidents.get(svc)
 
     return list(latest.values())
 
@@ -99,10 +107,11 @@ def record_alert(alert: ServiceAlertIn, conn=Depends(get_db), _=Depends(verify_a
 
 @router.post("/api/services/check/trigger")
 async def trigger_smoke_test(_=Depends(verify_api_key), __=Depends(rate_limit)):
+    global _last_smoke_trigger
     now = time.monotonic()
-    if now - dispatch_engine._last_smoke_trigger < 60:
+    if now - _last_smoke_trigger < 60:
         raise HTTPException(status_code=429, detail="Rate limited — max 1 trigger per 60 seconds")
-    dispatch_engine._last_smoke_trigger = now
+    _last_smoke_trigger = now
     try:
         proc = await asyncio.create_subprocess_exec(
             "/usr/local/bin/system-smoke-test.sh", "--json",
