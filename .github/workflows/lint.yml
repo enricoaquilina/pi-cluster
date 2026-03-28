@@ -148,8 +148,12 @@ jobs:
           for f in scripts/*.sh; do
             [ -f "$f" ] || continue
             # timeout cannot call shell functions (uses execvp, exit 127)
-            # Allow timed_ssh which is designed for this purpose
-            if grep -nP 'timeout\s+\d+\s+(?!ssh\b|docker\b|curl\b|bash\b|python3?\b|node\b|timed_ssh\b|stat\b|find\b|ls\b|df\b|du\b|cat\b|head\b|tail\b|wc\b|mkdir\b|touch\b|cp\b|mv\b|rm\b|chmod\b|chown\b)\w+' "$f" 2>/dev/null | grep -v '#'; then
+            # Allow known binaries and timed_ssh helper
+            allowed='ssh|docker|curl|bash|python3?|node|timed_ssh'
+            allowed="$allowed|stat|find|ls|df|du|cat|head|tail"
+            allowed="$allowed|wc|mkdir|touch|cp|mv|rm|chmod|chown"
+            if grep -nP "timeout\s+\d+\s+(?!($allowed)\b)\w+" "$f" \
+                2>/dev/null | grep -v '#'; then
               echo "ERROR: $f uses timeout with a shell function (use timed_ssh or inline the command)"
               failed=1
             fi
