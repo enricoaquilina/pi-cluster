@@ -73,7 +73,7 @@ async def event_queue(event_bus_instance):
     event_bus_instance.unsubscribe(q)
 
 
-TEST_NODE_NAMES = ["test-sse-node", "regression-test-node"]
+TEST_NODE_NAMES = ["test-sse-node", "regression-test-node", "test-edge-node"]
 TEST_SERVICE_NAMES = ["test-sse-svc"]
 
 
