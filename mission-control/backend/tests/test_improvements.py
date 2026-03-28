@@ -1,4 +1,4 @@
-"""Tests for Phase 1 improvements: middleware, timeout cap, rename, code quality."""
+"""Tests for improvements: middleware, timeout cap, rename, code quality, rate limiting."""
 
 import ast
 import logging
@@ -80,3 +80,36 @@ def test_lifespan_calls_closeall():
                 assert "closeall" in src, "lifespan missing _pool.closeall()"
                 return
     pytest.fail("lifespan function not found in main.py or app/__init__.py")
+
+
+# ── Rate limiting ───────────────────────────────────────────────────────────
+
+
+async def test_rate_limit_triggers_429(client, auth_headers):
+    """Mutation endpoints return 429 after exceeding rate limit."""
+    from main import _global_limiter
+    old_max = _global_limiter._max
+    _global_limiter._max = 2
+    try:
+        for i in range(3):
+            resp = await client.post("/api/tasks", json={
+                "title": f"rate test {i}", "status": "todo", "priority": "low",
+            }, headers=auth_headers)
+        assert resp.status_code == 429
+    finally:
+        _global_limiter._max = old_max
+        _global_limiter._windows.clear()
+
+
+async def test_rate_limit_does_not_affect_reads(client):
+    """Read endpoints are not rate-limited."""
+    from main import _global_limiter
+    old_max = _global_limiter._max
+    _global_limiter._max = 1
+    try:
+        for _ in range(5):
+            resp = await client.get("/api/tasks")
+        assert resp.status_code == 200
+    finally:
+        _global_limiter._max = old_max
+        _global_limiter._windows.clear()

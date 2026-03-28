@@ -7,7 +7,7 @@ import psycopg2  # noqa: F401 — needed for test patches (e.g. mock psycopg2.co
 from app import app, row_to_dict  # noqa: F401
 from app.db import _pool, init_db, get_db  # noqa: F401
 from app.event_bus import EventBus, event_bus  # noqa: F401
-from app.auth import verify_api_key  # noqa: F401
+from app.auth import verify_api_key, _global_limiter  # noqa: F401
 from app.config import (  # noqa: F401
     DATABASE_URL, POLYBOT_DATA, API_KEY, ALLOWED_ORIGINS, OPENCLAW_DIR,
     _start_time, HEARTBEAT_STALE_SECONDS,

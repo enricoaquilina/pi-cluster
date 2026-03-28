@@ -7,7 +7,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import verify_api_key
+from ..auth import verify_api_key, rate_limit
 from ..db import get_db
 from ..event_bus import event_bus
 from ..helpers import row_to_dict
@@ -58,7 +58,7 @@ def get_task(task_id: uuid.UUID, conn=Depends(get_db)):
 
 
 @router.post("/api/tasks", response_model=TaskResponse, status_code=201)
-def create_task(task: TaskCreate, conn=Depends(get_db), _=Depends(verify_api_key)):
+def create_task(task: TaskCreate, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     with conn.cursor() as cur:
         cur.execute(
             f"""INSERT INTO tasks (title, description, status, priority, assignee, project, tags, due_date)
@@ -78,7 +78,7 @@ def create_task(task: TaskCreate, conn=Depends(get_db), _=Depends(verify_api_key
 
 @router.patch("/api/tasks/{task_id}", response_model=TaskResponse)
 def update_task(
-    task_id: uuid.UUID, task: TaskUpdate, conn=Depends(get_db), _=Depends(verify_api_key)
+    task_id: uuid.UUID, task: TaskUpdate, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)
 ):
     updates = {}
     data = task.model_dump(exclude_unset=True)
@@ -107,7 +107,7 @@ def update_task(
 
 
 @router.delete("/api/tasks/{task_id}", status_code=204)
-def delete_task(task_id: uuid.UUID, conn=Depends(get_db), _=Depends(verify_api_key)):
+def delete_task(task_id: uuid.UUID, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     with conn.cursor() as cur:
         cur.execute("DELETE FROM tasks WHERE id = %s", (task_id,))
         if cur.rowcount == 0:

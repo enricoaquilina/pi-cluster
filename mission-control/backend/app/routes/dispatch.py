@@ -6,7 +6,7 @@ from typing import Optional
 import websockets
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import verify_api_key
+from ..auth import verify_api_key, rate_limit
 from ..db import get_db
 from ..event_bus import event_bus
 from ..models.dispatch import DispatchRequest, DispatchResponse, DispatchLogEntry
@@ -23,7 +23,7 @@ router = APIRouter()
 
 
 @router.post("/api/dispatch", response_model=DispatchResponse)
-async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key)):
+async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depends(rate_limit)):
     """Dispatch a prompt to a persona's ZeroClaw node with failover."""
     route = PERSONA_ROUTING.get(req.persona)
     if not route:
@@ -111,7 +111,7 @@ def list_personas():
 
 
 @router.post("/api/dispatch/log", status_code=201)
-def post_dispatch_log(entry: DispatchLogEntry, conn=Depends(get_db), _=Depends(verify_api_key)):
+def post_dispatch_log(entry: DispatchLogEntry, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     """Record a dispatch from the cluster service."""
     with conn.cursor() as cur:
         cur.execute(

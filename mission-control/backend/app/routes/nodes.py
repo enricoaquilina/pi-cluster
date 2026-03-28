@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import verify_api_key
+from ..auth import verify_api_key, rate_limit
 from ..db import get_db
 from ..event_bus import event_bus
 from ..helpers import row_to_dict
@@ -24,7 +24,7 @@ def list_nodes(conn=Depends(get_db)):
 
 
 @router.post("/api/nodes", response_model=NodeResponse, status_code=201)
-def upsert_node(node: NodeCreate, conn=Depends(get_db), _=Depends(verify_api_key)):
+def upsert_node(node: NodeCreate, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     """Upsert a node -- create if new, update if exists."""
     with conn.cursor() as cur:
         cur.execute(
@@ -57,7 +57,7 @@ def upsert_node(node: NodeCreate, conn=Depends(get_db), _=Depends(verify_api_key
 
 
 @router.patch("/api/nodes/{name}", response_model=NodeResponse)
-def update_node(name: str, node: NodeUpdate, conn=Depends(get_db), _=Depends(verify_api_key)):
+def update_node(name: str, node: NodeUpdate, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     updates = {}
     data = node.model_dump(exclude_unset=True)
     for key, val in data.items():

@@ -6,7 +6,7 @@ import time
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..auth import verify_api_key
+from ..auth import verify_api_key, rate_limit
 from ..db import get_db
 from ..event_bus import event_bus
 from ..models.services import ServiceCheckBulk, ServiceAlertIn
@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 @router.post("/api/services/check", status_code=201)
-def bulk_insert_checks(payload: ServiceCheckBulk, conn=Depends(get_db), _=Depends(verify_api_key)):
+def bulk_insert_checks(payload: ServiceCheckBulk, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     with conn.cursor() as cur:
         for c in payload.checks:
             cur.execute(
@@ -83,7 +83,7 @@ def list_service_alerts(hours: int = Query(24, ge=1, le=168), conn=Depends(get_d
 
 
 @router.post("/api/services/alert", status_code=201)
-def record_alert(alert: ServiceAlertIn, conn=Depends(get_db), _=Depends(verify_api_key)):
+def record_alert(alert: ServiceAlertIn, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     with conn.cursor() as cur:
         cur.execute(
             """INSERT INTO service_alerts (service, status, message, downtime_seconds)
@@ -98,7 +98,7 @@ def record_alert(alert: ServiceAlertIn, conn=Depends(get_db), _=Depends(verify_a
 
 
 @router.post("/api/services/check/trigger")
-async def trigger_smoke_test(_=Depends(verify_api_key)):
+async def trigger_smoke_test(_=Depends(verify_api_key), __=Depends(rate_limit)):
     now = time.monotonic()
     if now - dispatch_engine._last_smoke_trigger < 60:
         raise HTTPException(status_code=429, detail="Rate limited — max 1 trigger per 60 seconds")
