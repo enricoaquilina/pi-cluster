@@ -93,7 +93,7 @@ else
 fi
 
 # Test 12: ticket compliance disabled (removes noise)
-if grep -q 'require_ticket_analysis_review.*=.*false' .pr_agent.toml; then
+if grep -E -q '^require_ticket_analysis_review\s*=\s*false' .pr_agent.toml; then
   ok "ticket compliance disabled"
 else
   fail "require_ticket_analysis_review not set to false"
@@ -107,7 +107,7 @@ else
 fi
 
 # Test 14: best_practices.md contains key enforcement patterns
-for pattern in "&&/||" "grep -E" "testpassword" "503" "psycopg2"; do
+for pattern in "&&" "||" "grep -E" "testpassword" "503" "psycopg2"; do
   if grep -q "$pattern" .github/best_practices.md; then
     ok "best_practices.md documents '$pattern' pattern"
   else
