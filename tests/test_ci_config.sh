@@ -93,7 +93,7 @@ else
 fi
 
 # Test 12: ticket compliance disabled (removes noise)
-if grep -E -q '^require_ticket_analysis_review\s*=\s*false' .pr_agent.toml; then
+if grep -P -q '^require_ticket_analysis_review\s*=\s*false' .pr_agent.toml; then
   ok "ticket compliance disabled"
 else
   fail "require_ticket_analysis_review not set to false"
