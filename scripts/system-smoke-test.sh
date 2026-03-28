@@ -331,6 +331,22 @@ check_tailscale_dns() {
     fi
 }
 
+# 16. NFS Workspace Health — check NFS mount is writable and not stale
+check_nfs_workspace() {
+    local ws="/mnt/external/openclaw/workspace"
+    # Check mount exists and is responsive
+    timeout 5 stat "$ws" >/dev/null 2>&1 \
+        && check_service "nfs-workspace" "up" \
+        || check_service "nfs-workspace" "down" "NFS mount unresponsive or missing"
+
+    # Check for stale root-owned files (NFS all_squash issue)
+    local stale_count
+    stale_count=$(find "$ws" -maxdepth 2 -user root 2>/dev/null | grep -c "." || echo "0")
+    if [ "${stale_count:-0}" -gt 0 ]; then
+        check_service "nfs-workspace" "degraded" "${stale_count} root-owned files (NFS squash issue)"
+    fi
+}
+
 # ── Run All Checks ────────────────────────────────────────────────────────────
 
 check_openclaw_gateway
@@ -351,6 +367,7 @@ check_pihole
 check_cloudflared
 check_docker_dns
 check_tailscale_dns
+check_nfs_workspace
 
 # ── Output: Interactive Mode ──────────────────────────────────────────────────
 
@@ -358,7 +375,7 @@ if [[ "$MODE" == "interactive" ]]; then
     echo ""
     printf "${BOLD}%-25s %-10s %-8s %s${NC}\n" "SERVICE" "STATUS" "MS" "ERROR"
     echo "────────────────────────────────────────────────────────────────"
-    for svc in openclaw-gateway openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production openclaw-slave0 openclaw-slave1 openclaw-heavy router-api polymarket-bot pihole-dns cloudflared docker-dns tailscale-dns; do
+    for svc in openclaw-gateway openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production openclaw-slave0 openclaw-slave1 openclaw-heavy router-api polymarket-bot pihole-dns cloudflared docker-dns tailscale-dns nfs-workspace; do
         status="${RESULTS[$svc]:-unknown}"
         ms="${RESPONSE_MS[$svc]:-}"
         err="${ERRORS[$svc]:-}"

@@ -229,7 +229,7 @@ jobs:
           fi
 
           # Get failed logs — extract only error-relevant lines
-          FAILED_LOG=$(gh run view "$RUN_ID" -R "$REPO" --log-failed 2>&1 | grep -E 'SC[0-9]+|Error|FAIL|error:' | tail -40)
+          FAILED_LOG=$(gh run view "$RUN_ID" -R "$REPO" --log-failed 2>&1 | grep -iE 'SC[0-9]+|error|FAIL' | tail -40)
 
           # Check for transient failures
           if echo "$FAILED_LOG" | grep -qi "502: Bad Gateway\|ETIMEDOUT\|rate limit\|network error\|Could not resolve host"; then

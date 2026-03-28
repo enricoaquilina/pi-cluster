@@ -326,9 +326,14 @@ async def lifespan(app: FastAPI):
     budget_task = asyncio.create_task(_budget_snapshot())
     node_task = asyncio.create_task(_node_snapshot())
     yield
-    sweep_task.cancel()
-    budget_task.cancel()
-    node_task.cancel()
+    for task in (sweep_task, budget_task, node_task):
+        task.cancel()
+    for task in (sweep_task, budget_task, node_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+    _pool.closeall()
 
 
 app = FastAPI(title="Mission Control", version="1.0.0", lifespan=lifespan)
@@ -339,6 +344,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    start = time.monotonic()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.error("%s %s 500 (unhandled)", request.method, request.url.path)
+        raise
+    elapsed = (time.monotonic() - start) * 1000
+    if not request.url.path.startswith("/health"):
+        logger.info("%s %s %d %.0fms", request.method, request.url.path,
+                    response.status_code, elapsed)
+    return response
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -405,7 +425,7 @@ class TaskResponse(BaseModel):
     updated_at: datetime
 
 
-def row_to_task(row: tuple, columns: list[str]) -> dict:
+def row_to_dict(row: tuple, columns: list[str]) -> dict:
     return dict(zip(columns, row))
 
 
@@ -584,7 +604,7 @@ def list_tasks(
     with conn.cursor() as cur:
         cur.execute(query, params)
         rows = cur.fetchall()
-    return [row_to_task(r, TASK_COLUMNS) for r in rows]
+    return [row_to_dict(r, TASK_COLUMNS) for r in rows]
 
 
 @app.get("/api/tasks/{task_id}", response_model=TaskResponse)
@@ -597,7 +617,7 @@ def get_task(task_id: uuid.UUID, conn=Depends(get_db)):
         row = cur.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Task not found")
-    return row_to_task(row, TASK_COLUMNS)
+    return row_to_dict(row, TASK_COLUMNS)
 
 
 @app.post("/api/tasks", response_model=TaskResponse, status_code=201)
@@ -616,7 +636,7 @@ def create_task(task: TaskCreate, conn=Depends(get_db), _=Depends(verify_api_key
         row = cur.fetchone()
     conn.commit()
     event_bus.publish("tasks")
-    return row_to_task(row, TASK_COLUMNS)
+    return row_to_dict(row, TASK_COLUMNS)
 
 
 @app.patch("/api/tasks/{task_id}", response_model=TaskResponse)
@@ -646,7 +666,7 @@ def update_task(
     if not row:
         raise HTTPException(status_code=404, detail="Task not found")
     event_bus.publish("tasks")
-    return row_to_task(row, TASK_COLUMNS)
+    return row_to_dict(row, TASK_COLUMNS)
 
 
 @app.delete("/api/tasks/{task_id}", status_code=204)
@@ -687,7 +707,7 @@ def list_nodes(conn=Depends(get_db)):
     with conn.cursor() as cur:
         cur.execute(f"SELECT {', '.join(NODE_COLUMNS)} FROM nodes ORDER BY name")
         rows = cur.fetchall()
-    return [row_to_task(r, NODE_COLUMNS) for r in rows]
+    return [row_to_dict(r, NODE_COLUMNS) for r in rows]
 
 
 @app.post("/api/nodes", response_model=NodeResponse, status_code=201)
@@ -720,7 +740,7 @@ def upsert_node(node: NodeCreate, conn=Depends(get_db), _=Depends(verify_api_key
         row = cur.fetchone()
     conn.commit()
     event_bus.publish("nodes")
-    return row_to_task(row, NODE_COLUMNS)
+    return row_to_dict(row, NODE_COLUMNS)
 
 
 @app.patch("/api/nodes/{name}", response_model=NodeResponse)
@@ -748,7 +768,7 @@ def update_node(name: str, node: NodeUpdate, conn=Depends(get_db), _=Depends(ver
     if not row:
         raise HTTPException(status_code=404, detail="Node not found")
     event_bus.publish("nodes")
-    return row_to_task(row, NODE_COLUMNS)
+    return row_to_dict(row, NODE_COLUMNS)
 
 
 # ── Memory Endpoints ─────────────────────────────────────────────────────────
@@ -1117,7 +1137,7 @@ _last_smoke_trigger = 0.0
 class DispatchRequest(BaseModel):
     persona: str
     prompt: str
-    timeout: int = Field(default=60, ge=5, le=300)
+    timeout: int = Field(default=60, ge=5, le=120)
 
 
 class DispatchResponse(BaseModel):
@@ -1721,12 +1741,6 @@ def copybot_traders():
                 s["losses"] += 1
         else:
             s["skipped"] += 1
-
-    # Count active positions per trader
-    if positions:
-        for p in positions:
-            # Infer trader from market - not directly in positions, so skip
-            pass
 
     result = list(trader_stats.values())
     for s in result:
