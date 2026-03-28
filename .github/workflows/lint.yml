@@ -168,6 +168,9 @@ jobs:
           done
           exit $failed
 
+      - name: CI config quality tests
+        run: bash tests/test_ci_config.sh
+
   gitleaks:
     name: Credential Scan
     runs-on: ubuntu-latest

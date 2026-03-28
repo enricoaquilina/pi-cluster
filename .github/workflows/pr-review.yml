@@ -19,24 +19,7 @@ jobs:
     name: AI Code Review
     runs-on: ubuntu-latest
     steps:
-      - uses: qodo-ai/pr-agent@main
+      - uses: qodo-ai/pr-agent@v0.32
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENROUTER__KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          github_action_config.auto_review: "true"
-          github_action_config.auto_describe: "true"
-          github_action_config.auto_label: "false"
-          config.model: "openrouter/minimax/minimax-m2.7"
-          config.custom_model_max_tokens: 16000
-          pr_reviewer.require_score_review: "true"
-          pr_reviewer.num_code_suggestions: 3
-          pr_reviewer.extra_instructions: |
-            This is an Ansible-managed Raspberry Pi homelab cluster.
-            Focus on: security issues (exposed secrets, unsafe permissions),
-            Ansible best practices, systemd service correctness,
-            NFS mount safety, and shell script robustness.
-            Flag any hardcoded IPs that should be variables.
-            Python best practices: prefer specific exception types over bare
-            except Exception. Do NOT suggest broadening exception handling
-            (e.g., replacing psycopg2.Error with Exception). Narrow catches
-            are intentional — they prevent masking unrelated errors.

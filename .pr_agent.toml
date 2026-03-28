@@ -1,0 +1,37 @@
+[config]
+model = "openrouter/deepseek/deepseek-v3.2"
+model_weak = "openrouter/qwen/qwen3-coder:free"
+
+[pr_reviewer]
+require_score_review = true
+num_code_suggestions = 2
+best_practices_path = ".github/best_practices.md"
+extra_instructions = """
+This is an Ansible-managed Raspberry Pi homelab cluster running on Linux.
+All nodes are Linux (Debian/Ubuntu) — do NOT flag Linux-specific commands as portability issues.
+
+MUST FLAG — known problem patterns in this codebase:
+1. BASH &&/|| anti-pattern: func && do_success || do_failure silently misfires
+   when do_success exits non-zero. Always use if/then/else.
+2. GREP regex: basic regex treats . as literal. Use grep -E or grep -P.
+   Flag: grep 'health.pause' -> grep -E 'health\\.pause'
+3. PORT matching: grep "$port/tcp.*ALLOW" matches port 80 in 8000:8010 range.
+   Use word boundaries: grep -E "\\b${port}/tcp\\b.*ALLOW"
+4. CI hardcoded credentials: any password: with literal value (not secrets.*).
+5. Mutable CI action tags: uses: owner/repo@main or @latest — pin to @vX.Y.
+6. Python health endpoints: HTTP 503 (not 200) when dependencies are unhealthy.
+7. SSH empty result: warn on unreachable, never fail on empty SSH output.
+
+FOCUS ON: security (exposed secrets, unsafe permissions), Ansible best practices,
+systemd correctness, NFS mount safety, shell script correctness.
+Flag hardcoded IPs that should be Ansible variables.
+Python: NEVER suggest broadening exception handling. Narrow catches are intentional.
+DO NOT SUGGEST: Linux portability fixes, style, naming, or anything contradicting PR purpose.
+Rate every suggestion. Only surface HIGH (8-10) or MEDIUM (6-7) severity.
+Include: severity, exact file:line, one-line concrete fix.
+"""
+
+[github_action_config]
+auto_review = true
+auto_describe = true
+auto_label = false

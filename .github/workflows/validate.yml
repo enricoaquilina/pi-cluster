@@ -111,9 +111,11 @@ jobs:
 
       - name: Start PostgreSQL
         run: |
+          TEST_PASS=$(openssl rand -hex 16)
           sudo systemctl start postgresql
-          sudo -u postgres psql -c "CREATE USER missioncontrol WITH PASSWORD 'testpassword';"
+          sudo -u postgres psql -c "CREATE USER missioncontrol WITH PASSWORD '${TEST_PASS}';"
           sudo -u postgres psql -c "CREATE DATABASE missioncontrol OWNER missioncontrol;"
+          echo "TEST_DB_PASS=${TEST_PASS}" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
@@ -127,5 +129,4 @@ jobs:
       - name: Run MC backend tests
         run: pytest mission-control/backend/tests/ -v --tb=short
         env:
-          DATABASE_URL: postgresql://missioncontrol:testpassword@localhost:5432/missioncontrol
-          POSTGRES_PASSWORD: testpassword
+          DATABASE_URL: postgresql://missioncontrol:${{ env.TEST_DB_PASS }}@localhost:5432/missioncontrol
