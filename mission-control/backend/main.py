@@ -28,7 +28,6 @@ from app.dispatch_engine import (  # noqa: F401
     NODE_MODELS, FALLBACK_NODES, FALLBACK_DELEGATE_MAP,
 )
 from app.trading_helpers import TEAM_ROSTER  # noqa: F401
-from urllib.request import urlopen as urlopen_  # noqa: F401 — for test patches
 from app.budget_helpers import (  # noqa: F401
     _fetch_openrouter_usage, _budget_cache,
     _fetch_deepseek_balance, _fetch_moonshot_balance, _fetch_tavily_usage,

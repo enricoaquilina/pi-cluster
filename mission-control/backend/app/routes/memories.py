@@ -269,12 +269,12 @@ def qmd_search(
 @router.get("/api/life/heartbeat")
 def life_heartbeat():
     """Run heartbeat check on active projects."""
-    search_script = LIFE_DIR / "scripts" / "heartbeat_check.py"
-    if not search_script.exists():
+    script = LIFE_DIR / "scripts" / "heartbeat_check.py"
+    if not script.exists():
         raise HTTPException(status_code=503, detail="Heartbeat script not available")
     try:
         result = subprocess.run(
-            ["python3", str(search_script), "--json", "--dry-run"],
+            ["python3", str(script), "--json", "--dry-run"],
             capture_output=True, text=True, timeout=30,
             env={**os.environ, "LIFE_DIR": str(LIFE_DIR)},
         )
@@ -291,10 +291,10 @@ def life_graph(
     relation: Optional[str] = Query(None),
 ):
     """Query entity relationship graph."""
-    graph_script = LIFE_DIR / "scripts" / "entity_graph.py"
-    if not graph_script.exists():
+    script = LIFE_DIR / "scripts" / "entity_graph.py"
+    if not script.exists():
         raise HTTPException(status_code=503, detail="Entity graph script not available")
-    cmd = ["python3", str(graph_script)]
+    cmd = ["python3", str(script)]
     if entity:
         cmd.extend(["connections", entity])
     else:

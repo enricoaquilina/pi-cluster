@@ -7,70 +7,69 @@ from urllib.request import Request as UrlReq, urlopen as urlopen_
 
 from .config import (
     OPENROUTER_API_KEY, DEEPSEEK_API_KEY, MOONSHOT_API_KEY, TAVILY_API_KEY,
-    BILLING_ALERT_BALANCE_USD,
 )
 
 logger = logging.getLogger("mission-control")
 
+# Unified TTL cache for all provider fetches (5-minute TTL)
+_provider_cache: dict[str, tuple[float, dict]] = {}
+# Backward-compat alias — some tests reference _budget_cache directly
 _budget_cache: tuple[float, dict] = (0, {})
 
 
-def _fetch_openrouter_usage() -> dict:
-    """Fetch usage from OpenRouter API (cached 5 min)."""
-    global _budget_cache
-    now = time.time()
-    if now - _budget_cache[0] < 300 and _budget_cache[1]:
-        return _budget_cache[1]
-    try:
-        req = UrlReq(
-            "https://openrouter.ai/api/v1/auth/key",
-            headers={"Authorization": f"Bearer {OPENROUTER_API_KEY}"},
-        )
-        resp = urlopen_(req, timeout=10)
-        data = json.loads(resp.read().decode())["data"]
-        result = {
-            "daily_usd": data.get("usage_daily", 0),
-            "weekly_usd": data.get("usage_weekly", 0),
-            "monthly_usd": data.get("usage_monthly", 0),
-            "total_usd": data.get("usage", 0),
-        }
-        _budget_cache = (now, result)
-        return result
-    except Exception as e:
-        logger.warning("OpenRouter usage fetch failed: %s", e)
-        return _budget_cache[1] if _budget_cache[1] else {"error": str(e)}
-
-
-# ── Multi-provider balance fetching ──────────────────────────────────────────
-
-_provider_cache: dict[str, tuple[float, dict]] = {}
-
-
 def _cached_fetch(provider: str, fetch_fn):
-    """5-minute cache wrapper."""
+    """5-minute cache wrapper for any provider fetch."""
+    global _budget_cache
     now = time.time()
     cached = _provider_cache.get(provider, (0, {}))
     if now - cached[0] < 300 and cached[1]:
         return cached[1]
     result = fetch_fn()
     _provider_cache[provider] = (now, result)
+    if provider == "openrouter":
+        _budget_cache = (now, result)
     return result
+
+
+def _fetch_provider_json(url: str, api_key: str) -> dict:
+    """GET url with Bearer auth, return parsed JSON. Tests can patch urlopen_."""
+    req = UrlReq(url, headers={"Authorization": f"Bearer {api_key}"})
+    resp = urlopen_(req, timeout=10)
+    return json.loads(resp.read().decode())
+
+
+# ── OpenRouter ───────────────────────────────────────────────────────────────
+
+
+def _fetch_openrouter_usage_inner() -> dict:
+    try:
+        data = _fetch_provider_json(
+            "https://openrouter.ai/api/v1/auth/key", OPENROUTER_API_KEY
+        )["data"]
+        return {
+            "daily_usd": data.get("usage_daily", 0),
+            "weekly_usd": data.get("usage_weekly", 0),
+            "monthly_usd": data.get("usage_monthly", 0),
+            "total_usd": data.get("usage", 0),
+        }
+    except Exception as e:
+        logger.warning("OpenRouter usage fetch failed: %s", e)
+        cached = _provider_cache.get("openrouter", (0, {}))
+        return cached[1] if cached[1] else {"error": str(e)}
+
+
+def _fetch_openrouter_usage() -> dict:
+    return _cached_fetch("openrouter", _fetch_openrouter_usage_inner)
 
 
 # ── DeepSeek ─────────────────────────────────────────────────────────────────
 
 
 def _fetch_deepseek_balance_inner() -> dict:
-    """Fetch balance from DeepSeek API."""
-    import sys
-    _urlopen = getattr(sys.modules.get("main"), "urlopen_", urlopen_)
     try:
-        req = UrlReq(
-            "https://api.deepseek.com/user/balance",
-            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}"},
+        data = _fetch_provider_json(
+            "https://api.deepseek.com/user/balance", DEEPSEEK_API_KEY
         )
-        resp = _urlopen(req, timeout=10)
-        data = json.loads(resp.read().decode())
         balance_infos = data.get("balance_infos", [])
         usd_info = next((b for b in balance_infos if b.get("currency") == "USD"), {})
         balance = float(usd_info.get("total_balance", 0))
@@ -88,23 +87,14 @@ def _fetch_deepseek_balance() -> dict:
     return _cached_fetch("deepseek", _fetch_deepseek_balance_inner)
 
 
-_fetch_deepseek_balance.__wrapped__ = _fetch_deepseek_balance_inner
-
-
 # ── Moonshot ─────────────────────────────────────────────────────────────────
 
 
 def _fetch_moonshot_balance_inner() -> dict:
-    """Fetch balance from Moonshot API."""
-    import sys
-    _urlopen = getattr(sys.modules.get("main"), "urlopen_", urlopen_)
     try:
-        req = UrlReq(
-            "https://api.moonshot.ai/v1/users/me/balance",
-            headers={"Authorization": f"Bearer {MOONSHOT_API_KEY}"},
-        )
-        resp = _urlopen(req, timeout=10)
-        data = json.loads(resp.read().decode()).get("data", {})
+        data = _fetch_provider_json(
+            "https://api.moonshot.ai/v1/users/me/balance", MOONSHOT_API_KEY
+        ).get("data", {})
         return {
             "provider": "moonshot",
             "balance_usd": data.get("available_balance", 0),
@@ -120,23 +110,14 @@ def _fetch_moonshot_balance() -> dict:
     return _cached_fetch("moonshot", _fetch_moonshot_balance_inner)
 
 
-_fetch_moonshot_balance.__wrapped__ = _fetch_moonshot_balance_inner
-
-
 # ── Tavily ───────────────────────────────────────────────────────────────────
 
 
 def _fetch_tavily_usage_inner() -> dict:
-    """Fetch usage from Tavily API."""
-    import sys
-    _urlopen = getattr(sys.modules.get("main"), "urlopen_", urlopen_)
     try:
-        req = UrlReq(
-            "https://api.tavily.com/usage",
-            headers={"Authorization": f"Bearer {TAVILY_API_KEY}"},
+        data = _fetch_provider_json(
+            "https://api.tavily.com/usage", TAVILY_API_KEY
         )
-        resp = _urlopen(req, timeout=10)
-        data = json.loads(resp.read().decode())
         key_data = data.get("key", {})
         account_data = data.get("account", {})
         return {
@@ -152,9 +133,6 @@ def _fetch_tavily_usage_inner() -> dict:
 
 def _fetch_tavily_usage() -> dict:
     return _cached_fetch("tavily", _fetch_tavily_usage_inner)
-
-
-_fetch_tavily_usage.__wrapped__ = _fetch_tavily_usage_inner
 
 
 # ── Alert helpers ────────────────────────────────────────────────────────────
@@ -190,7 +168,6 @@ def _fetch_all_provider_balances() -> list[dict]:
         data = fetch_fn()
         data["status"] = "error" if "error" in data else "ok"
         results.append(data)
-    # Dashboard-only providers (no API)
     for name in ["google_ai", "groq", "zai"]:
         results.append({"provider": name, "status": "dashboard_only"})
     return results
