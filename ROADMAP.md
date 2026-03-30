@@ -24,6 +24,7 @@
 | 20 | Security: API key rotation, git history scrub, repo made public | 2026-03-26 |
 | 21 | CI/CD overhaul: MiniMax 2.7 review, Claude auto-fix, native auto-merge | 2026-03-26 |
 | 22 | Code quality: connection pooling, enum enforcement, JSON logging, pre-commit | 2026-03-26 |
+| 23 | Memory & Knowledge: PARA system at ~/life/, nightly consolidation, MC integration | 2026-03-30 |
 
 ## Future Ideas (Prioritized)
 
@@ -39,6 +40,7 @@
 - **Pre-deploy validation** — CI validates inventory matches actual network
 
 ### Long-term
+- **QMD (Quantified Me Dashboard)** — Personal metrics dashboard fed by ~/life/ knowledge graph
 - **Secrets management** — Vault/Sealed Secrets instead of .env.cluster
 - **Multi-workspace isolation** — different projects on different nodes
 - **Auto-scaling** — spin up cloud instances when cluster is at capacity

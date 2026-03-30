@@ -102,6 +102,15 @@ Alerts via Telegram:
 - Service restarts (mc-watchdog on heavy)
 - Structured JSON logging via `scripts/lib/log.sh` (bash) and `_JsonFormatter` (Python)
 
+### Memory & Knowledge Base
+
+PARA-structured knowledge system at `~/life/` on heavy with 3 layers:
+- **Knowledge Graph** — entity folders with `summary.md` + `items.json`
+- **Daily Notes** — session logs at `Daily/YYYY/MM/YYYY-MM-DD.md`, heartbeat reference
+- **Tacit Knowledge** — rules, habits, lessons in `Areas/about-me/`
+
+Nightly consolidation (2 AM) extracts facts from daily notes via Claude Haiku. Integrated with Mission Control's Memories tab. See [architecture.md](docs/architecture.md) for details.
+
 ## Project Structure
 
 ```

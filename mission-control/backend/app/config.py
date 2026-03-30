@@ -17,6 +17,8 @@ POLYBOT_DATA = Path(os.environ.get("POLYBOT_DATA_DIR", "/polybot-data"))
 API_KEY = os.environ.get("API_KEY", "")
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 OPENCLAW_DIR = Path(os.environ.get("OPENCLAW_DIR", "/openclaw"))
+LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
+QMD_INDEX = Path(os.environ.get("QMD_INDEX", Path.home() / ".cache" / "qmd" / "index.sqlite"))
 
 _start_time = time.time()
 

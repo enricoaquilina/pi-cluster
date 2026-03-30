@@ -1,12 +1,13 @@
 """Memory endpoints."""
 
+import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from ..config import OPENCLAW_DIR
+from ..config import LIFE_DIR, OPENCLAW_DIR, QMD_INDEX
 
 router = APIRouter()
 
@@ -32,6 +33,34 @@ def _workspace_files():
                 "text": text,
                 "updated_at": datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat(),
             })
+    return items
+
+
+def _life_files():
+    """Return ~/life/ PARA files as memory items (recursive)."""
+    items = []
+    if not LIFE_DIR.is_dir():
+        return items
+    skip_dirs = {"scripts", "logs", "_template", "__pycache__", ".pytest_cache"}
+    for f in sorted(LIFE_DIR.rglob("*")):
+        if f.suffix not in (".md", ".json") or not f.is_file():
+            continue
+        if any(skip in f.parts for skip in skip_dirs):
+            continue
+        try:
+            text = f.read_text(errors="replace")
+        except OSError:
+            continue
+        rel = str(f.relative_to(LIFE_DIR))
+        title = f"{f.parent.name}/{f.name}" if f.parent != LIFE_DIR else f.name
+        items.append({
+            "id": f"life/{rel}",
+            "path": f"life/{rel}",
+            "source": "life",
+            "title": title,
+            "text": text,
+            "updated_at": datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc).isoformat(),
+        })
     return items
 
 
@@ -87,18 +116,20 @@ def list_memories(
     offset: int = Query(0, ge=0),
 ):
     ws_items = _workspace_files()
+    life_items = _life_files()
 
     if q:
         # Filter workspace files by search term
         q_lower = q.lower()
         ws_matched = [it for it in ws_items if q_lower in it["text"].lower() or q_lower in it["title"].lower()]
+        life_matched = [it for it in life_items if q_lower in it["text"].lower() or q_lower in it["title"].lower()]
         fts_items, fts_total = _search_fts(q, limit, offset)
-        # Combine: workspace matches first, then FTS results
-        all_items = ws_matched + fts_items
-        total = len(ws_matched) + fts_total
+        # Combine: workspace matches first, then life, then FTS results
+        all_items = ws_matched + life_matched + fts_items
+        total = len(ws_matched) + len(life_matched) + fts_total
     else:
-        all_items = ws_items
-        total = len(ws_items)
+        all_items = ws_items + life_items
+        total = len(ws_items) + len(life_items)
 
     # Apply pagination to combined results (workspace files are few so include all)
     paginated = all_items[offset:offset + limit] if not q else all_items[:limit]
@@ -107,9 +138,16 @@ def list_memories(
 
 @router.get("/api/memories/file")
 def get_memory_file(path: str = Query(...)):
+    # Resolve against the correct base directory
+    if path.startswith("life/"):
+        base_dir = LIFE_DIR
+        rel_path = path[len("life/"):]
+    else:
+        base_dir = OPENCLAW_DIR
+        rel_path = path
     # Path traversal protection
-    resolved = (OPENCLAW_DIR / path).resolve()
-    if not str(resolved).startswith(str(OPENCLAW_DIR.resolve())):
+    resolved = (base_dir / rel_path).resolve()
+    if not str(resolved).startswith(str(base_dir.resolve())):
         raise HTTPException(status_code=403, detail="Access denied")
     if not resolved.is_file():
         raise HTTPException(status_code=404, detail="File not found")
@@ -118,3 +156,93 @@ def get_memory_file(path: str = Query(...)):
     except OSError:
         raise HTTPException(status_code=500, detail="Cannot read file")
     return {"path": path, "content": content}
+
+
+@router.get("/api/life/daily-status")
+def daily_status():
+    today = date.today()
+    note_path = LIFE_DIR / "Daily" / str(today.year) / f"{today.month:02d}" / f"{today}.md"
+    exists = note_path.is_file()
+    size = note_path.stat().st_size if exists else 0
+    consolidated = False
+    if exists:
+        content = note_path.read_text(errors="replace")
+        consolidated = "_Not yet consolidated_" not in content
+    return {
+        "date": str(today),
+        "exists": exists,
+        "size": size,
+        "consolidated": consolidated,
+        "path": str(note_path.relative_to(LIFE_DIR)) if exists else None,
+    }
+
+
+def _qmd_search_fts(q: str, limit: int) -> list[dict]:
+    """Search QMD's FTS5 index directly via sqlite3."""
+    if not QMD_INDEX.is_file():
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{QMD_INDEX}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        # QMD FTS5 has columns: filepath, title, body (no join needed)
+        cur.execute(
+            """SELECT
+                   filepath,
+                   title,
+                   snippet(documents_fts, 2, '<mark>', '</mark>', '...', 40) AS snippet,
+                   rank
+               FROM documents_fts
+               WHERE documents_fts MATCH ?
+               ORDER BY rank
+               LIMIT ?""",
+            (q, limit),
+        )
+        rows = cur.fetchall()
+        items = [
+            {
+                "path": r["filepath"],
+                "title": r["title"],
+                "snippet": r["snippet"],
+                "score": round(-r["rank"], 4),
+            }
+            for r in rows
+        ]
+        conn.close()
+        return items
+    except Exception:
+        return []
+
+
+@router.get("/api/qmd/search")
+def qmd_search(
+    q: str = Query(...),
+    mode: str = Query("bm25", regex="^(bm25|vector|hybrid)$"),
+    limit: int = Query(10, ge=1, le=50),
+):
+    """Search ~/life/ via QMD (BM25 mode reads FTS5 index directly)."""
+    if mode != "bm25":
+        # Vector/hybrid modes require the qmd binary which isn't in the container.
+        # Fall back to the host-side search script if mounted.
+        import subprocess
+        search_script = LIFE_DIR / "scripts" / "qmd_search.py"
+        if not search_script.exists():
+            raise HTTPException(
+                status_code=503,
+                detail="QMD vector/hybrid search not available in container",
+            )
+        try:
+            result = subprocess.run(
+                ["python3", str(search_script), q, "--mode", mode, "--limit", str(limit)],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode != 0:
+                return {"items": [], "total": 0, "mode": mode, "error": result.stderr[:200]}
+            items = json.loads(result.stdout)
+            return {"items": items, "total": len(items), "mode": mode}
+        except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+            return {"items": [], "total": 0, "mode": mode, "error": str(e)}
+
+    # BM25: read FTS5 index directly (no external binary needed)
+    items = _qmd_search_fts(q, limit)
+    return {"items": items, "total": len(items), "mode": mode}

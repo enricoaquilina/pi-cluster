@@ -9,7 +9,7 @@ from app.db import _pool, init_db, get_db  # noqa: F401
 from app.event_bus import EventBus, event_bus  # noqa: F401
 from app.auth import verify_api_key, _global_limiter  # noqa: F401
 from app.config import (  # noqa: F401
-    DATABASE_URL, POLYBOT_DATA, API_KEY, ALLOWED_ORIGINS, OPENCLAW_DIR,
+    DATABASE_URL, POLYBOT_DATA, API_KEY, ALLOWED_ORIGINS, OPENCLAW_DIR, LIFE_DIR,
     _start_time, HEARTBEAT_STALE_SECONDS,
     OPENROUTER_API_KEY, BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY,
     BUDGET_ALERT_THRESHOLD,
