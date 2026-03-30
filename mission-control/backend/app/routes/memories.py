@@ -1,6 +1,7 @@
 """Memory endpoints."""
 
 import json
+import os
 import sqlite3
 import subprocess
 import time
@@ -263,3 +264,52 @@ def qmd_search(
     # BM25: read FTS5 index directly (no external binary needed)
     items = _qmd_search_fts(q, limit)
     return {"items": items, "total": len(items), "mode": mode}
+
+
+@router.get("/api/life/heartbeat")
+def life_heartbeat():
+    """Run heartbeat check on active projects."""
+    search_script = LIFE_DIR / "scripts" / "heartbeat_check.py"
+    if not search_script.exists():
+        raise HTTPException(status_code=503, detail="Heartbeat script not available")
+    try:
+        result = subprocess.run(
+            ["python3", str(search_script), "--json", "--dry-run"],
+            capture_output=True, text=True, timeout=30,
+            env={**os.environ, "LIFE_DIR": str(LIFE_DIR)},
+        )
+        if result.returncode != 0:
+            return {"error": result.stderr[:200]}
+        return json.loads(result.stdout)
+    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        return {"error": str(e)}
+
+
+@router.get("/api/life/graph")
+def life_graph(
+    entity: Optional[str] = Query(None),
+    relation: Optional[str] = Query(None),
+):
+    """Query entity relationship graph."""
+    graph_script = LIFE_DIR / "scripts" / "entity_graph.py"
+    if not graph_script.exists():
+        raise HTTPException(status_code=503, detail="Entity graph script not available")
+    cmd = ["python3", str(graph_script)]
+    if entity:
+        cmd.extend(["connections", entity])
+    else:
+        cmd.append("full")
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=10,
+            env={**os.environ, "LIFE_DIR": str(LIFE_DIR)},
+        )
+        if result.returncode != 0:
+            return {"edges": [], "total": 0, "error": result.stderr[:200]}
+        data = json.loads(result.stdout)
+        if relation:
+            data["edges"] = [e for e in data.get("edges", []) if e.get("relation") == relation]
+            data["total"] = len(data["edges"])
+        return data
+    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        return {"edges": [], "total": 0, "error": str(e)}
