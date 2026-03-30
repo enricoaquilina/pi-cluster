@@ -7,7 +7,7 @@ import logging
 from .config import HEARTBEAT_STALE_SECONDS, BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY
 from .db import _pool
 from .event_bus import event_bus
-from .budget_helpers import _fetch_openrouter_usage
+from .budget_helpers import _fetch_openrouter_usage, _fetch_all_provider_balances
 
 logger = logging.getLogger("mission-control")
 
@@ -72,8 +72,8 @@ async def _provider_balance_snapshot():
     while True:
         conn = _pool.getconn()
         try:
-            from .budget_helpers import _fetch_all_provider_balances
-            balances = _fetch_all_provider_balances()
+            # Run blocking HTTP calls in a thread to avoid freezing the event loop
+            balances = await asyncio.to_thread(_fetch_all_provider_balances)
             with conn.cursor() as cur:
                 for b in balances:
                     if b.get("status") in ("no_key", "dashboard_only"):
