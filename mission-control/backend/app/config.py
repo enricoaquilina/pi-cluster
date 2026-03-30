@@ -29,3 +29,8 @@ BUDGET_DAILY = float(os.environ.get("BUDGET_DAILY", "5.00"))
 BUDGET_WEEKLY = float(os.environ.get("BUDGET_WEEKLY", "25.00"))
 BUDGET_MONTHLY = float(os.environ.get("BUDGET_MONTHLY", "75.00"))
 BUDGET_ALERT_THRESHOLD = float(os.environ.get("BUDGET_ALERT_THRESHOLD", "0.80"))
+
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+MOONSHOT_API_KEY = os.environ.get("MOONSHOT_API_KEY", "")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+BILLING_ALERT_BALANCE_USD = float(os.environ.get("BILLING_ALERT_BALANCE_USD", "2.00"))

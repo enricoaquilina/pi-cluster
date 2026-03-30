@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import ALLOWED_ORIGINS
 from .db import _pool, init_db
 from .event_bus import event_bus
-from .background import _heartbeat_sweep, _budget_snapshot, _node_snapshot
+from .background import _heartbeat_sweep, _budget_snapshot, _node_snapshot, _provider_balance_snapshot
 from .routes import api_router
 from .helpers import row_to_dict
 
@@ -25,10 +25,11 @@ async def lifespan(a: FastAPI):
     sweep_task = asyncio.create_task(_heartbeat_sweep())
     budget_task = asyncio.create_task(_budget_snapshot())
     node_task = asyncio.create_task(_node_snapshot())
+    provider_task = asyncio.create_task(_provider_balance_snapshot())
     yield
-    for task in (sweep_task, budget_task, node_task):
+    for task in (sweep_task, budget_task, node_task, provider_task):
         task.cancel()
-    for task in (sweep_task, budget_task, node_task):
+    for task in (sweep_task, budget_task, node_task, provider_task):
         try:
             await task
         except asyncio.CancelledError:

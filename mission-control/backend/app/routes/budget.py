@@ -2,9 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..config import BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY, BUDGET_ALERT_THRESHOLD
+from ..config import BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY, BUDGET_ALERT_THRESHOLD, BILLING_ALERT_BALANCE_USD
 from ..db import get_db
-from ..budget_helpers import _fetch_openrouter_usage
+from ..budget_helpers import (
+    _fetch_openrouter_usage, _fetch_all_provider_balances,
+    _check_balance_alert, _check_usage_alert,
+)
 
 router = APIRouter()
 
@@ -65,3 +68,39 @@ def budget_history(days: int = Query(7, ge=1, le=90), conn=Depends(get_db)):
                 "daily_limit", "weekly_limit", "monthly_limit", "snapshot_at"]
         rows = cur.fetchall()
     return [{**dict(zip(cols, r)), "snapshot_at": r[7].isoformat()} for r in rows]
+
+
+@router.get("/api/billing")
+def get_billing():
+    """Current balances from all configured LLM providers."""
+    balances = _fetch_all_provider_balances()
+    for b in balances:
+        if b.get("balance_usd") is not None:
+            b["alert"] = _check_balance_alert(b["balance_usd"], BILLING_ALERT_BALANCE_USD)
+        if b.get("used") is not None and b.get("limit") is not None:
+            b["alert"] = _check_usage_alert(b["used"], b["limit"])
+    return {"providers": balances}
+
+
+@router.get("/api/billing/history")
+def billing_history(
+    provider: str = Query(None),
+    days: int = Query(7, ge=1, le=90),
+    conn=Depends(get_db),
+):
+    """Historical provider balance snapshots."""
+    query = """
+        SELECT provider, balance_usd, used_credits, total_credits, fetched_at
+        FROM provider_balances
+        WHERE fetched_at > now() - interval '1 day' * %s
+    """
+    params: list = [days]
+    if provider:
+        query += " AND provider = %s"
+        params.append(provider)
+    query += " ORDER BY fetched_at ASC LIMIT 500"
+    with conn.cursor() as cur:
+        cur.execute(query, params)
+        cols = ["provider", "balance_usd", "used_credits", "total_credits", "fetched_at"]
+        rows = cur.fetchall()
+    return [{**dict(zip(cols, r)), "fetched_at": r[4].isoformat()} for r in rows]

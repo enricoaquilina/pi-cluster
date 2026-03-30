@@ -121,6 +121,18 @@ def init_db():
                 CREATE INDEX IF NOT EXISTS idx_budget_snapshots_at
                     ON budget_snapshots (snapshot_at DESC);
 
+                CREATE TABLE IF NOT EXISTS provider_balances (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    provider TEXT NOT NULL,
+                    balance_usd DOUBLE PRECISION,
+                    used_credits INT,
+                    total_credits INT,
+                    raw_json JSONB DEFAULT '{}',
+                    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+                CREATE INDEX IF NOT EXISTS idx_provider_balances_lookup
+                    ON provider_balances (provider, fetched_at DESC);
+
                 CREATE TABLE IF NOT EXISTS node_snapshots (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     node_name TEXT NOT NULL,

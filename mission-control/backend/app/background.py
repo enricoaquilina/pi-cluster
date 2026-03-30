@@ -1,6 +1,7 @@
 """Background tasks: heartbeat sweep, budget snapshots, node snapshots."""
 
 import asyncio
+import json
 import logging
 
 from .config import HEARTBEAT_STALE_SECONDS, BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY
@@ -60,6 +61,41 @@ async def _budget_snapshot():
                 logger.info("Budget snapshot stored: $%.4f daily", usage["daily_usd"])
         except Exception as e:
             logger.warning("Budget snapshot error: %s", e)
+        finally:
+            _pool.putconn(conn)
+        await asyncio.sleep(3600)
+
+
+async def _provider_balance_snapshot():
+    """Store provider balance snapshots hourly."""
+    await asyncio.sleep(20)
+    while True:
+        conn = _pool.getconn()
+        try:
+            from .budget_helpers import _fetch_all_provider_balances
+            balances = _fetch_all_provider_balances()
+            with conn.cursor() as cur:
+                for b in balances:
+                    if b.get("status") in ("no_key", "dashboard_only"):
+                        continue
+                    cur.execute(
+                        """INSERT INTO provider_balances
+                           (provider, balance_usd, used_credits, total_credits, raw_json)
+                           VALUES (%s, %s, %s, %s, %s)""",
+                        (b["provider"],
+                         b.get("balance_usd"),
+                         b.get("used"),
+                         b.get("limit"),
+                         json.dumps(b)),
+                    )
+                cur.execute(
+                    "DELETE FROM provider_balances WHERE fetched_at < now() - interval '90 days'"
+                )
+            conn.commit()
+            ok_count = sum(1 for b in balances if b.get("status") == "ok")
+            logger.info("Provider balances snapshot: %d/%d ok", ok_count, len(balances))
+        except Exception as e:
+            logger.warning("Provider balance snapshot error: %s", e)
         finally:
             _pool.putconn(conn)
         await asyncio.sleep(3600)

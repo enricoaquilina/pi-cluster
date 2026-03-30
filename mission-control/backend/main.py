@@ -13,6 +13,7 @@ from app.config import (  # noqa: F401
     _start_time, HEARTBEAT_STALE_SECONDS,
     OPENROUTER_API_KEY, BUDGET_DAILY, BUDGET_WEEKLY, BUDGET_MONTHLY,
     BUDGET_ALERT_THRESHOLD,
+    DEEPSEEK_API_KEY, MOONSHOT_API_KEY, TAVILY_API_KEY, BILLING_ALERT_BALANCE_USD,
 )
 from app.helpers import row_to_dict  # noqa: F401
 from app.models import (  # noqa: F401
@@ -27,7 +28,12 @@ from app.dispatch_engine import (  # noqa: F401
     NODE_MODELS, FALLBACK_NODES, FALLBACK_DELEGATE_MAP,
 )
 from app.trading_helpers import TEAM_ROSTER  # noqa: F401
-from app.budget_helpers import _fetch_openrouter_usage, _budget_cache  # noqa: F401
-from app.background import _heartbeat_sweep, _budget_snapshot, _node_snapshot  # noqa: F401
+from urllib.request import urlopen as urlopen_  # noqa: F401 — for test patches
+from app.budget_helpers import (  # noqa: F401
+    _fetch_openrouter_usage, _budget_cache,
+    _fetch_deepseek_balance, _fetch_moonshot_balance, _fetch_tavily_usage,
+    _fetch_all_provider_balances, _check_balance_alert, _check_usage_alert,
+)
+from app.background import _heartbeat_sweep, _budget_snapshot, _node_snapshot, _provider_balance_snapshot  # noqa: F401
 
 logger = logging.getLogger("mission-control")
