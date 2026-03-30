@@ -76,6 +76,25 @@ check_openclaw_gateway() {
     fi
 }
 
+# 1b. OpenClaw Gateway — container memory pressure (early OOM warning)
+check_gateway_memory() {
+    local raw pct
+    raw=$(docker stats --no-stream --format '{{.MemPerc}}' openclaw-openclaw-gateway-1 2>/dev/null)
+    if [[ -z "$raw" ]]; then
+        check_service "openclaw-gateway-memory" "down" "Cannot read container memory stats"
+        return
+    fi
+    pct=${raw%%%}  # strip trailing %
+    pct=${pct%.*}  # truncate to integer
+    if [[ "$pct" -gt 90 ]]; then
+        check_service "openclaw-gateway-memory" "down" "Container memory at ${pct}% — OOM imminent"
+    elif [[ "$pct" -gt 75 ]]; then
+        check_service "openclaw-gateway-memory" "degraded" "Container memory at ${pct}%"
+    else
+        check_service "openclaw-gateway-memory" "up" "" "0"
+    fi
+}
+
 # 2. OpenClaw Telegram — DNS resolve + log polling check
 check_openclaw_telegram() {
     if [[ "$HOST_DNS_OK" == false ]]; then
@@ -352,6 +371,7 @@ check_nfs_workspace() {
 # ── Run All Checks ────────────────────────────────────────────────────────────
 
 check_openclaw_gateway
+check_gateway_memory
 check_openclaw_telegram
 check_openclaw_whatsapp
 check_mc_api
@@ -420,7 +440,7 @@ fi
 # Critical services that trigger immediate alerts
 # shellcheck disable=SC2034  # used for reference/future alerting tiers
 declare -A CRITICAL=(
-    [openclaw-gateway]=1 [openclaw-telegram]=1 [openclaw-whatsapp]=1
+    [openclaw-gateway]=1 [openclaw-gateway-memory]=1 [openclaw-telegram]=1 [openclaw-whatsapp]=1
     [mission-control-api]=1 [postgresql]=1 [openclaw-slave0]=1
     [polymarket-bot]=1 [pihole-dns]=1
 )
@@ -562,6 +582,27 @@ if [[ "$openclaw_tg_fails" -ge 3 ]] || [[ "$openclaw_gw_fails" -ge 3 ]]; then
             echo "up" > "$STATE_DIR/openclaw-gateway.status"
         else
             send_alert "AUTO-RECOVERY FAILED: OpenClaw gateway still can't resolve Telegram API after restart"
+        fi
+    fi
+fi
+
+# ── Auto-Recovery: Gateway OOM / Memory Pressure ────────────────────────────
+gw_mem_fails=$(cat "$FAIL_COUNT_DIR/openclaw-gateway-memory.count" 2>/dev/null || echo "0")
+
+if [[ "$gw_mem_fails" -ge 2 ]]; then
+    restart_count=$(docker inspect --format '{{.RestartCount}}' openclaw-openclaw-gateway-1 2>/dev/null || echo "0")
+    if [[ "$restart_count" -gt 5 ]] && check_circuit_breaker; then
+        send_alert "AUTO-RECOVERY: Gateway OOM loop detected (${restart_count} restarts, memory failures: ${gw_mem_fails}) — recreating container"
+        cd /mnt/external/openclaw && docker compose up -d --force-recreate openclaw-gateway 2>/dev/null
+        sleep 30
+        if curl -sf --max-time 5 "http://${HEAVY_IP}:18789/healthz" >/dev/null 2>&1; then
+            send_alert "AUTO-RECOVERY SUCCESS: Gateway recreated and healthy"
+            echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway-memory.count"
+            echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway.count"
+            echo "up" > "$STATE_DIR/openclaw-gateway-memory.status"
+            echo "up" > "$STATE_DIR/openclaw-gateway.status"
+        else
+            send_alert "AUTO-RECOVERY FAILED: Gateway still unhealthy after recreate — check NODE_OPTIONS and mem_limit"
         fi
     fi
 fi

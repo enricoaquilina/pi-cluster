@@ -2,6 +2,8 @@
 
 import json
 import sqlite3
+import subprocess
+import time
 from datetime import date, datetime, timezone
 from typing import Optional
 
@@ -10,6 +12,22 @@ from fastapi import APIRouter, HTTPException, Query
 from ..config import LIFE_DIR, OPENCLAW_DIR, QMD_INDEX
 
 router = APIRouter()
+
+# TTL cache for file listings (avoid re-reading filesystem on every request)
+_cache: dict[str, tuple[float, list]] = {}
+_CACHE_TTL = 30  # seconds
+
+
+def _cached(key: str, loader):
+    """Return cached result if fresh, otherwise call loader and cache."""
+    now = time.monotonic()
+    if key in _cache:
+        ts, data = _cache[key]
+        if now - ts < _CACHE_TTL:
+            return data
+    data = loader()
+    _cache[key] = (now, data)
+    return data
 
 
 def _workspace_files():
@@ -115,8 +133,8 @@ def list_memories(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
-    ws_items = _workspace_files()
-    life_items = _life_files()
+    ws_items = _cached("workspace", _workspace_files)
+    life_items = _cached("life", _life_files)
 
     if q:
         # Filter workspace files by search term
@@ -224,7 +242,6 @@ def qmd_search(
     if mode != "bm25":
         # Vector/hybrid modes require the qmd binary which isn't in the container.
         # Fall back to the host-side search script if mounted.
-        import subprocess
         search_script = LIFE_DIR / "scripts" / "qmd_search.py"
         if not search_script.exists():
             raise HTTPException(
