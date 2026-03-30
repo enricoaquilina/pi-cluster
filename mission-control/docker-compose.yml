@@ -38,9 +38,13 @@ services:
       ZEROCLAW_SLAVE0_TOKEN: "${ZEROCLAW_SLAVE0_TOKEN}"
       ZEROCLAW_SLAVE1_TOKEN: "${ZEROCLAW_SLAVE1_TOKEN}"
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY}"
+      LIFE_DIR: "/life"
+      QMD_INDEX: "/qmd-cache/index.sqlite"
     volumes:
       - /home/enrico/.openclaw:/openclaw:ro
       - /mnt/external/polymarket-bot/data:/polybot-data:ro
+      - /home/enrico/life:/life:ro
+      - /home/enrico/.cache/qmd:/qmd-cache:ro
     ports:
       - "8000:8000"
     depends_on:

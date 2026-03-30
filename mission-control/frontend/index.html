@@ -74,6 +74,7 @@
   .source-badge { padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; }
   .source-workspace { background: rgba(79,143,247,0.15); color: var(--accent); }
   .source-memory { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .source-life { background: #10b981; color: white; }
   .memory-card-preview { font-size: 0.8rem; color: var(--muted); line-height: 1.5; white-space: pre-wrap; overflow: hidden; max-height: 6em; }
   .memory-card-preview mark { background: rgba(234,179,8,0.3); color: var(--text); border-radius: 2px; padding: 0 2px; }
   .memory-empty { text-align: center; padding: 3rem 2rem; color: var(--muted); font-size: 0.95rem; }
@@ -258,6 +259,11 @@
   <div class="memory-search">
     <input type="text" id="memory-search-input" placeholder="Search memories...">
     <button onclick="searchMemories()">Search</button>
+  </div>
+  <div class="memory-help" style="font-size: 0.75rem; color: #6b7280; margin-bottom: 0.5rem; padding: 0 2rem;">
+    Search across <span style="background:#3b82f6;color:white;padding:0 4px;border-radius:3px;font-size:0.7rem;">workspace</span> files,
+    <span style="background:#10b981;color:white;padding:0 4px;border-radius:3px;font-size:0.7rem;">life</span> knowledge base (PARA),
+    and <span style="background:#8b5cf6;color:white;padding:0 4px;border-radius:3px;font-size:0.7rem;">memory</span> index.
   </div>
   <div id="memory-grid" class="memory-grid"></div>
   <div id="memory-pagination" class="memory-pagination"></div>
@@ -568,7 +574,7 @@ function renderMemories(data) {
     return;
   }
   grid.innerHTML = data.items.map(item => {
-    const srcClass = item.source === 'workspace' ? 'source-workspace' : 'source-memory';
+    const srcClass = item.source === 'workspace' ? 'source-workspace' : item.source === 'life' ? 'source-life' : 'source-memory';
     const preview = item.snippet || (item.text ? item.text.slice(0, 300) : '');
     return `<div class="memory-card" onclick="openMemoryFile('${esc(item.path)}')">
       <div class="memory-card-header">
@@ -967,6 +973,7 @@ let servicesData = [];
 
 const SVC_DISPLAY = {
   'openclaw-gateway': 'OpenClaw Gateway',
+  'openclaw-gateway-memory': 'Gateway Memory',
   'openclaw-telegram': 'OpenClaw Telegram',
   'openclaw-whatsapp': 'OpenClaw WhatsApp',
   'mission-control-api': 'Mission Control API',
@@ -1058,8 +1065,9 @@ async function renderServicesTimeline(services) {
   const container = document.getElementById('services-timeline');
   // Fetch history for each service in parallel
   const BLOCKS = 48; // 48 half-hour blocks = 24h
-  const now = Date.now();
   const blockDuration = 30 * 60 * 1000; // 30 min in ms
+  // Snap to fixed :00/:30 boundaries — end of last complete block is current half-hour start
+  const now = Math.ceil(Date.now() / blockDuration) * blockDuration;
 
   try {
     const historyPromises = services.map(s =>
@@ -1084,11 +1092,17 @@ async function renderServicesTimeline(services) {
         let tipStatusCls = 'tip-nodata';
         let tipDetails = [];
         if (inBlock.length > 0) {
+          // Use last check status — reflects current state, not worst-ever in window
+          const lastCheck = inBlock.reduce((a, b) => new Date(a.checked_at) > new Date(b.checked_at) ? a : b);
+          const lastStatus = lastCheck.status;
+          // Show mixed indicator if block had different statuses
           const hasDown = inBlock.some(h => h.status === 'down');
           const hasDegraded = inBlock.some(h => h.status === 'degraded');
-          cls = hasDown ? 'down' : hasDegraded ? 'degraded' : 'up';
-          tipStatusText = hasDown ? 'Down' : hasDegraded ? 'Degraded' : 'Up';
-          tipStatusCls = hasDown ? 'tip-down' : hasDegraded ? 'tip-degraded' : 'tip-up';
+          cls = lastStatus === 'down' ? 'down' : lastStatus === 'degraded' ? 'degraded' : 'up';
+          const wasUnstable = (lastStatus === 'up' && (hasDown || hasDegraded));
+          tipStatusText = lastStatus === 'down' ? 'Down' : lastStatus === 'degraded' ? 'Degraded' : 'Up';
+          if (wasUnstable) tipStatusText += ' (recovered)';
+          tipStatusCls = lastStatus === 'down' ? 'tip-down' : lastStatus === 'degraded' ? 'tip-degraded' : 'tip-up';
           const avgMs = inBlock.filter(h => h.response_ms).map(h => h.response_ms);
           if (avgMs.length) tipDetails.push(Math.round(avgMs.reduce((a,b) => a+b, 0) / avgMs.length) + 'ms avg');
           tipDetails.push(inBlock.length + ' check' + (inBlock.length > 1 ? 's' : ''));
@@ -1168,42 +1182,61 @@ function sseRefresh(fn, key) {
 function connectSSE() {
   const dot = document.getElementById('sse-dot');
   const label = document.getElementById('sse-label');
-  const es = new EventSource('/api/events');
+  let es = null;
+  let retryDelay = 1000;
+  const MAX_RETRY = 30000;
 
-  es.onopen = () => {
-    dot.style.background = '#4caf50';
-    label.textContent = 'live';
-    console.log('SSE connected');
-  };
+  function connect() {
+    if (es) { es.close(); es = null; }
+    es = new EventSource('/api/events');
 
-  es.onmessage = (e) => {
-    try {
-      const msg = JSON.parse(e.data);
-      const tab = getTab();
-      switch (msg.event) {
-        case 'nodes':
-          if (tab === 'cluster') sseRefresh(() => { loadCluster(); loadBudget(); }, 'nodes');
-          break;
-        case 'tasks':
-          if (tab === 'tasks') sseRefresh(load, 'tasks');
-          break;
-        case 'services':
-          if (tab === 'cluster') sseRefresh(() => { loadServices(); loadBudget(); }, 'services');
-          break;
-        case 'dispatch':
-          if (tab === 'dispatch') sseRefresh(loadDispatchLog, 'dispatch');
-          break;
+    es.onopen = () => {
+      dot.style.background = '#4caf50';
+      label.textContent = 'live';
+      retryDelay = 1000; // reset backoff on success
+      console.log('SSE connected');
+    };
+
+    es.onmessage = (e) => {
+      // Any message means connection is alive — ensure UI shows live
+      if (label.textContent !== 'live') {
+        dot.style.background = '#4caf50';
+        label.textContent = 'live';
       }
-    } catch (err) {
-      console.warn('SSE parse error:', err);
-    }
-  };
+      try {
+        const msg = JSON.parse(e.data);
+        const tab = getTab();
+        switch (msg.event) {
+          case 'nodes':
+            if (tab === 'cluster') sseRefresh(() => { loadCluster(); loadBudget(); }, 'nodes');
+            break;
+          case 'tasks':
+            if (tab === 'tasks') sseRefresh(load, 'tasks');
+            break;
+          case 'services':
+            if (tab === 'cluster') sseRefresh(() => { loadServices(); loadBudget(); }, 'services');
+            break;
+          case 'dispatch':
+            if (tab === 'dispatch') sseRefresh(loadDispatchLog, 'dispatch');
+            break;
+        }
+      } catch (err) {
+        console.warn('SSE parse error:', err);
+      }
+    };
 
-  es.onerror = () => {
-    dot.style.background = '#ff9800';
-    label.textContent = 'reconnecting';
-    console.warn('SSE disconnected, auto-reconnecting...');
-  };
+    es.onerror = () => {
+      dot.style.background = '#ff9800';
+      label.textContent = 'reconnecting';
+      console.warn('SSE disconnected, retrying in ' + (retryDelay/1000) + 's...');
+      es.close();
+      es = null;
+      setTimeout(connect, retryDelay);
+      retryDelay = Math.min(retryDelay * 2, MAX_RETRY); // exponential backoff
+    };
+  }
+
+  connect();
 }
 
 connectSSE();

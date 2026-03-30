@@ -141,6 +141,41 @@ PR opened
 - Off-site copy: rsync to heavy `/home/enrico/backups/` (14 days)
 - DR validation: weekly (Sunday 4am) via `scripts/openclaw-dr-test.sh`
 
+## Memory & Knowledge System
+
+Three-layer PARA knowledge base at `~/life/` on heavy, integrated with Mission Control.
+
+### Layers
+
+| Layer | Purpose | Storage |
+|-------|---------|---------|
+| Knowledge Graph | Durable facts about projects, people, companies | `~/life/{Projects,People,Companies,Resources}/*/summary.md + items.json` |
+| Daily Notes | Session log, decisions, active project heartbeat | `~/life/Daily/YYYY/MM/YYYY-MM-DD.md` |
+| Tacit Knowledge | Identity, rules, habits, lessons learned | `~/life/Areas/about-me/*.md` |
+
+### Entity Rules
+- Entity folder created when mentioned 3+ times, has direct relationship, or is significant
+- Each entity has `summary.md` (overview) + `items.json` (structured facts with dates)
+- Slug convention: lowercase, hyphens only (e.g. `pi-cluster`, `archie`)
+
+### Nightly Consolidation (2 AM cron)
+`~/life/scripts/nightly-consolidate.sh` calls `claude -p` (Haiku 4.5, pinned model) to:
+1. Extract entities, facts, skills, and tacit knowledge from today's daily note
+2. Apply changes via `apply_extraction.py` (dedup, conflict detection, JSON validation)
+3. Touch heartbeat file; alert via Telegram if no daily note exists
+
+### Mission Control Integration
+- `GET /api/memories` — searches across workspace files, ~/life/ PARA files, and FTS5 index
+- `GET /api/life/daily-status` — checks today's daily note existence and consolidation status
+- Life files appear with green badges in the Memories tab
+- Volume mount: `/home/enrico/life:/life:ro` in docker-compose
+
+### Session Protocol
+`/home/enrico/CLAUDE.md` auto-loads every Claude Code session, instructing the bot to:
+- Read hard-rules.md and workflow-habits.md at start
+- Create daily note if missing; write to it throughout the session
+- Use `[[wiki-links]]` when referencing entities (Obsidian-compatible)
+
 ## Key Design Decisions
 
 1. **MongoDB on local storage** -- NFS `all_squash` maps all file owners to anonuid=1000. WiredTiger requires accurate file ownership and locking, resulting in `EPERM` on NFS. Solution: MongoDB data lives at `/home/enrico/mongodb-data/` on heavy's local disk.

@@ -47,7 +47,7 @@ mc_result=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy bash -s "$LOCAL" "$RE
   cd /home/enrico/pi-cluster || exit 0
   git pull --ff-only origin master --quiet 2>/dev/null || exit 0
   if git diff --name-only "$1..$2" 2>/dev/null | grep -q '^mission-control/'; then
-    cd /home/enrico/mission-control && docker compose up -d --build 2>&1
+    cd /home/enrico/mission-control && docker compose up -d --no-deps --build api 2>&1 && docker compose restart proxy 2>&1
     echo "MC_REBUILT"
   fi
 HEAVY_SYNC
