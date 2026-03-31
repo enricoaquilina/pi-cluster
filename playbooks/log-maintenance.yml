@@ -33,6 +33,14 @@
         state: absent
       become: true
 
+    - name: Deploy mc-watchdog script from repo
+      ansible.builtin.copy:
+        src: scripts/mission-control-watchdog.sh
+        dest: /home/enrico/.local/bin/mission-control-watchdog
+        mode: "0755"
+        owner: enrico
+        group: enrico
+
     - name: Add mc-watchdog cron with proper log path
       ansible.builtin.cron:
         name: "mission-control-watchdog"
