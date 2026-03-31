@@ -103,6 +103,20 @@ NEW_VERSION=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$HEAVY_HOST" \
 if [[ "$NEW_VERSION" == "$LATEST" ]]; then
     log "Update successful: $CURRENT -> $NEW_VERSION"
     send_alert "OpenClaw updated: $CURRENT -> $NEW_VERSION"
+
+    log "Updating lastTouchedVersion in config to $NEW_VERSION..."
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "$HEAVY_HOST" \
+        "python3 -c \"
+import json, datetime
+path = '/home/enrico/.openclaw/openclaw.json'
+with open(path) as f:
+    d = json.load(f)
+d['meta']['lastTouchedVersion'] = '$NEW_VERSION'
+d['meta']['lastTouchedAt'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+with open(path, 'w') as f:
+    json.dump(d, f, indent=2)
+print('Config lastTouchedVersion updated to $NEW_VERSION')
+\" 2>&1" || log "WARN: Failed to update lastTouchedVersion in config"
 else
     log "WARN: Version mismatch after update (expected $LATEST, got $NEW_VERSION)"
     send_alert "OpenClaw update WARNING: expected $LATEST but got $NEW_VERSION"
