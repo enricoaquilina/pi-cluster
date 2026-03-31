@@ -36,7 +36,7 @@ def test_no_raw_psycopg2_connect():
 
 def test_db_functions_use_try_finally():
     """Functions that get pool connections must use try/finally to return them."""
-    target_funcs = {"_heartbeat_sweep", "_is_node_dispatchable", "_log_dispatch",
+    target_funcs = {"_heartbeat_sweep", "_log_dispatch",
                     "init_db", "_budget_snapshot", "_node_snapshot"}
     found = set()
     for filepath in _app_source_files():

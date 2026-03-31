@@ -23,9 +23,8 @@ from app.models import (  # noqa: F401
     DispatchRequest, DispatchResponse, DispatchLogEntry,
 )
 from app.dispatch_engine import (  # noqa: F401
-    PERSONA_ROUTING, ZEROCLAW_NODES, RateLimiter,
-    rate_limiter, _zeroclaw_chat, _is_node_dispatchable, _log_dispatch,
-    NODE_MODELS, FALLBACK_NODES, FALLBACK_DELEGATE_MAP,
+    PERSONA_ROUTING, OPENCLAW_GATEWAY, RateLimiter,
+    rate_limiter, _openclaw_chat, _is_gateway_reachable, _log_dispatch,
 )
 from app.trading_helpers import TEAM_ROSTER  # noqa: F401
 from app.budget_helpers import (  # noqa: F401

@@ -3,7 +3,6 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-import websockets
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ..auth import verify_api_key, rate_limit
@@ -11,8 +10,8 @@ from ..db import get_db
 from ..event_bus import event_bus
 from ..models.dispatch import DispatchRequest, DispatchResponse, DispatchLogEntry
 from ..dispatch_engine import (
-    PERSONA_ROUTING, ZEROCLAW_NODES, FALLBACK_NODES, FALLBACK_DELEGATE_MAP,
-    NODE_MODELS, rate_limiter, _zeroclaw_chat, _is_node_dispatchable, _log_dispatch,
+    PERSONA_ROUTING, OPENCLAW_GATEWAY,
+    rate_limiter, _openclaw_chat, _is_gateway_reachable, _log_dispatch,
 )
 from ..trading_helpers import TEAM_ROSTER
 
@@ -24,75 +23,49 @@ router = APIRouter()
 
 @router.post("/api/dispatch", response_model=DispatchResponse)
 async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depends(rate_limit)):
-    """Dispatch a prompt to a persona's ZeroClaw node with failover."""
+    """Dispatch a prompt to a persona via the OpenClaw gateway."""
     route = PERSONA_ROUTING.get(req.persona)
     if not route:
         available = sorted(PERSONA_ROUTING.keys())
         raise HTTPException(status_code=400, detail=f"Unknown persona '{req.persona}'. Available: {available}")
 
-    node, delegate, system_prompt = route
-    is_fallback = False
-    original_node = None
+    delegate, system_prompt = route
 
-    # Health-aware routing with failover
-    if not _is_node_dispatchable(node):
-        fallback_node = FALLBACK_NODES.get(node)
-        if fallback_node and _is_node_dispatchable(fallback_node):
-            original_node = node
-            delegate_map = FALLBACK_DELEGATE_MAP.get((node, fallback_node), {})
-            delegate = delegate_map.get(delegate, ZEROCLAW_NODES[fallback_node]["delegates"][0])
-            node = fallback_node
-            is_fallback = True
-            logger.info("Failover: %s → %s for persona %s", original_node, node, req.persona)
-        else:
-            _log_dispatch(req.persona, node, delegate, False, req.prompt, "",
-                          0, "error", "All nodes unavailable", original_node=None,
-                          model=NODE_MODELS.get(node))
-            raise HTTPException(status_code=503, detail="All dispatch nodes are unavailable")
-
-    cfg = ZEROCLAW_NODES[node]
-    if not cfg["token"]:
-        raise HTTPException(status_code=503, detail=f"Node {node} not configured (missing token)")
+    # Check gateway reachability
+    if not await _is_gateway_reachable():
+        _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, "",
+                      0, "error", "OpenClaw gateway unreachable")
+        raise HTTPException(status_code=503, detail="OpenClaw gateway is unreachable")
 
     # Rate limiting
     try:
-        rate_limiter.check(node)
+        rate_limiter.check()
     except HTTPException as rate_exc:
-        _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      0, "rate_limited", rate_exc.detail, original_node=original_node,
-                      model=NODE_MODELS.get(node))
+        _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, "",
+                      0, "rate_limited", rate_exc.detail)
         raise
 
     start = datetime.now(timezone.utc)
     try:
-        response = await _zeroclaw_chat(node, req.prompt, system_prompt, req.timeout)
-    except websockets.exceptions.WebSocketException as e:
-        elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
-        logger.error("Dispatch to %s failed: %s", node, e)
-        _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      elapsed_ms, "error", str(e), original_node=original_node,
-                      model=NODE_MODELS.get(node))
-        raise HTTPException(status_code=502, detail=f"Cannot reach {node}: {e}")
+        response = await _openclaw_chat(req.prompt, system_prompt, req.timeout)
     except HTTPException as e:
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
-        _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, "",
-                      elapsed_ms, "error", e.detail, original_node=original_node,
-                      model=NODE_MODELS.get(node))
+        _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, "",
+                      elapsed_ms, "error", e.detail)
         raise
 
     elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
-    _log_dispatch(req.persona, node, delegate, is_fallback, req.prompt, response,
-                  elapsed_ms, original_node=original_node, model=NODE_MODELS.get(node))
+    _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, response, elapsed_ms)
 
     event_bus.publish("dispatch")
     return DispatchResponse(
         persona=req.persona,
-        node=node,
+        node="gateway",
         delegate=delegate,
         response=response,
         elapsed_ms=elapsed_ms,
-        fallback=is_fallback,
-        original_node=original_node,
+        fallback=False,
+        original_node=None,
     )
 
 
@@ -100,13 +73,13 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
 def list_personas():
     """List available personas and their routing info."""
     result = {}
-    for persona, (node, delegate, _) in PERSONA_ROUTING.items():
+    for persona, (delegate, _) in PERSONA_ROUTING.items():
         team = "unknown"
         for t in TEAM_ROSTER["teams"]:
             if any(m["name"] == persona for m in t["members"]):
                 team = t["name"]
                 break
-        result[persona] = {"node": node, "delegate": delegate, "team": team}
+        result[persona] = {"node": "gateway", "delegate": delegate, "team": team}
     return result
 
 

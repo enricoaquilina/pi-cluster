@@ -24,6 +24,11 @@ _start_time = time.time()
 
 HEARTBEAT_STALE_SECONDS = int(os.environ.get("HEARTBEAT_STALE_SECONDS", "120"))
 
+# OpenClaw gateway — all dispatches route through this single gateway
+OPENCLAW_GATEWAY_HOST = os.environ.get("OPENCLAW_GATEWAY_HOST", "192.168.0.5")
+OPENCLAW_GATEWAY_PORT = int(os.environ.get("OPENCLAW_GATEWAY_PORT", "18789"))
+OPENCLAW_GATEWAY_TOKEN = os.environ.get("OPENCLAW_GATEWAY_TOKEN", "")
+
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 BUDGET_DAILY = float(os.environ.get("BUDGET_DAILY", "5.00"))
 BUDGET_WEEKLY = float(os.environ.get("BUDGET_WEEKLY", "25.00"))
