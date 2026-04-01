@@ -126,3 +126,58 @@ def test_mission_control_network_is_external():
     assert mc_net.get("external") is True, (
         "mission-control_default must be external: true (created by MC stack)"
     )
+
+
+@requires_cluster
+def test_node_services_have_restart_limits():
+    """Node services have StartLimitBurst and RestartSec=30 to prevent infinite restart loops."""
+    import subprocess
+    for host in ["slave0", "slave1"]:
+        result = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", host,
+             "cat", "/etc/systemd/system/openclaw-node.service"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode != 0:
+            pytest.skip(f"Cannot reach {host}")
+        content = result.stdout
+        assert "StartLimitBurst" in content, (
+            f"{host} missing StartLimitBurst — can enter infinite restart loops"
+        )
+        assert "StartLimitIntervalSec" in content, (
+            f"{host} missing StartLimitIntervalSec"
+        )
+        assert "RestartSec=30" in content, (
+            f"{host} RestartSec must be 30s (gives gateway time to start up after recreate)"
+        )
+
+
+SMOKE_TEST_PATH = "/home/enrico/pi-cluster/scripts/system-smoke-test.sh"
+
+
+@pytest.mark.skipif(
+    not os.path.exists(SMOKE_TEST_PATH),
+    reason="Smoke test script not found (skipped outside cluster)",
+)
+def test_smoke_test_recovery_uses_ssh():
+    """Smoke test auto-recovery docker commands use SSH (script runs on master, containers on heavy)."""
+    with open(SMOKE_TEST_PATH) as f:
+        lines = f.readlines()
+    bare_docker = []
+    in_recovery = False
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if "Auto-Recovery" in stripped:
+            in_recovery = True
+        if not in_recovery:
+            continue
+        if stripped.startswith("#"):
+            continue
+        has_docker = any(cmd in stripped for cmd in ["docker compose", "docker inspect", "docker stats"])
+        has_ssh = "timed_ssh" in stripped or "ssh " in stripped
+        if has_docker and not has_ssh:
+            bare_docker.append(f"line {i}: {stripped[:80]}")
+    assert not bare_docker, (
+        "Auto-recovery has bare docker commands (won't work from master, containers are on heavy):\n"
+        + "\n".join(bare_docker[:5])
+    )

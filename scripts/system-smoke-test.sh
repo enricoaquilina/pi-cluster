@@ -79,7 +79,7 @@ check_openclaw_gateway() {
 # 1b. OpenClaw Gateway — container memory pressure (early OOM warning)
 check_gateway_memory() {
     local raw pct
-    raw=$(docker stats --no-stream --format '{{.MemPerc}}' openclaw-openclaw-gateway-1 2>/dev/null)
+    raw=$(timed_ssh 8 ${HEAVY_HOST} "docker stats --no-stream --format '{{.MemPerc}}' openclaw-openclaw-gateway-1" 2>/dev/null)
     if [[ -z "$raw" ]]; then
         check_service "openclaw-gateway-memory" "down" "Cannot read container memory stats"
         return
@@ -571,7 +571,7 @@ if [[ "$openclaw_tg_fails" -ge 3 ]] || [[ "$openclaw_gw_fails" -ge 3 ]]; then
         echo "[${NOW}] Circuit breaker tripped — skipping Telegram auto-recovery" >> "$LOG_FILE"
     else
         send_alert "AUTO-RECOVERY: Restarting OpenClaw gateway after ${openclaw_tg_fails} consecutive Telegram failures"
-        cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
+        timed_ssh 15 ${HEAVY_HOST} "cd /mnt/external/openclaw && docker compose restart openclaw-gateway" 2>/dev/null
         sleep 30
         # Re-check
         if timed_ssh 8 ${HEAVY_HOST} "docker exec openclaw-openclaw-gateway-1 getent hosts api.telegram.org" >/dev/null 2>&1; then
@@ -580,6 +580,19 @@ if [[ "$openclaw_tg_fails" -ge 3 ]] || [[ "$openclaw_gw_fails" -ge 3 ]]; then
             echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway.count"
             echo "up" > "$STATE_DIR/openclaw-telegram.status"
             echo "up" > "$STATE_DIR/openclaw-gateway.status"
+            # Re-pair nodes only if disconnected (gateway restart invalidates session tokens)
+            sleep 20
+            _nodes_raw=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null)
+            _disconnected=$(echo "$_nodes_raw" | python3 -c "
+import json,sys
+data=json.load(sys.stdin)
+bad=[n['name'] for n in data.get('nodes',[]) if not n.get('connected',False) and n['name'] in ('build','light','heavy')]
+print(' '.join(bad))
+" 2>/dev/null)
+            if [[ -n "$_disconnected" ]]; then
+                send_alert "AUTO-RECOVERY: Nodes disconnected after gateway restart (${_disconnected}) — re-pairing"
+                timed_ssh 60 ${HEAVY_HOST} "bash /home/enrico/pi-cluster/scripts/openclaw-pair-nodes.sh" >> "$LOG_FILE" 2>&1 || true
+            fi
         else
             send_alert "AUTO-RECOVERY FAILED: OpenClaw gateway still can't resolve Telegram API after restart"
         fi
@@ -590,22 +603,63 @@ fi
 gw_mem_fails=$(cat "$FAIL_COUNT_DIR/openclaw-gateway-memory.count" 2>/dev/null || echo "0")
 
 if [[ "$gw_mem_fails" -ge 2 ]]; then
-    restart_count=$(docker inspect --format '{{.RestartCount}}' openclaw-openclaw-gateway-1 2>/dev/null || echo "0")
+    restart_count=$(timed_ssh 8 ${HEAVY_HOST} "docker inspect --format '{{.RestartCount}}' openclaw-openclaw-gateway-1" 2>/dev/null || echo "0")
     if [[ "$restart_count" -gt 5 ]] && check_circuit_breaker; then
         send_alert "AUTO-RECOVERY: Gateway OOM loop detected (${restart_count} restarts, memory failures: ${gw_mem_fails}) — recreating container"
-        cd /mnt/external/openclaw && docker compose up -d --force-recreate openclaw-gateway 2>/dev/null
-        sleep 30
+        timed_ssh 30 ${HEAVY_HOST} "cd /mnt/external/openclaw && docker compose up -d --force-recreate openclaw-gateway" 2>/dev/null
+        sleep 45
         if curl -sf --max-time 5 "http://${HEAVY_IP}:18789/healthz" >/dev/null 2>&1; then
             send_alert "AUTO-RECOVERY SUCCESS: Gateway recreated and healthy"
             echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway-memory.count"
             echo "0" > "$FAIL_COUNT_DIR/openclaw-gateway.count"
             echo "up" > "$STATE_DIR/openclaw-gateway-memory.status"
             echo "up" > "$STATE_DIR/openclaw-gateway.status"
+            # Re-pair nodes only if disconnected (force-recreate always invalidates session tokens)
+            sleep 20
+            _nodes_raw=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null)
+            _disconnected=$(echo "$_nodes_raw" | python3 -c "
+import json,sys
+data=json.load(sys.stdin)
+bad=[n['name'] for n in data.get('nodes',[]) if not n.get('connected',False) and n['name'] in ('build','light','heavy')]
+print(' '.join(bad))
+" 2>/dev/null)
+            if [[ -n "$_disconnected" ]]; then
+                send_alert "AUTO-RECOVERY: Nodes disconnected after gateway recreate (${_disconnected}) — re-pairing"
+                timed_ssh 60 ${HEAVY_HOST} "bash /home/enrico/pi-cluster/scripts/openclaw-pair-nodes.sh" >> "$LOG_FILE" 2>&1 || true
+            fi
         else
             send_alert "AUTO-RECOVERY FAILED: Gateway still unhealthy after recreate — check NODE_OPTIONS and mem_limit"
         fi
     fi
 fi
+
+# ── Auto-Recovery: Disconnected Nodes ────────────────────────────────────────
+_node_repaired=0  # prevent calling pair-nodes twice if both nodes are down
+for node_entry in slave0:build slave1:light; do
+    host="${node_entry%%:*}"
+    display="${node_entry##*:}"
+    fails=$(cat "$FAIL_COUNT_DIR/openclaw-${host}.count" 2>/dev/null || echo "0")
+    if [[ "$fails" -ge 3 ]] && check_circuit_breaker; then
+        send_alert "AUTO-RECOVERY: Node ${display} (${host}) disconnected for 15+ min — restarting service"
+        timed_ssh 10 "$host" "sudo systemctl restart openclaw-node" 2>/dev/null || true
+        sleep 15
+        # Check reconnection using same JSON pattern as _fetch_openclaw_node_status()
+        node_status=$(curl -sf --max-time 5 "http://${HEAVY_IP}:8520/nodes" 2>/dev/null | \
+            python3 -c "import json,sys; d=json.load(sys.stdin); nodes={n['name']:n.get('connected',False) for n in d.get('nodes',[])}; print('connected' if nodes.get('$display') else 'disconnected')" 2>/dev/null)
+        if [[ "$node_status" == "connected" ]]; then
+            send_alert "AUTO-RECOVERY SUCCESS: Node ${display} reconnected after service restart"
+            echo "0" > "$FAIL_COUNT_DIR/openclaw-${host}.count"
+            echo "up" > "$STATE_DIR/openclaw-${host}.status"
+        elif [[ "$_node_repaired" -eq 0 ]]; then
+            # Escalate: device_token_mismatch — re-pair needed (run at most once per cycle)
+            send_alert "AUTO-RECOVERY: Node ${display} still disconnected — escalating to re-pair"
+            timed_ssh 60 ${HEAVY_HOST} "bash /home/enrico/pi-cluster/scripts/openclaw-pair-nodes.sh" >> "$LOG_FILE" 2>&1 || true
+            _node_repaired=1
+        else
+            send_alert "AUTO-RECOVERY: Node ${display} still disconnected — re-pair already ran this cycle"
+        fi
+    fi
+done
 
 # ── Auto-Recovery: DNS ───────────────────────────────────────────────────────
 
@@ -636,7 +690,7 @@ if [[ "$docker_dns_fails" -ge 3 ]]; then
         echo "[${NOW}] Circuit breaker tripped — skipping Docker DNS auto-recovery" >> "$LOG_FILE"
     else
         send_alert "AUTO-RECOVERY: Docker container DNS broken for 15+ min — restarting OpenClaw gateway"
-        cd /mnt/external/openclaw && docker compose restart openclaw-gateway 2>/dev/null
+        timed_ssh 15 ${HEAVY_HOST} "cd /mnt/external/openclaw && docker compose restart openclaw-gateway" 2>/dev/null
         sleep 10
         if timed_ssh 5 ${HEAVY_HOST} docker exec openclaw-openclaw-gateway-1 sh -c "getent hosts google.com" >/dev/null 2>&1; then
             send_alert "AUTO-RECOVERY SUCCESS: Docker container DNS restored after gateway restart"

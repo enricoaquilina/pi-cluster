@@ -116,7 +116,7 @@ if ! curl -sf --max-time 5 "http://localhost:8520/health" > /dev/null 2>&1; then
 fi
 
 # 7. MC compose services (catch any that crashed)
-cd "$MC_DIR"
+cd "$MC_DIR" || exit
 if ! docker compose ps --status running --format '{{.Name}}' 2>/dev/null | grep -q mission-control-db; then
     log "MC DB not running — starting compose"
     docker compose up -d 2>&1
@@ -133,7 +133,7 @@ fi
 if [ "$GW_RESTARTED" = true ]; then
     log "Waiting for gateway to stabilize before posting status..."
     gw_ok=false
-    for i in $(seq 1 12); do
+    for _ in $(seq 1 12); do
         sleep 5
         if curl -sf --max-time 5 "http://localhost:18789/healthz" > /dev/null 2>&1; then
             gw_ok=true
