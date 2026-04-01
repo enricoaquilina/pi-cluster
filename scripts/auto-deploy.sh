@@ -50,9 +50,17 @@ mc_result=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy bash -s "$LOCAL" "$RE
     cd /home/enrico/mission-control && docker compose up -d --no-deps --build api 2>&1 && docker compose restart proxy 2>&1
     echo "MC_REBUILT"
   fi
+  # Re-pair nodes if openclaw config changed (gateway recreate invalidates sessions)
+  if git diff --name-only "$1..$2" 2>/dev/null | grep -qE 'scripts/openclaw|templates/openclaw'; then
+    timeout 90 bash /home/enrico/pi-cluster/scripts/openclaw-pair-nodes.sh 2>&1
+    echo "NODES_REPAIRED"
+  fi
 HEAVY_SYNC
 if echo "$mc_result" | grep -q "MC_REBUILT"; then
     log "Mission Control rebuilt on heavy"
+fi
+if echo "$mc_result" | grep -q "NODES_REPAIRED"; then
+    log "OpenClaw nodes re-paired on heavy"
 fi
 
 log "Deploy complete"
