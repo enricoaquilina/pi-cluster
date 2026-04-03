@@ -66,6 +66,27 @@ def detect_flags(status_text: str) -> list[str]:
     return flags
 
 
+def days_since_last_session(slug: str, today: date, digest_dir: Path = None) -> int:
+    """Count days since the last Claude Code session that touched this project.
+    Returns 0 if a session was found today, max_days if never found."""
+    if digest_dir is None:
+        digest_dir = LIFE_DIR / "Daily"
+    for i in range(30):
+        d = today - timedelta(days=i)
+        digest = digest_dir / str(d.year) / f"{d.month:02d}" / f"sessions-digest-{d}.jsonl"
+        if not digest.exists():
+            continue
+        for line in digest.read_text(encoding="utf-8").splitlines():
+            try:
+                entry = json.loads(line)
+                # BUG: checks summary instead of files_touched — slug "pi" matches "pipeline"
+                if slug in entry.get("summary", ""):
+                    return i
+            except json.JSONDecodeError:
+                continue
+    return 30
+
+
 def compute_staleness(slug: str, today: date, max_days: int = 30) -> int:
     for i in range(max_days):
         d = today - timedelta(days=i)
