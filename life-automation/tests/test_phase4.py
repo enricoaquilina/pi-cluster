@@ -120,6 +120,32 @@ class TestSessionArchive:
         assert r.returncode == 0
         assert "no sessions" in r.stdout.lower() or r.stdout == ""
 
+    def test_session_near_midnight_utc_included(self, life_dir):
+        """Session started just past midnight UTC (but same local day) should be included."""
+        from datetime import datetime, timezone
+        sessions_dir = life_dir / ".claude-sessions"
+        sessions_dir.mkdir()
+        # Create a session at 00:30 UTC on TODAY — in CET/CEST this is still TODAY
+        today_date = date.fromisoformat(TODAY)
+        utc_midnight = datetime(today_date.year, today_date.month, today_date.day, 0, 30, tzinfo=timezone.utc)
+        local_date = utc_midnight.astimezone().date()
+        # Only run the assertion if local timezone puts this on the same day
+        # (Skip if running in UTC where there's no difference)
+        if local_date == today_date:
+            ts_ms = int(utc_midnight.timestamp() * 1000)
+            (sessions_dir / "99999.json").write_text(json.dumps({
+                "pid": 99999,
+                "sessionId": "midnight-session",
+                "cwd": "/home/enrico",
+                "startedAt": ts_ms
+            }))
+            r = run_script(SESSION_SCRIPT, life_dir, env_extra={"SESSIONS_DIR_OVERRIDE": str(sessions_dir)})
+            assert r.returncode == 0
+            archive_path = life_dir / "Daily/2026/03" / f"sessions-{TODAY}.json"
+            assert archive_path.exists()
+            archive = json.loads(archive_path.read_text())
+            assert any(s["session_id"] == "midnight-session" for s in archive["sessions"])
+
 
 class TestSkillDedup:
     def test_detects_similar_skills(self, life_dir):

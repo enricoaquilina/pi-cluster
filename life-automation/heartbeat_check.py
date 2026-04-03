@@ -162,11 +162,19 @@ def create_escalation_pending(slug: str, reason: str) -> None:
     pending_item = f"- [ ] ESCALATION: [[{slug}]] — {reason}"
     if pending_item in content:
         return  # idempotent
-    content = content.replace(
-        "## Pending",
-        f"## Pending\n{pending_item}",
-        1,
-    )
+    # Handle both "## Pending Items" (init.sh template) and "## Pending" (legacy)
+    if "## Pending Items" in content:
+        content = content.replace(
+            "## Pending Items",
+            f"## Pending Items\n{pending_item}",
+            1,
+        )
+    else:
+        content = content.replace(
+            "## Pending",
+            f"## Pending\n{pending_item}",
+            1,
+        )
     note_path.write_text(content, encoding="utf-8")
 
 

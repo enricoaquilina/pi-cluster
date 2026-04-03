@@ -414,6 +414,24 @@ class TestSuperseded:
         old = [i for i in items if "nginx" in i["fact"]][0]
         assert old["confidence"] == "superseded"
 
+    def test_supersedes_runs_before_reinforcement(self, life_dir: Path) -> None:
+        """When supersedes text is similar to new fact, supersede must win over reinforce."""
+        (life_dir / "Projects/pi-cluster/items.json").write_text(json.dumps([
+            {"fact": "Order size is $10.00 per trade", "confidence": "confirmed", "mentions": 3, "date": TODAY, "last_seen": TODAY}
+        ]))
+        # New fact is very similar to old (would trigger reinforce), but has supersedes
+        run_apply(life_dir, empty_payload(fact_updates=[{
+            "entity_type": "project", "entity": "pi-cluster",
+            "date": TODAY, "fact": "Order size is $4.00 per trade",
+            "category": "configuration",
+            "supersedes": "Order size is $10.00 per trade"
+        }]))
+        items = json.loads((life_dir / "Projects/pi-cluster/items.json").read_text())
+        old = [i for i in items if "$10.00" in i["fact"]][0]
+        assert old["confidence"] == "superseded"
+        new = [i for i in items if "$4.00" in i["fact"]][0]
+        assert new["confidence"] == "single"  # New fact was appended, not reinforced
+
 
 class TestLastSeen:
     """Phase 3: last_seen field on new facts."""

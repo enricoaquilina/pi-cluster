@@ -27,7 +27,7 @@ def archive_sessions() -> dict:
             data = json.loads(f.read_text())
             started_ms = data.get("startedAt", 0)
             started_dt = datetime.fromtimestamp(started_ms / 1000, tz=timezone.utc)
-            if started_dt.date() == today_date:
+            if started_dt.astimezone().date() == today_date:
                 # Use file mtime as approximate end time
                 mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
                 duration_min = round((mtime - started_dt).total_seconds() / 60)

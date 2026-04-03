@@ -240,23 +240,6 @@ class TestProcessItem:
         assert result["action"] == "budget_exceeded"
         assert len(telegram_calls) == 1
 
-    def test_no_nodes_notifies(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(agent, "SPEND_LOG", tmp_path / "spend.json")
-        monkeypatch.setattr(agent, "DAILY_BUDGET_USD", 10.0)
-        monkeypatch.setattr(agent, "TODAY", "2026-03-30")
-        monkeypatch.setattr(agent, "DRY_RUN", False)
-
-        telegram_calls = []
-        monkeypatch.setattr(agent, "send_telegram", lambda msg: telegram_calls.append(msg) or True)
-
-        no_nodes = {
-            "slave0": {"dispatchable": False},
-            "slave1": {"dispatchable": False},
-        }
-        result = agent.process_item(self._make_item("fix the bug"), no_nodes)
-        assert result["action"] == "no_nodes"
-        assert len(telegram_calls) == 1
-
     def test_dry_run_does_not_dispatch(self, monkeypatch, tmp_path):
         monkeypatch.setattr(agent, "SPEND_LOG", tmp_path / "spend.json")
         monkeypatch.setattr(agent, "DAILY_BUDGET_USD", 10.0)

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -159,6 +160,10 @@ class TestBasicIngestion:
 
 
 class TestTimezones:
+    @pytest.mark.skipif(
+        time.timezone >= 0 and time.daylight == 0,
+        reason="Test requires non-UTC timezone (e.g. CEST) to verify midnight boundary",
+    )
     def test_utc_midnight_boundary(self, life_dir, mc_server):
         """UTC 23:30 on Apr 1 = Apr 2 01:30 CEST → appears in Apr 2 output."""
         _, url, handler = mc_server

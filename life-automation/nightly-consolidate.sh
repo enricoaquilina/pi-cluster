@@ -12,12 +12,9 @@ readonly CLAUDE_BIN="$HOME/.local/bin/claude"
 readonly LOG_DIR="$LIFE_DIR/logs"
 readonly LOCK_FILE="$LOG_DIR/consolidate.lock"
 readonly HEARTBEAT_FILE="$LOG_DIR/consolidate.heartbeat"
-TODAY=$(date '+%Y-%m-%d')
-readonly TODAY
-YEAR=$(date '+%Y')
-readonly YEAR
-MONTH=$(date '+%m')
-readonly MONTH
+readonly TODAY=$(date '+%Y-%m-%d')
+readonly YEAR=$(date '+%Y')
+readonly MONTH=$(date '+%m')
 readonly DAILY_NOTE="$LIFE_DIR/Daily/$YEAR/$MONTH/$TODAY.md"
 
 mkdir -p "$LOG_DIR"
@@ -87,9 +84,8 @@ if [ ${#DAILY_CONTENT} -gt 50000 ]; then
     log "WARNING: daily note truncated to 50000 chars"
 fi
 
-EXISTING=$(find "$LIFE_DIR/Projects/" "$LIFE_DIR/People/" "$LIFE_DIR/Companies/" \
-    -mindepth 1 -maxdepth 1 -type d -not -name '_template' -printf '%f\n' 2>/dev/null \
-    | sort -u || true)
+EXISTING=$(ls "$LIFE_DIR/Projects/" "$LIFE_DIR/People/" "$LIFE_DIR/Companies/" 2>/dev/null \
+    | grep -v '^_template$' | sort -u || true)
 
 # --- Collect recent facts for contradiction detection (last 7 days, ~875 tokens) ---
 RECENT_FACTS=$(python3 -c "

@@ -6,6 +6,7 @@ readonly MEM="$HOME/.claude/projects/-home-enrico/memory"
 
 copy_with_frontmatter() {
     local src="$1" dst="$2" ftype="$3" fname="$4"
+    [[ -f "$src" ]] || { echo "[migrate] skip (source missing): $src"; return; }
     [[ -f "$dst" ]] && { echo "[migrate] exists: $dst"; return; }
     {
         printf -- '---\ntype: %s\nname: %s\ncreated: %s\nlast-updated: %s\nstatus: active\n---\n\n' \

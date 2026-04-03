@@ -2,8 +2,7 @@
 set -euo pipefail
 
 readonly LIFE="$HOME/life"
-TODAY=$(date +%Y-%m-%d)
-readonly TODAY
+readonly TODAY=$(date +%Y-%m-%d)
 
 log() { echo "[init] $*"; }
 
@@ -27,6 +26,17 @@ mkdir -p "$LIFE/Resources/skills"
 # Daily notes use YYYY/MM/ hierarchy
 YEAR=$(date +%Y); MONTH=$(date +%m)
 mkdir -p "$LIFE/Daily/$YEAR/$MONTH"
+
+# --- Copy automation scripts into ~/life/scripts ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+for f in "$SCRIPT_DIR"/*.sh "$SCRIPT_DIR"/*.py; do
+    [[ -f "$f" ]] && cp "$f" "$LIFE/scripts/$(basename "$f")"
+done
+if [[ -d "$SCRIPT_DIR/tests" ]]; then
+    cp "$SCRIPT_DIR"/tests/* "$LIFE/scripts/tests/" 2>/dev/null || true
+    log "copied tests to $LIFE/scripts/tests/"
+fi
+log "copied scripts to $LIFE/scripts/"
 
 # --- CLAUDE.md at home root ---
 create_if_missing "$HOME/CLAUDE.md" <<'HEREDOC'

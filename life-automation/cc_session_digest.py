@@ -300,58 +300,91 @@ def _run_hook_mode() -> bool:
 
 
 def _run_scan_mode() -> None:
-    """Scan for unprocessed transcripts and process them."""
+    """Scan for unprocessed transcripts and process them.
+
+    Digests are filed by the transcript's own date (not today's date),
+    so a missed session from yesterday lands in yesterday's digest file.
+    """
     if not CLAUDE_PROJECTS.is_dir():
         return
 
     today = date.today()
-    dp = _digest_path(today)
+    lock_path = _digest_path(today)
 
-    # Hold flock for entire scan cycle to prevent race with hook mode
-    dp.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(dp), os.O_WRONLY | os.O_CREAT | os.O_APPEND)
+    # Use today's digest as the lock file to prevent race with hook mode
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(str(lock_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND)
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             # Another process holds the lock — skip this scan
             return
-        finally:
-            pass  # Lock acquired or skipped
 
-        # Re-read existing IDs under the lock
-        existing = _existing_session_ids(dp)
+        # Find recent transcripts across all project subdirectories
+        candidate_dates: set[date] = {today}
+        candidate_transcripts = []
+        projects_root = CLAUDE_PROJECTS.parent
+        scan_dirs = [CLAUDE_PROJECTS]
+        if projects_root.is_dir():
+            scan_dirs = [d for d in projects_root.iterdir() if d.is_dir()]
+        for scan_dir in scan_dirs:
+            for f in scan_dir.glob("*.jsonl"):
+                if f.name.startswith("."):
+                    continue
+                try:
+                    mtime_date = datetime.fromtimestamp(f.stat().st_mtime).date()
+                except OSError:
+                    continue
+                if (today - mtime_date).days > 1:
+                    continue
+                candidate_transcripts.append(f)
 
-        # Find today's transcripts (by mtime)
+        # Process candidates to learn their target dates
         new_digests = []
-        for f in CLAUDE_PROJECTS.glob("*.jsonl"):
-            if f.name.startswith("."):
-                continue
-            try:
-                mtime_date = datetime.fromtimestamp(f.stat().st_mtime).date()
-            except OSError:
-                continue
-            if mtime_date != today:
-                continue
-
+        for f in candidate_transcripts:
             session_id = _extract_session_id(f)
-            if session_id in existing:
-                continue
-
             digest = _process_transcript(f)
             if digest is not None:
-                new_digests.append(digest)
-                existing.add(digest["session_id"])  # Prevent intra-scan duplicates
+                target = date.fromisoformat(digest.get("_date", str(today)))
+                candidate_dates.add(target)
+                new_digests.append((session_id, digest))
 
-        # Append all new digests
+        # Build existing set from ALL candidate target dates (not just today/yesterday)
+        existing: set[str] = set()
+        for d in candidate_dates:
+            existing.update(_existing_session_ids(_digest_path(d)))
+
+        # Filter out already-processed and prevent intra-scan duplicates
+        filtered = []
+        for session_id, digest in new_digests:
+            if session_id not in existing:
+                filtered.append(digest)
+                existing.add(session_id)
+        new_digests = filtered
+
+        # Group by transcript date and append to correct digest file
+        by_date: dict[str, list[dict]] = {}
         for digest in new_digests:
-            output = {k: v for k, v in digest.items() if not k.startswith("_")}
-            line = json.dumps(output, ensure_ascii=False) + "\n"
-            os.write(fd, line.encode("utf-8"))
+            d = digest.get("_date", str(today))
+            by_date.setdefault(d, []).append(digest)
+
+        for date_str, digests in by_date.items():
+            target = _digest_path(date.fromisoformat(date_str))
+            if target == lock_path:
+                # We already hold the lock on this file — write directly
+                for digest in digests:
+                    output = {k: v for k, v in digest.items() if not k.startswith("_")}
+                    line = json.dumps(output, ensure_ascii=False) + "\n"
+                    os.write(lock_fd, line.encode("utf-8"))
+            else:
+                # Different file — use _append_digest which acquires its own lock
+                for digest in digests:
+                    _append_digest(digest, target)
 
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 
 def main():
