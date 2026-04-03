@@ -2,6 +2,7 @@
 budget tracking, node resources, and item processing."""
 import json
 import sys
+from datetime import date
 from pathlib import Path
 
 # Ensure the scripts directory is importable
@@ -127,6 +128,84 @@ class TestBudgetTracking:
         monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
         monkeypatch.setattr(agent, "DAILY_BUDGET_USD", 5.0)
         assert agent.budget_ok(0.05) is True
+
+    def test_log_spend_30_day_retention(self, tmp_path, monkeypatch):
+        """Entries older than 30 days should be pruned."""
+        from datetime import timedelta
+        spend_log = tmp_path / "agent-spend.json"
+        monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
+        monkeypatch.setattr(agent, "TODAY", "2026-04-03")
+        old_date = str(date.fromisoformat("2026-04-03") - timedelta(days=31))
+        spend_log.write_text(json.dumps([
+            {"date": old_date, "cost_usd": 1.00, "task": "ancient"},
+        ]))
+        agent.log_spend("new task", 0.10)
+        data = json.loads(spend_log.read_text())
+        assert not any(e["task"] == "ancient" for e in data)
+        assert any(e["task"] == "new task" for e in data)
+
+    def test_log_spend_month_boundary(self, tmp_path, monkeypatch):
+        """Entry from 29 days ago survives, 31 days ago pruned."""
+        from datetime import timedelta
+        spend_log = tmp_path / "agent-spend.json"
+        monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
+        monkeypatch.setattr(agent, "TODAY", "2026-04-03")
+        recent = str(date.fromisoformat("2026-04-03") - timedelta(days=29))
+        old = str(date.fromisoformat("2026-04-03") - timedelta(days=31))
+        spend_log.write_text(json.dumps([
+            {"date": recent, "cost_usd": 0.50, "task": "recent"},
+            {"date": old, "cost_usd": 0.50, "task": "old"},
+        ]))
+        agent.log_spend("today", 0.10)
+        data = json.loads(spend_log.read_text())
+        tasks = [e["task"] for e in data]
+        assert "recent" in tasks
+        assert "old" not in tasks
+        assert "today" in tasks
+
+    def test_log_spend_corrupt_file_recovery(self, tmp_path, monkeypatch):
+        """Corrupt JSON in spend log → starts fresh, doesn't crash."""
+        spend_log = tmp_path / "agent-spend.json"
+        monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
+        monkeypatch.setattr(agent, "TODAY", "2026-04-03")
+        spend_log.write_text("not valid json {{{")
+        agent.log_spend("recovery task", 0.10)
+        data = json.loads(spend_log.read_text())
+        assert len(data) == 1
+        assert data[0]["task"] == "recovery task"
+
+    def test_log_spend_creates_parent_dirs(self, tmp_path, monkeypatch):
+        """Missing logs/ directory created automatically."""
+        spend_log = tmp_path / "deep" / "nested" / "agent-spend.json"
+        monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
+        monkeypatch.setattr(agent, "TODAY", "2026-04-03")
+        agent.log_spend("deep task", 0.10)
+        assert spend_log.exists()
+        data = json.loads(spend_log.read_text())
+        assert data[0]["task"] == "deep task"
+
+    def test_log_spend_task_truncation(self, tmp_path, monkeypatch):
+        """Task names over 200 chars are truncated."""
+        spend_log = tmp_path / "agent-spend.json"
+        monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
+        monkeypatch.setattr(agent, "TODAY", "2026-04-03")
+        long_task = "x" * 300
+        agent.log_spend(long_task, 0.10)
+        data = json.loads(spend_log.read_text())
+        assert len(data[0]["task"]) == 200
+
+    def test_budget_ok_sums_today_only(self, tmp_path, monkeypatch):
+        """budget_ok() should sum only today's entries, not all entries."""
+        spend_log = tmp_path / "agent-spend.json"
+        monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
+        monkeypatch.setattr(agent, "DAILY_BUDGET_USD", 5.0)
+        monkeypatch.setattr(agent, "TODAY", "2026-04-03")
+        spend_log.write_text(json.dumps([
+            {"date": "2026-04-02", "cost_usd": 4.90, "task": "yesterday"},
+            {"date": "2026-04-03", "cost_usd": 0.05, "task": "today"},
+        ]))
+        # Yesterday's $4.90 should NOT count — only today's $0.05
+        assert agent.budget_ok(0.10) is True
 
 
 # ── TestNodeResources ────────────────────────────────────────────────────────

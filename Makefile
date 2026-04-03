@@ -181,7 +181,7 @@ rotate-secrets:
 
 life-check:
 	@echo "=== Life Automation Lint ==="
-	ruff check life-automation/ --select E,F,W --ignore E501
+	ruff check life-automation/
 	@echo ""
 	@echo "=== Life Automation ShellCheck ==="
 	@for f in life-automation/*.sh; do \
@@ -191,8 +191,7 @@ life-check:
 	done
 	@echo ""
 	@echo "=== Life Automation Tests ==="
-	pytest life-automation/tests/ -v --tb=short -m "not local_only" \
-		--ignore=life-automation/tests/test_init.sh
+	pytest life-automation/tests/ -v --tb=short -m "not local_only"
 	@echo ""
 	@echo "=== Life Automation Check Complete ==="
 
