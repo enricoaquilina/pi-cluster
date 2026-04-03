@@ -686,6 +686,11 @@ async function loadBudget() {
         7d avg: $${h.avg_daily_7d.toFixed(4)}/day &middot; peak: $${h.peak_daily_7d.toFixed(4)}/day &middot; ${h.snapshots_7d} snapshots
       </div>`;
     }
+    if (d.stale) {
+      grid.innerHTML += `<div style="grid-column:1/-1;font-size:0.8rem;color:var(--yellow);margin-top:0.25rem">
+        Budget data may be stale — OpenRouter API unreachable
+      </div>`;
+    }
     loadBudgetHistory();
   } catch (e) {
     document.getElementById('budget-grid').innerHTML = '<div style="color:var(--muted)">Budget data unavailable</div>';
@@ -707,6 +712,16 @@ async function loadBudgetHistory() {
       const day = s.snapshot_at.substring(0, 10);
       if (!byDay[day] || s.daily_usd > byDay[day]) byDay[day] = s.daily_usd;
     });
+    // Fill missing days with 0 so the sparkline never has gaps
+    const knownDays = Object.keys(byDay).sort();
+    if (knownDays.length >= 2) {
+      const start = new Date(knownDays[0] + 'T00:00:00');
+      const end = new Date(knownDays[knownDays.length - 1] + 'T00:00:00');
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = d.toISOString().substring(0, 10);
+        if (!(key in byDay)) byDay[key] = 0;
+      }
+    }
     const days = Object.keys(byDay).sort();
     const values = days.map(d => byDay[d]);
     const max = Math.max(...values, 0.01);

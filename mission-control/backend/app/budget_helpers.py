@@ -18,16 +18,41 @@ _budget_cache: tuple[float, dict] = (0, {})
 
 
 def _cached_fetch(provider: str, fetch_fn):
-    """5-minute cache wrapper for any provider fetch."""
+    """5-minute cache wrapper for any provider fetch.
+
+    On success: caches fresh data and returns it.
+    On error (result contains "error" key):
+      - If good cached data exists: returns it with _stale=True, resets retry timer.
+      - Otherwise: returns the error dict.
+    TTL check skips entries with "error" key to force retry after error-only cache.
+    """
     global _budget_cache
     now = time.time()
-    cached = _provider_cache.get(provider, (0, {}))
-    if now - cached[0] < 300 and cached[1]:
-        return cached[1]
+    entry = _provider_cache.get(provider)
+
+    # Return cached if TTL hasn't expired and data is good
+    if entry and now - entry[0] < 300 and entry[1] and "error" not in entry[1]:
+        return entry[1]
+
     result = fetch_fn()
+
+    if "error" not in result:
+        # Success — cache fresh data
+        result.pop("_stale", None)
+        _provider_cache[provider] = (now, result)
+        if provider == "openrouter":
+            _budget_cache = (now, result)
+        return result
+
+    # Fetch failed — return stale cached data if available
+    if entry and entry[1] and "error" not in entry[1]:
+        clean = {k: v for k, v in entry[1].items() if k != "_stale"}
+        stale = {**clean, "_stale": True}
+        _provider_cache[provider] = (now, stale)  # reset retry timer
+        return stale
+
+    # No good cached data at all
     _provider_cache[provider] = (now, result)
-    if provider == "openrouter":
-        _budget_cache = (now, result)
     return result
 
 
@@ -54,8 +79,7 @@ def _fetch_openrouter_usage_inner() -> dict:
         }
     except Exception as e:
         logger.warning("OpenRouter usage fetch failed: %s", e)
-        cached = _provider_cache.get("openrouter", (0, {}))
-        return cached[1] if cached[1] else {"error": str(e)}
+        return {"error": str(e)}
 
 
 def _fetch_openrouter_usage() -> dict:
@@ -166,7 +190,8 @@ def _fetch_all_provider_balances() -> list[dict]:
             results.append({"provider": name, "status": "no_key"})
             continue
         data = fetch_fn()
-        data["status"] = "error" if "error" in data else "ok"
+        is_stale = data.pop("_stale", False)
+        data["status"] = "error" if "error" in data else ("stale" if is_stale else "ok")
         results.append(data)
     for name in ["google_ai", "groq", "zai"]:
         results.append({"provider": name, "status": "dashboard_only"})
