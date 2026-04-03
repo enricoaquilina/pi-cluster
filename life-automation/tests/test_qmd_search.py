@@ -3,10 +3,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 
 SCRIPT = Path(__file__).parent.parent / "qmd_search.py"
 
 
+@pytest.mark.local_only
 class TestQmdSearch:
     def test_bm25_returns_results(self):
         """BM25 search should find gateway in workflow-habits."""
@@ -28,7 +30,6 @@ class TestQmdSearch:
         assert r.returncode == 0
         results = json.loads(r.stdout)
         assert len(results) > 0
-        # Wrapper normalizes QMD's "file" key to "path" with qmd:// stripped
         paths = [item.get("path", "") for item in results]
         assert any("hard-rules" in p for p in paths)
 
@@ -37,7 +38,6 @@ class TestQmdSearch:
             [sys.executable, str(SCRIPT), "", "--mode", "bm25"],
             capture_output=True, text=True
         )
-        # Should not crash
         assert r.returncode == 0
 
     def test_limit_respected(self):
@@ -54,4 +54,4 @@ class TestQmdSearch:
             [sys.executable, str(SCRIPT), "test", "--mode", "invalid"],
             capture_output=True, text=True
         )
-        assert r.returncode != 0  # argparse rejects invalid choice
+        assert r.returncode != 0

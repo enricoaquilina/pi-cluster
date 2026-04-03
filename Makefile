@@ -179,7 +179,24 @@ openclaw-preflight:
 rotate-secrets:
 	ansible-playbook playbooks/secret-rotation.yml --vault-password-file secrets-vault-password
 
-validate: lint test
+life-check:
+	@echo "=== Life Automation Lint ==="
+	ruff check life-automation/ --select E,F,W --ignore E501
+	@echo ""
+	@echo "=== Life Automation ShellCheck ==="
+	@for f in life-automation/*.sh; do \
+		[ -f "$$f" ] || continue; \
+		echo "--- Checking $$f ---"; \
+		shellcheck -S warning "$$f" || exit 1; \
+	done
+	@echo ""
+	@echo "=== Life Automation Tests ==="
+	pytest life-automation/tests/ -v --tb=short -m "not local_only" \
+		--ignore=life-automation/tests/test_init.sh
+	@echo ""
+	@echo "=== Life Automation Check Complete ==="
+
+validate: lint test life-check
 	@echo ""
 	@echo "=== Permission Check ==="
 	@for f in scripts/.env.cluster secrets/*.yml; do \
