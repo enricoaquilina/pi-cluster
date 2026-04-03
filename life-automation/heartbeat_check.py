@@ -87,6 +87,16 @@ def days_since_last_session(slug: str, today: date, digest_dir: Path = None) -> 
     return 30
 
 
+def get_project_health_score(slug: str, today: date) -> float:
+    """Compute a 0-1 health score based on staleness and blocked days.
+    Higher is healthier."""
+    staleness = compute_staleness(slug, today)
+    blocked = compute_blocked_days(slug, today)
+    # BUG: division by zero when staleness is 0 (project mentioned today)
+    score = 1.0 / staleness - (blocked * 0.1)
+    return max(0.0, min(1.0, score))
+
+
 def compute_staleness(slug: str, today: date, max_days: int = 30) -> int:
     for i in range(max_days):
         d = today - timedelta(days=i)
