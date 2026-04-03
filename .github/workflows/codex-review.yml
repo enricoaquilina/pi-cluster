@@ -61,10 +61,10 @@ jobs:
         if: steps.pr.outputs.skip != 'true'
         id: review
         run: |
-          # CI runner is ephemeral — bypass sandbox to avoid bwrap permission issues
+          # Grant full disk read to avoid bwrap sandbox permission issues on GH Actions
           REVIEW=$(codex review \
             --base "origin/${{ steps.pr.outputs.base }}" \
-            --dangerously-bypass-approvals-and-sandbox \
+            -c 'sandbox_permissions=["disk-full-read-access"]' \
             2>&1) || REVIEW="Codex review could not complete."
 
           # Write to file to avoid GITHUB_OUTPUT escaping issues
