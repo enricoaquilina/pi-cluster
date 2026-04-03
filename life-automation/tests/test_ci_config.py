@@ -58,3 +58,12 @@ class TestCIWorkflow:
         """CI should use -m 'not local_only' for test filtering."""
         config = (REPO_ROOT / ".github/workflows/life-automation.yml").read_text()
         assert "not local_only" in config
+
+    def test_ruff_toml_exists(self):
+        """ruff.toml should exist as single source of lint config."""
+        assert (REPO_ROOT / "ruff.toml").exists()
+
+    def test_ruff_version_pinned_in_ci(self):
+        """life-automation.yml should pin ruff version."""
+        config = (REPO_ROOT / ".github/workflows/life-automation.yml").read_text()
+        assert "ruff==" in config

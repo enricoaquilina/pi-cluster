@@ -10,7 +10,6 @@ repos:
     rev: v0.8.0
     hooks:
       - id: ruff
-        args: ["--select", "E,F,W", "--ignore", "E501"]
         files: ^(scripts|mission-control/backend|life-automation)/.*\.py$
 
   - repo: https://github.com/adrienverge/yamllint

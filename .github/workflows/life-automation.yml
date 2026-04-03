@@ -23,10 +23,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.8.0
 
       - name: Lint Python
-        run: ruff check life-automation/ --select E,F,W --ignore E501
+        run: ruff check life-automation/
 
       - name: ShellCheck
         run: |
@@ -57,4 +57,3 @@ jobs:
         run: >
           pytest life-automation/tests/ -v --tb=short
           -m "not local_only"
-          --ignore=life-automation/tests/test_init.sh

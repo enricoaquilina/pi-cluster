@@ -78,13 +78,13 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.8.0
 
       - name: Lint Python scripts
-        run: ruff check scripts/ --select E,F,W --ignore E501
+        run: ruff check scripts/
 
       - name: Lint Mission Control backend
-        run: ruff check mission-control/backend/ --select E,F,W --ignore E501
+        run: ruff check mission-control/backend/
         continue-on-error: true
 
   script-smoke:
