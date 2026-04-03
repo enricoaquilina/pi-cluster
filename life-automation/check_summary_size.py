@@ -87,7 +87,7 @@ def main() -> None:
             if summary.exists():
                 check_entity(summary)
 
-    print(f"[summary-check] Done")
+    print("[summary-check] Done")
 
 
 if __name__ == "__main__":

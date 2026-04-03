@@ -16,7 +16,7 @@ import os
 import re
 import signal
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 # Cron safety: force UTF-8 regardless of locale (cron often has POSIX/C locale)
