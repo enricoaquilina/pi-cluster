@@ -15,6 +15,12 @@ from pathlib import Path
 
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 DRY_RUN = "--dry-run" in sys.argv
+JSON_MODE = "--json" in sys.argv
+
+
+def log(msg: str) -> None:
+    """Print to stderr in JSON mode (keep stdout clean), stdout otherwise."""
+    print(msg, file=sys.stderr if JSON_MODE else sys.stdout)
 MC_API = os.environ.get("MC_API_URL", "http://localhost:3000/api")
 MC_API_KEY = os.environ.get("MC_API_KEY", "")
 REPO_DIR = Path.home() / "pi-cluster"
@@ -44,7 +50,7 @@ def ensure_entity(entity_type: str, slug: str, display: str) -> Path:
 
     if not entity_dir.exists() and not DRY_RUN:
         entity_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[backfill] Created entity dir: {entity_type}/{slug}")
+        log(f"[backfill] Created entity dir: {entity_type}/{slug}")
 
     if not summary_path.exists() and not DRY_RUN:
         summary_path.write_text(
@@ -64,7 +70,7 @@ def ensure_entity(entity_type: str, slug: str, display: str) -> Path:
 def add_fact(items_path: Path, fact: str, category: str, date_str: str, source: str) -> bool:
     """Add fact if not duplicate. Returns True if added."""
     if DRY_RUN:
-        print(f"[backfill] (dry) Would add: {fact[:80]}...")
+        log(f"[backfill] (dry) Would add: {fact[:80]}...")
         return True
 
     items = safe_load_json(items_path)
@@ -88,7 +94,7 @@ def add_relationship(from_slug: str, from_type: str, to_slug: str, to_type: str,
     """Add relationship if not duplicate."""
     rel_path = LIFE_DIR / "relationships.json"
     if DRY_RUN:
-        print(f"[backfill] (dry) Rel: {from_slug} --{relation}--> {to_slug}")
+        log(f"[backfill] (dry) Rel: {from_slug} --{relation}--> {to_slug}")
         return True
 
     rels = safe_load_json(rel_path)
@@ -130,7 +136,7 @@ def classify_pr(title: str) -> str:
 def backfill_github_prs() -> int:
     """Extract facts from merged GitHub PRs."""
     if not REPO_DIR.exists():
-        print("[backfill] No pi-cluster repo found, skipping GitHub PRs")
+        log("[backfill] No pi-cluster repo found, skipping GitHub PRs")
         return 0
 
     try:
@@ -141,11 +147,11 @@ def backfill_github_prs() -> int:
             capture_output=True, text=True, timeout=30, cwd=str(REPO_DIR),
         )
         if result.returncode != 0:
-            print(f"[backfill] gh pr list failed: {result.stderr[:100]}")
+            log(f"[backfill] gh pr list failed: {result.stderr[:100]}")
             return 0
         prs = json.loads(result.stdout)
     except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as e:
-        print(f"[backfill] GitHub PR fetch error: {e}")
+        log(f"[backfill] GitHub PR fetch error: {e}")
         return 0
 
     items_path = ensure_entity("project", "pi-cluster", "Pi Cluster")
@@ -161,7 +167,7 @@ def backfill_github_prs() -> int:
         if add_fact(items_path, fact, category, merged_at, f"backfill/github-pr-{number}"):
             added += 1
 
-    print(f"[backfill] GitHub PRs: {added} facts added to pi-cluster")
+    log(f"[backfill] GitHub PRs: {added} facts added to pi-cluster")
     return added
 
 
@@ -180,7 +186,7 @@ def backfill_mc_tasks() -> int:
         if isinstance(tasks, dict):
             tasks = tasks.get("items", tasks.get("tasks", []))
     except (URLError, json.JSONDecodeError, OSError) as e:
-        print(f"[backfill] MC tasks fetch error: {e}")
+        log(f"[backfill] MC tasks fetch error: {e}")
         return 0
 
     added = 0
@@ -210,7 +216,7 @@ def backfill_mc_tasks() -> int:
         if add_fact(items_path, fact, "deployment", created, "backfill/mc-task"):
             added += 1
 
-    print(f"[backfill] MC tasks: {added} facts added")
+    log(f"[backfill] MC tasks: {added} facts added")
     return added
 
 
@@ -228,7 +234,7 @@ def backfill_dispatch_log() -> int:
         data = json.loads(resp.read().decode())
         entries = data.get("items", []) if isinstance(data, dict) else data
     except (URLError, json.JSONDecodeError, OSError) as e:
-        print(f"[backfill] Dispatch log fetch error: {e}")
+        log(f"[backfill] Dispatch log fetch error: {e}")
         return 0
 
     added = 0
@@ -255,7 +261,7 @@ def backfill_dispatch_log() -> int:
         ):
             added += 1
 
-    print(f"[backfill] Dispatch log: {added} relationships added")
+    log(f"[backfill] Dispatch log: {added} relationships added")
     return added
 
 
@@ -268,7 +274,7 @@ def backfill_claude_memory() -> int:
     ai_pipeline = memory_dir / "project_ai_review_pipeline.md"
 
     if not ai_pipeline.exists():
-        print("[backfill] No unmigrated Claude memory files found")
+        log("[backfill] No unmigrated Claude memory files found")
         return 0
 
     items_path = ensure_entity("project", "pi-cluster", "Pi Cluster")
@@ -289,7 +295,7 @@ def backfill_claude_memory() -> int:
         if add_fact(items_path, fact, "lesson", "2026-03-28", "backfill/claude-memory"):
             added += 1
 
-    print(f"[backfill] Claude memory: {added} facts added")
+    log(f"[backfill] Claude memory: {added} facts added")
     return added
 
 
@@ -298,7 +304,7 @@ def backfill_claude_memory() -> int:
 
 def run_backfill() -> dict:
     """Run all backfill sources."""
-    print(f"[backfill] Starting {'(DRY RUN) ' if DRY_RUN else ''}backfill at {date.today()}")
+    log(f"[backfill] Starting {'(DRY RUN) ' if DRY_RUN else ''}backfill at {date.today()}")
 
     results = {
         "github_prs": backfill_github_prs(),
@@ -308,9 +314,9 @@ def run_backfill() -> dict:
     }
 
     total = sum(results.values())
-    print(f"\n[backfill] Done — {total} total items added")
+    log(f"\n[backfill] Done — {total} total items added")
     for source, count in results.items():
-        print(f"  {source}: {count}")
+        log(f"  {source}: {count}")
 
     return results
 

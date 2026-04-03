@@ -21,6 +21,19 @@ from urllib.error import URLError
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 TODAY = str(date.today())
 DRY_RUN = "--dry-run" in sys.argv
+JSON_MODE = "--json" in sys.argv
+
+
+def log(msg: str) -> None:
+    """Print to stderr in JSON mode (keep stdout clean), stdout otherwise."""
+    print(msg, file=sys.stderr if JSON_MODE else sys.stdout)
+
+
+def _escape_md(text: str) -> str:
+    """Escape Telegram Markdown v1 metacharacters."""
+    for ch in r"\_*`[":
+        text = text.replace(ch, f"\\{ch}")
+    return text
 
 # MC API config
 MC_API = os.environ.get("MC_API_URL", "http://localhost:3000/api")
@@ -114,12 +127,13 @@ def mc_post(endpoint: str, data: dict) -> dict | None:
 def send_telegram(message: str) -> bool:
     """Send message via Telegram bot."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print(f"[agent] Telegram not configured, would send: {message[:100]}")
+        log(f"[agent] Telegram not configured, would send: {message[:100]}")
         return False
     if DRY_RUN:
-        print(f"[agent] (dry) Telegram: {message[:100]}")
+        log(f"[agent] (dry) Telegram: {message[:100]}")
         return True
     try:
+        message = _escape_md(message)
         data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}).encode()
         req = Request(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
@@ -351,7 +365,7 @@ def _generate_prd(title: str, description: str) -> str:
     prd_dir = LIFE_DIR / "Projects" / slug
 
     if DRY_RUN:
-        print(f"[agent] (dry) Would generate PRD for: {title}")
+        log(f"[agent] (dry) Would generate PRD for: {title}")
         return "dry_prd_needed"
 
     if not budget_ok():
@@ -502,7 +516,7 @@ def process_item(item: dict, nodes: dict) -> dict:
             return result
 
         if DRY_RUN:
-            print(f"[agent] (dry) Would dispatch to {persona} on {node}: {title}")
+            log(f"[agent] (dry) Would dispatch to {persona} on {node}: {title}")
             result["action"] = "dry_dispatch"
             return result
 
@@ -541,27 +555,27 @@ def process_item(item: dict, nodes: dict) -> dict:
 
 def run_agent() -> dict:
     """Main agent entry point."""
-    print(f"[agent] Starting heartbeat check at {datetime.now().isoformat()}")
+    log(f"[agent] Starting heartbeat check at {datetime.now().isoformat()}")
 
     # Check node resources
     nodes = check_node_resources()
     if not nodes:
-        print("[agent] WARNING: Could not reach MC nodes API")
+        log("[agent] WARNING: Could not reach MC nodes API")
 
     # Collect actionable items
     items = collect_actionable_items()
     if not items:
-        print("[agent] No actionable items found")
+        log("[agent] No actionable items found")
         return {"timestamp": datetime.now().isoformat(), "items_checked": 0, "actions": []}
 
-    print(f"[agent] Found {len(items)} actionable items")
+    log(f"[agent] Found {len(items)} actionable items")
 
     # Process each item
     actions = []
     for item in items:
         result = process_item(item, nodes)
         actions.append(result)
-        print(f"[agent] {result['action'].upper()}: {result['title'][:80]}")
+        log(f"[agent] {result['action'].upper()}: {result['title'][:80]}")
 
     # Log results
     log_path = LIFE_DIR / "logs" / "agent-runs.json"
