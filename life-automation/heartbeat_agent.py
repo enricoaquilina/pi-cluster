@@ -12,7 +12,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
@@ -275,7 +275,7 @@ def log_spend(task: str, cost_usd: float) -> None:
         "cost_usd": cost_usd,
     })
     # Keep last 30 days
-    cutoff = str(date.today().replace(day=1))  # rough 30-day cutoff
+    cutoff = str(date.today() - timedelta(days=30))
     entries = [e for e in entries if e.get("date", "") >= cutoff]
     SPEND_LOG.write_text(json.dumps(entries, indent=2), encoding="utf-8")
 
