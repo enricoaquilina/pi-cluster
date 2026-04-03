@@ -43,8 +43,9 @@ def extract_section(content: str, header: str) -> str:
 
 def generate_summary(notes: list[tuple[str, str]], ref_date: date) -> str:
     """Generate weekly summary markdown from daily notes."""
-    week_num = ref_date.isocalendar()[1]
-    year = ref_date.year
+    iso = ref_date.isocalendar()
+    week_num = iso[1]
+    year = iso[0]  # ISO year, not Gregorian (differs at year boundaries)
 
     all_work = []
     all_decisions = []
@@ -61,7 +62,7 @@ def generate_summary(notes: list[tuple[str, str]], ref_date: date) -> str:
         if decisions:
             all_decisions.append(f"**{date_str}:** {decisions}")
 
-        pending = extract_section(content, "Pending Items")
+        pending = extract_section(content, "Pending Items") or extract_section(content, "Pending")
         if pending and pending != "- [ ]":
             for line in pending.split("\n"):
                 line = line.strip()
@@ -114,9 +115,10 @@ def write_summary() -> str | None:
         return None
 
     summary = generate_summary(notes, TODAY)
-    week_num = TODAY.isocalendar()[1]
+    iso = TODAY.isocalendar()
+    week_num = iso[1]
 
-    out_dir = LIFE_DIR / "Daily" / str(TODAY.year)
+    out_dir = LIFE_DIR / "Daily" / str(iso[0])
     out_path = out_dir / f"W{week_num:02d}-summary.md"
 
     if not DRY_RUN:

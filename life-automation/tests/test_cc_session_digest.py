@@ -5,7 +5,7 @@ import subprocess
 import sys
 import threading
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -412,6 +412,29 @@ class TestScanMode:
         result = _run_scan(life_dir, projects)
         assert result.returncode == 0
         assert len(_read_digests(life_dir)) == 0
+
+    def test_scan_mode_uses_transcript_date(self, life_dir, tmp_path):
+        """Transcript from yesterday scanned today should land in yesterday's digest."""
+        projects = tmp_path / "projects"
+        projects.mkdir()
+        yesterday = date.fromisoformat(TODAY) - timedelta(days=1)
+        yesterday_ts = datetime(yesterday.year, yesterday.month, yesterday.day, 14, 30).isoformat()
+        # Create transcript with yesterday's timestamp
+        sid = "yesterday-session"
+        tp = projects / f"{sid}.jsonl"
+        lines = [
+            make_line("user", role="user", text="Work from yesterday", ts=yesterday_ts),
+            make_line("assistant", role="assistant"),
+        ] * 5
+        make_transcript(tp, lines)
+
+        _run_scan(life_dir, projects)
+        # Should NOT be in today's digest
+        today_digests = _read_digests(life_dir, TODAY)
+        assert not any(d["session_id"] == sid for d in today_digests)
+        # Should be in yesterday's digest
+        yesterday_digests = _read_digests(life_dir, str(yesterday))
+        assert any(d["session_id"] == sid for d in yesterday_digests)
 
     def test_hook_fallthrough_to_scan(self, life_dir, tmp_path):
         """Empty stdin → falls through to scan mode."""

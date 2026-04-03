@@ -396,13 +396,17 @@ def _generate_prd(title: str, description: str) -> str:
 
     prd_dir.mkdir(parents=True, exist_ok=True)
     _prd_path(title).write_text(prd_content, encoding="utf-8")
-    (prd_dir / "items.json").write_text("[]", encoding="utf-8")
-    (prd_dir / "summary.md").write_text(
-        f"---\ntype: project\nname: {title}\ncreated: {TODAY}\n"
-        f"last-updated: {TODAY}\nstatus: active\n---\n\n"
-        f"## What This Is\n{description or title}\n",
-        encoding="utf-8",
-    )
+    items_path = prd_dir / "items.json"
+    if not items_path.exists():
+        items_path.write_text("[]", encoding="utf-8")
+    summary_path = prd_dir / "summary.md"
+    if not summary_path.exists():
+        summary_path.write_text(
+            f"---\ntype: project\nname: {title}\ncreated: {TODAY}\n"
+            f"last-updated: {TODAY}\nstatus: active\n---\n\n"
+            f"## What This Is\n{description or title}\n",
+            encoding="utf-8",
+        )
 
     log_spend(f"PRD: {title}", 0.005)
 
@@ -504,18 +508,8 @@ def process_item(item: dict, nodes: dict) -> dict:
             result["action"] = "awaiting_approval"
             return result
 
-        # Check node resources
-        preferred_node = "slave0" if persona in ("Archie", "Pixel", "Harbor", "Sentinel") else "slave1"
-        node = find_available_node(preferred_node, nodes)
-
-        if not node:
-            msg = f"⚠️ *No nodes available* for {persona}\n\n{title}\n\n_All nodes at >80% RAM_"
-            send_telegram(msg)
-            result["action"] = "no_nodes"
-            return result
-
         if DRY_RUN:
-            log(f"[agent] (dry) Would dispatch to {persona} on {node}: {title}")
+            log(f"[agent] (dry) Would dispatch to {persona}: {title}")
             result["action"] = "dry_dispatch"
             return result
 

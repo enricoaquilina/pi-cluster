@@ -20,7 +20,7 @@ def search(query: str, mode: str = "bm25", limit: int = 10) -> list[dict]:
 
     try:
         result = subprocess.run(
-            [str(QMD_BIN), cmd, query, "-n", str(limit), "--json"],
+            [str(QMD_BIN), cmd, query, "-n", str(limit), "-c", "life", "--json"],
             capture_output=True, text=True, timeout=30
         )
         if result.returncode != 0:

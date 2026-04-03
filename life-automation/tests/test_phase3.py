@@ -192,6 +192,27 @@ class TestWeeklySummary:
         summary_files = list((life_dir / "Daily/2026").glob("W*-summary.md"))
         assert len(summary_files) == 0  # not written
 
+    def test_iso_week_year_boundary(self, tmp_path):
+        """Jan 1 2027 is ISO week 53 of 2026 — summary should use 2026, not 2027."""
+        # Jan 1 2027 is a Friday → ISO week 53 of 2026
+        boundary_date = "2027-01-01"
+        # Create minimal daily note for this date
+        (tmp_path / "Daily/2027/01").mkdir(parents=True)
+        (tmp_path / f"Daily/2027/01/{boundary_date}.md").write_text(
+            f"---\ndate: {boundary_date}\n---\n\n## What We Worked On\n- Year boundary test\n"
+        )
+        env = os.environ.copy()
+        env["LIFE_DIR"] = str(tmp_path)
+        env["CONSOLIDATION_DATE"] = boundary_date
+        r = subprocess.run(
+            [sys.executable, str(WEEKLY_SCRIPT)],
+            capture_output=True, env=env, text=True,
+        )
+        assert r.returncode == 0
+        # Should be filed under 2026 (ISO year), not 2027 (Gregorian year)
+        assert (tmp_path / "Daily/2026/W53-summary.md").exists()
+        assert not (tmp_path / "Daily/2027/W53-summary.md").exists()
+
 
 class TestCarryForward:
     def test_carries_open_items(self, life_dir):

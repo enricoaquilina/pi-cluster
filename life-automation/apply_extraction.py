@@ -117,8 +117,11 @@ def _similar(a: str, b: str) -> bool:
 
 def reinforce_fact(existing_items: list, new_fact: str) -> bool:
     """If a similar fact already exists, increment its mention count and upgrade confidence.
-    Returns True if fact was reinforced (caller should skip adding)."""
+    Returns True if fact was reinforced (caller should skip adding).
+    Skips superseded items — they should not be reinforced back to life."""
     for item in existing_items:
+        if item.get("confidence") == "superseded":
+            continue
         if _similar(item.get("fact", ""), new_fact):
             mentions = item.get("mentions", 1) + 1
             item["mentions"] = mentions
@@ -176,12 +179,7 @@ def apply(data: dict) -> tuple[int, int, int]:
             category = "event"
         if not DRY_RUN:
             items = safe_load_json(items_path)
-            # Confidence scoring: reinforce existing facts instead of skipping
-            if reinforce_fact(items, fu["fact"]):
-                items_path.write_text(json.dumps(items, indent=2), encoding="utf-8")
-                print(f"[apply] Reinforced fact: {fu['fact'][:60]}...", file=sys.stderr)
-                continue
-            # Handle supersedes from Haiku (Phase 4: delegated contradiction detection)
+            # Handle supersedes — mark old fact before checking reinforcement
             if fu.get("supersedes"):
                 for old_item in items:
                     if _similar(old_item.get("fact", ""), fu["supersedes"]):
@@ -190,6 +188,12 @@ def apply(data: dict) -> tuple[int, int, int]:
                         old_item["confidence"] = "superseded"
                         print(f"[apply] SUPERSEDED: '{old_item['fact'][:50]}...' → '{fu['fact'][:50]}...'", file=sys.stderr)
                         break
+            # Confidence scoring: reinforce existing facts instead of adding duplicates
+            # Runs for both normal and supersede facts — ensures idempotency on re-run
+            if reinforce_fact(items, fu["fact"]):
+                items_path.write_text(json.dumps(items, indent=2), encoding="utf-8")
+                print(f"[apply] Reinforced fact: {fu['fact'][:60]}...", file=sys.stderr)
+                continue
             new_entry = {
                 "date": fu["date"],
                 "fact": fu["fact"],

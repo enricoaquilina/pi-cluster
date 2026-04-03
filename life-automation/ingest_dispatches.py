@@ -23,6 +23,7 @@ LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 TODAY = os.environ.get("CONSOLIDATION_DATE", str(date.today()))
 DRY_RUN = "--dry-run" in sys.argv
 MC_API = os.environ.get("MC_API_URL", "http://localhost:3000/api")
+MC_API_KEY = os.environ.get("MC_API_KEY", "")
 
 TARGET_DATE = date.fromisoformat(TODAY)
 
@@ -31,7 +32,7 @@ def _fetch_dispatches() -> list[dict]:
     """Fetch today's dispatches from MC API."""
     url = f"{MC_API}/dispatch/log?limit=200"
     try:
-        req = Request(url, headers={"Accept": "application/json"})
+        req = Request(url, headers={"Accept": "application/json", "X-Api-Key": MC_API_KEY})
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
     except (URLError, HTTPError, OSError) as e:
