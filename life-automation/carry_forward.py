@@ -4,7 +4,6 @@ Carry forward unchecked pending items from yesterday's daily note to today's.
 Designed to run at session start (called from CLAUDE.md protocol or as a standalone script).
 """
 import os
-import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path

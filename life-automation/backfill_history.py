@@ -7,7 +7,6 @@ Safe to re-run (idempotent). Use --dry-run to preview.
 """
 import json
 import os
-import re
 import subprocess
 import sys
 from datetime import date

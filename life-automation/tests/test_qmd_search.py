@@ -1,10 +1,8 @@
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 
 SCRIPT = Path(__file__).parent.parent / "qmd_search.py"
 

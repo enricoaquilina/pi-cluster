@@ -148,12 +148,12 @@ def main():
     heartbeat = _fetch_heartbeat_actions()
 
     lines = [
-        f"---",
+        "---",
         f"date: {TODAY}",
-        f"source: maxwell-ingest",
-        f"---",
-        f"",
-        f"## Maxwell Dispatch Activity",
+        "source: maxwell-ingest",
+        "---",
+        "",
+        "## Maxwell Dispatch Activity",
     ]
 
     if dispatches is None:

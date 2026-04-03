@@ -276,7 +276,7 @@ class TestFuzzyReinforcement:
         (life_dir / "Projects/pi-cluster/items.json").write_text(json.dumps([
             {"fact": "QMD search works on life directory", "confidence": "single", "mentions": 1, "date": TODAY, "last_seen": TODAY}
         ]))
-        r = run_apply(life_dir, empty_payload(fact_updates=[{
+        run_apply(life_dir, empty_payload(fact_updates=[{
             "entity_type": "project", "entity": "pi-cluster",
             "date": TODAY, "fact": "QMD search works on the life directory", "category": "configuration"
         }]))

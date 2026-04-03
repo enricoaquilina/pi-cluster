@@ -12,7 +12,6 @@ import json
 import os
 import re
 import sys
-import time
 from datetime import date, datetime
 from pathlib import Path
 from urllib.request import Request, urlopen

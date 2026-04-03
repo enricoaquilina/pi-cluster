@@ -4,7 +4,6 @@ import os
 import subprocess
 import sys
 import threading
-from datetime import date, datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -167,7 +166,7 @@ class TestTimezones:
             "items": [_make_dispatch("Pixel", "2026-04-01T23:30:00+00:00")],
             "total": 1, "limit": 200, "offset": 0,
         }
-        result = _run(life_dir, url, today="2026-04-02")
+        _run(life_dir, url, today="2026-04-02")
         content = _output_file(life_dir, "2026-04-02").read_text()
         assert "Pixel" in content
 
@@ -182,7 +181,7 @@ class TestTimezones:
             "total": 2, "limit": 200, "offset": 0,
         }
         (life_dir / "Daily" / "2026" / "03").mkdir(parents=True, exist_ok=True)
-        result = _run(life_dir, url, today="2026-03-31")
+        _run(life_dir, url, today="2026-03-31")
         out = life_dir / "Daily" / "2026" / "03" / "maxwell-2026-03-31.md"
         content = out.read_text()
         assert "Pixel" in content
