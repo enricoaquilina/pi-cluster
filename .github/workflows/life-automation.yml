@@ -56,5 +56,5 @@ jobs:
       - name: Run life-automation tests
         run: >
           pytest life-automation/tests/ -v --tb=short
-          --ignore=life-automation/tests/test_qmd_search.py
+          -m "not local_only"
           --ignore=life-automation/tests/test_init.sh

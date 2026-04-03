@@ -4,8 +4,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 # Ensure the scripts directory is importable
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import heartbeat_agent as agent
@@ -101,7 +99,6 @@ class TestBudgetTracking:
         ]))
         assert agent.budget_ok(0.05) is False
 
-    @pytest.mark.xfail(reason="log_spend writes empty list — budget tracking bug to fix separately")
     def test_log_spend_creates_file(self, tmp_path, monkeypatch):
         spend_log = tmp_path / "logs" / "agent-spend.json"
         monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
@@ -113,7 +110,6 @@ class TestBudgetTracking:
         assert data[0]["cost_usd"] == 0.10
         assert data[0]["task"] == "test task"
 
-    @pytest.mark.xfail(reason="log_spend writes empty list — budget tracking bug to fix separately")
     def test_log_spend_appends(self, tmp_path, monkeypatch):
         spend_log = tmp_path / "agent-spend.json"
         monkeypatch.setattr(agent, "SPEND_LOG", spend_log)
@@ -474,7 +470,6 @@ class TestGeneratePrd:
         assert (project_dir / "items.json").exists()
         assert (project_dir / "summary.md").exists()
 
-    @pytest.mark.xfail(reason="log_spend writes empty list — budget tracking bug to fix separately")
     def test_spend_logged(self, tmp_path, monkeypatch):
         self._setup(tmp_path, monkeypatch)
         monkeypatch.setattr(agent, "DRY_RUN", False)
@@ -586,3 +581,45 @@ class TestProcessItemPlanningGate:
         agent.process_item(item, self._healthy_nodes())
         assert prompts_sent
         assert "My PRD details here" in prompts_sent[0]
+
+
+# ── Telegram Markdown Escaping ─────────────────────────────────────────────
+
+
+class TestTelegramEscaping:
+    """Test _escape_md() escapes Telegram Markdown v1 metacharacters."""
+
+    def test_escapes_underscores(self):
+        assert agent._escape_md("gym_tracker_app") == r"gym\_tracker\_app"
+
+    def test_escapes_brackets(self):
+        assert agent._escape_md("[x] done") == r"\[x] done"
+
+    def test_escapes_backticks(self):
+        assert agent._escape_md("run `qmd embed`") == r"run \`qmd embed\`"
+
+    def test_escapes_asterisks(self):
+        assert agent._escape_md("*bold text*") == r"\*bold text\*"
+
+    def test_plain_text_unchanged(self):
+        assert agent._escape_md("normal text here") == "normal text here"
+
+    def test_mixed_content(self):
+        """Real-world task title with multiple metacharacters."""
+        text = "Fix [gym_tracker_app] `config` *urgent*"
+        escaped = agent._escape_md(text)
+        assert "\\_" in escaped
+        assert "\\[" in escaped
+        assert "\\`" in escaped
+        assert "\\*" in escaped
+        # Original text structure preserved
+        assert "Fix" in escaped
+        assert "config" in escaped
+
+    def test_empty_string(self):
+        assert agent._escape_md("") == ""
+
+    def test_backslash_in_escape_chars(self):
+        """Backslash before metachar should still escape the metachar."""
+        result = agent._escape_md("path\\to\\_file")
+        assert "\\_" in result
