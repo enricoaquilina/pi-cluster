@@ -61,8 +61,10 @@ jobs:
         if: steps.pr.outputs.skip != 'true'
         id: review
         run: |
+          # Disable sandbox to avoid bwrap permission issues on GH Actions runners
           REVIEW=$(codex review \
             --base "origin/${{ steps.pr.outputs.base }}" \
+            -c 'sandbox=false' \
             2>&1) || REVIEW="Codex review could not complete."
 
           # Write to file to avoid GITHUB_OUTPUT escaping issues
