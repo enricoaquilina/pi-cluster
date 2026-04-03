@@ -87,6 +87,19 @@ def days_since_last_session(slug: str, today: date, digest_dir: Path = None) -> 
     return 30
 
 
+def get_all_health_scores(today: date) -> dict[str, float]:
+    """Get health scores for all active projects from today's note."""
+    note_path = daily_note_path(today)
+    if not note_path.exists():
+        return {}
+    content = note_path.read_text(encoding="utf-8")
+    projects = parse_active_projects(content)
+    scores = {}
+    for proj in projects:
+        scores[proj["slug"]] = get_project_health_score(proj["slug"], today)
+    return scores
+
+
 def get_project_health_score(slug: str, today: date) -> float:
     """Compute a 0-1 health score for a project.
     Based on staleness (days since last mention) and consecutive blocked days.
