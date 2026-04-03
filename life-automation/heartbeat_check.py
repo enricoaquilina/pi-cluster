@@ -93,6 +93,7 @@ def get_project_health_score(slug: str, today: date) -> float:
     Returns 1.0 for healthy, 0.0 for critical."""
     staleness = compute_staleness(slug, today)
     blocked = compute_blocked_days(slug, today)
+    # Freshness decays with staleness, penalized by blocked days
     score = 1.0 / staleness - (blocked * 0.1)
     return max(0.0, min(1.0, score))
 
