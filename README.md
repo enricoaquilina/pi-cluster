@@ -104,12 +104,12 @@ Alerts via Telegram:
 
 ### Memory & Knowledge Base
 
-PARA-structured knowledge system at `~/life/` on heavy with 3 layers:
-- **Knowledge Graph** — entity folders with `summary.md` + `items.json`
+PARA-structured knowledge system at `~/life/` on heavy with automation in `life-automation/`:
+- **Knowledge Graph** — entity folders with `summary.md` + `items.json` (confidence scoring, temporal decay)
 - **Daily Notes** — session logs at `Daily/YYYY/MM/YYYY-MM-DD.md`, heartbeat reference
 - **Tacit Knowledge** — rules, habits, lessons in `Areas/about-me/`
 
-Nightly consolidation (2 AM) extracts facts from daily notes via Claude Haiku. Integrated with Mission Control's Memories tab. See [architecture.md](docs/architecture.md) for details.
+Nightly consolidation (2 AM) extracts facts from daily notes via Claude Haiku, with entity slug normalization, temporal-aware decay, and summary size monitoring. The `~/life/scripts/` directory symlinks to `life-automation/` in this repo. See [architecture.md](docs/architecture.md) for details.
 
 ## Project Structure
 
@@ -120,6 +120,8 @@ homelab/
 ├── vars/                # Variable files
 ├── templates/           # Jinja2 templates (systemd, configs)
 ├── scripts/             # Bash/Python scripts (router, watchdog, health, etc.)
+├── life-automation/     # Knowledge base automation (symlinked from ~/life/scripts/)
+│   └── tests/           # pytest suite (281 tests)
 ├── secrets/             # Ansible Vault encrypted secrets
 ├── docs/                # Architecture, runbook, DR procedures
 ├── .github/workflows/   # CI/CD: review, fix, merge, lint, security

@@ -1,0 +1,60 @@
+---
+name: Life Automation
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "life-automation/**"
+  pull_request:
+    branches: [master, main]
+    paths:
+      - "life-automation/**"
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint Python
+        run: ruff check life-automation/ --select E,F,W --ignore E501
+
+      - name: ShellCheck
+        run: |
+          failed=0
+          for f in life-automation/*.sh; do
+            [ -f "$f" ] || continue
+            echo "--- Checking $f ---"
+            if ! shellcheck -S warning "$f"; then
+              failed=1
+            fi
+          done
+          exit $failed
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Run life-automation tests
+        run: >
+          pytest life-automation/tests/ -v --tb=short
+          --ignore=life-automation/tests/test_qmd_search.py
+          --ignore=life-automation/tests/test_init.sh

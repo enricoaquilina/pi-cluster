@@ -15,6 +15,7 @@ ansible/logs/
 # Python virtual environments
 .venv/
 __pycache__/
+.pytest_cache/
 scripts/.env.cluster
 
 # Secrets - never commit
