@@ -2,7 +2,8 @@
 set -euo pipefail
 
 readonly LIFE="$HOME/life"
-readonly TODAY=$(date +%Y-%m-%d)
+TODAY=$(date +%Y-%m-%d)
+readonly TODAY
 
 log() { echo "[init] $*"; }
 
