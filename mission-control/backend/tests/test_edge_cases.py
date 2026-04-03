@@ -104,7 +104,7 @@ async def test_dispatch_personas_endpoint(client):
     assert resp.status_code == 200
     data = resp.json()
     assert "Archie" in data
-    assert data["Archie"]["node"] == "slave0"
+    assert data["Archie"]["node"] == "gateway"
     assert data["Archie"]["team"] == "Engineering"
 
 
