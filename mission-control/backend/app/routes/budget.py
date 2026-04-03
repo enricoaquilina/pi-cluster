@@ -18,18 +18,21 @@ def get_budget(conn=Depends(get_db)):
     usage = _fetch_openrouter_usage()
     if "error" in usage:
         raise HTTPException(503, detail=usage["error"])
+    is_stale = bool(usage.get("_stale", False))
+    clean_usage = {k: v for k, v in usage.items() if not k.startswith("_")}
     result = {
-        "usage": usage,
+        "usage": clean_usage,
+        "stale": is_stale,
         "limits": {"daily": BUDGET_DAILY, "weekly": BUDGET_WEEKLY, "monthly": BUDGET_MONTHLY},
         "remaining": {
-            "daily": round(BUDGET_DAILY - usage["daily_usd"], 2),
-            "weekly": round(BUDGET_WEEKLY - usage["weekly_usd"], 2),
-            "monthly": round(BUDGET_MONTHLY - usage["monthly_usd"], 2),
+            "daily": round(BUDGET_DAILY - clean_usage["daily_usd"], 2),
+            "weekly": round(BUDGET_WEEKLY - clean_usage["weekly_usd"], 2),
+            "monthly": round(BUDGET_MONTHLY - clean_usage["monthly_usd"], 2),
         },
         "alerts": {
-            "daily": usage["daily_usd"] >= BUDGET_DAILY * BUDGET_ALERT_THRESHOLD,
-            "weekly": usage["weekly_usd"] >= BUDGET_WEEKLY * BUDGET_ALERT_THRESHOLD,
-            "monthly": usage["monthly_usd"] >= BUDGET_MONTHLY * BUDGET_ALERT_THRESHOLD,
+            "daily": clean_usage["daily_usd"] >= BUDGET_DAILY * BUDGET_ALERT_THRESHOLD,
+            "weekly": clean_usage["weekly_usd"] >= BUDGET_WEEKLY * BUDGET_ALERT_THRESHOLD,
+            "monthly": clean_usage["monthly_usd"] >= BUDGET_MONTHLY * BUDGET_ALERT_THRESHOLD,
         },
     }
     try:

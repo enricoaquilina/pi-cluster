@@ -43,7 +43,7 @@ async def _budget_snapshot():
         conn = _pool.getconn()
         try:
             usage = _fetch_openrouter_usage()
-            if "error" not in usage:
+            if "error" not in usage and not usage.get("_stale"):
                 with conn.cursor() as cur:
                     cur.execute(
                         """INSERT INTO budget_snapshots
