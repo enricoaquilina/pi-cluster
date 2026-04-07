@@ -75,7 +75,13 @@ cp /home/enrico/homelab/secrets/*.yml "$BACKUP_DIR/ansible/" 2>/dev/null || true
 cp /home/enrico/homelab/vars/*.yml "$BACKUP_DIR/ansible/" 2>/dev/null || true
 cp /home/enrico/homelab/inventory/hosts.yml "$BACKUP_DIR/ansible/" 2>/dev/null || true
 
-# 6. Cloudflare tunnel config (lives on heavy)
+# 6. Polymarket-bot runtime config (gitignored, lives on master /mnt/external)
+log "Backing up polymarket-bot runtime config..."
+mkdir -p "$BACKUP_DIR/polymarket-bot"
+cp /mnt/external/polymarket-bot/data/control.json "$BACKUP_DIR/polymarket-bot/" 2>/dev/null || log "  WARN: control.json not found"
+cp /mnt/external/polymarket-bot/data/positions.json "$BACKUP_DIR/polymarket-bot/" 2>/dev/null || true
+
+# 7. Cloudflare tunnel config (lives on heavy)
 log "Backing up tunnel config..."
 cluster_ssh "${HEAVY_HOST:-heavy}" "cat /etc/cloudflared/config.yml" \
     > "$BACKUP_DIR/gateway/cloudflared.yml" 2>/dev/null || log "  WARN: cloudflared config not found on heavy"
