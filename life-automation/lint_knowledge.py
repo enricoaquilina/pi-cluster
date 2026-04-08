@@ -7,8 +7,9 @@ Checks:
   3. Empty entity dirs — dirs in Projects/People/Companies without summary.md
 
 Usage:
-    python3 lint_knowledge.py              # Check all
-    python3 lint_knowledge.py --dry-run    # Same (lint is read-only by default)
+    python3 lint_knowledge.py              # Check all (read-only)
+    python3 lint_knowledge.py --fix        # Auto-fix: create missing entities from templates
+    python3 lint_knowledge.py --fix --dry-run  # Show what would be fixed without writing
     python3 lint_knowledge.py --json       # Output structured JSON
 
 Environment:
@@ -28,6 +29,8 @@ if not TODAY:
     TODAY = str(date.today())
 
 JSON_OUTPUT = "--json" in sys.argv
+FIX_MODE = "--fix" in sys.argv
+DRY_RUN = "--dry-run" in sys.argv
 
 ENTITY_TYPES = ["Projects", "People", "Companies"]
 TYPE_MAP = {"person": "People", "project": "Projects", "company": "Companies"}
@@ -39,6 +42,37 @@ def finding(category: str, message: str, path: str = "") -> None:
     findings.append({"category": category, "message": message, "path": path})
     if not JSON_OUTPUT:
         print(f"[lint] {category}: {message}")
+
+
+def _load_template(parent_dir: str) -> tuple[str, str]:
+    """Load summary.md and items.json from _template/ for entity type."""
+    tmpl = LIFE_DIR / parent_dir / "_template"
+    try:
+        summary = (tmpl / "summary.md").read_text(encoding="utf-8") if (tmpl / "summary.md").exists() else ""
+    except OSError:
+        summary = ""
+    try:
+        items = (tmpl / "items.json").read_text(encoding="utf-8") if (tmpl / "items.json").exists() else "[]"
+    except OSError:
+        items = "[]"
+    return summary, items
+
+
+def _fix_create_entity(slug: str, parent_dir: str) -> None:
+    """Create missing entity dir + summary.md + items.json from template."""
+    if not slug or not slug.strip():
+        print(f"[lint] SKIP FIX: empty slug for {parent_dir}")
+        return
+    entity_dir = LIFE_DIR / parent_dir / slug
+    entity_dir.mkdir(parents=True, exist_ok=True)
+    summary_tmpl, items_tmpl = _load_template(parent_dir)
+    display = slug.replace("-", " ").title()
+    summary = summary_tmpl.replace("Display Name", display).replace("YYYY-MM-DD", TODAY)
+    if not (entity_dir / "summary.md").exists():
+        (entity_dir / "summary.md").write_text(summary, encoding="utf-8")
+    if not (entity_dir / "items.json").exists():
+        (entity_dir / "items.json").write_text(items_tmpl, encoding="utf-8")
+    print(f"[lint] FIXED: Created {parent_dir}/{slug}/")
 
 
 def check_orphan_relationships(relationships: list[dict]) -> None:
@@ -59,6 +93,8 @@ def check_orphan_relationships(relationships: list[dict]) -> None:
                     f"'{slug}' ({role_type}) in relationships.json has no {parent}/{slug}/ dir",
                     str(entity_dir),
                 )
+                if FIX_MODE and not DRY_RUN:
+                    _fix_create_entity(slug, parent)
 
 
 def check_stale_relationships(relationships: list[dict]) -> None:
@@ -93,6 +129,8 @@ def check_empty_entity_dirs() -> None:
                     f"{entity_type}/{d.name}/ has no summary.md",
                     str(d),
                 )
+                if FIX_MODE and not DRY_RUN:
+                    _fix_create_entity(d.name, entity_type)
 
 
 def _load_aliases() -> dict[str, str]:
