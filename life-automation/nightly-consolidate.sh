@@ -184,6 +184,9 @@ export CONSOLIDATION_DATE="$TODAY"
 python3 "$LIFE_DIR/scripts/apply_extraction.py" < "$TMPFILE" \
     | tee -a "$LOG_DIR/consolidate.log"
 
+# Log operation
+python3 "$LIFE_DIR/scripts/log_operation.py" "consolidate" "Extraction applied for $TODAY" 2>/dev/null || true
+
 # --- Auto-archive completed projects ---
 log "Checking for completed projects to archive..."
 python3 "$LIFE_DIR/scripts/auto_archive.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"

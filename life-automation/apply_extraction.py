@@ -209,6 +209,40 @@ def apply(data: dict) -> tuple[int, int, int]:
         print(f"[apply] {'(dry) ' if DRY_RUN else ''}Fact → {fu['entity']}: {fu['fact'][:60]}...")
         updated += 1
 
+    # Cross-reference propagation: if a fact mentions another known entity,
+    # add a reciprocal fact to that entity (Karpathy-style cross-linking)
+    if not DRY_RUN:
+        try:
+            rels = json.loads((LIFE_DIR / "relationships.json").read_text(encoding="utf-8"))
+            known_slugs = {e.get("from") for e in rels} | {e.get("to") for e in rels}
+        except (OSError, json.JSONDecodeError):
+            known_slugs = set()
+
+        for fu in data.get("fact_updates", []):
+            source_entity = fu.get("entity", "")
+            fact_text = fu.get("fact", "")
+            for slug in known_slugs:
+                if slug == source_entity or not slug:
+                    continue
+                if slug in fact_text.lower() or slug.replace("-", " ") in fact_text.lower():
+                    # Find this entity's items.json
+                    for etype in TYPE_TO_DIR.values():
+                        cross_items_path = LIFE_DIR / etype / slug / "items.json"
+                        if cross_items_path.exists():
+                            cross_items = safe_load_json(cross_items_path)
+                            cross_fact = f"Related: {fact_text[:150]} (via {source_entity})"
+                            if not reinforce_fact(cross_items, cross_fact):
+                                cross_items.append({
+                                    "date": TODAY, "fact": cross_fact,
+                                    "category": fu.get("category", "event"),
+                                    "source": f"cross-ref/{source_entity}",
+                                    "confidence": "single", "mentions": 1,
+                                    "last_seen": TODAY, "temporal": False,
+                                })
+                                cross_items_path.write_text(json.dumps(cross_items, indent=2), encoding="utf-8")
+                                print(f"[apply] Cross-ref → {slug}: {cross_fact[:60]}...")
+                            break  # Found the entity dir, stop searching
+
     # Layer 5: Procedural skills
     skills_dir = LIFE_DIR / "Resources" / "skills"
     for sk in data.get("skills", []):

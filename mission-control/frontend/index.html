@@ -345,7 +345,13 @@
 
 <!-- Knowledge Base -->
 <div class="screen" id="screen-knowledge">
-  <div style="display:grid;grid-template-columns:280px 1fr;gap:1rem;height:calc(100vh - 180px);">
+  <!-- View toggle -->
+  <div style="display:flex;gap:0.5rem;margin-bottom:0.75rem;">
+    <button class="tab-btn active" id="kb-view-browse" onclick="showKBView('browse')" style="font-size:0.8rem;padding:0.3rem 0.8rem;">Browse</button>
+    <button class="tab-btn" id="kb-view-graph" onclick="showKBView('graph')" style="font-size:0.8rem;padding:0.3rem 0.8rem;">Graph</button>
+  </div>
+  <!-- Browse view -->
+  <div id="kb-browse" style="display:grid;grid-template-columns:280px 1fr 220px;gap:1rem;height:calc(100vh - 220px);">
     <div style="background:var(--surface);border-radius:8px;padding:1rem;overflow-y:auto;">
       <h3 style="margin:0 0 0.75rem;color:var(--accent);">Browse ~/life</h3>
       <input type="text" id="knowledge-search" placeholder="Search..." onkeydown="if(event.key==='Enter')searchKnowledge()"
@@ -357,6 +363,16 @@
         <p style="color:var(--muted);">Select a file from the tree or search to view content.</p>
       </div>
     </div>
+    <div style="background:var(--surface);border-radius:8px;padding:1rem;overflow-y:auto;">
+      <h4 style="margin:0 0 0.5rem;color:var(--accent);font-size:0.85rem;">Backlinks</h4>
+      <div id="knowledge-backlinks" style="font-size:0.8rem;color:var(--muted);">
+        <p>View a file to see backlinks.</p>
+      </div>
+    </div>
+  </div>
+  <!-- Graph view -->
+  <div id="kb-graph" style="display:none;height:calc(100vh - 220px);">
+    <iframe id="kb-graph-iframe" style="width:100%;height:100%;border:none;border-radius:8px;background:var(--surface);" src="about:blank"></iframe>
   </div>
 </div>
 
@@ -1285,6 +1301,40 @@ setInterval(() => {
 // ── Knowledge Base ──────────────────────────────────────────────────────────
 
 let _knowledgeLoaded = false;
+let _currentKBPath = '';
+
+function showKBView(view) {
+  document.getElementById('kb-browse').style.display = view === 'browse' ? 'grid' : 'none';
+  document.getElementById('kb-graph').style.display = view === 'graph' ? 'block' : 'none';
+  document.getElementById('kb-view-browse').classList.toggle('active', view === 'browse');
+  document.getElementById('kb-view-graph').classList.toggle('active', view === 'graph');
+  if (view === 'graph') {
+    const iframe = document.getElementById('kb-graph-iframe');
+    if (iframe.src === 'about:blank') iframe.src = '/knowledge/graph.html';
+  }
+}
+
+async function loadBacklinks(path) {
+  const el = document.getElementById('knowledge-backlinks');
+  // Extract slug from path (e.g., "Projects/pi-cluster/summary.md" → "pi-cluster")
+  const parts = path.split('/');
+  const slug = parts.length >= 2 ? parts[parts.length - 2] : parts[0].replace('.md', '');
+  if (!slug || slug === '_template') { el.innerHTML = '<p>No backlinks.</p>'; return; }
+  try {
+    // Search QMD for mentions of this entity
+    const resp = await fetch(`${API}/qmd/search?q=${encodeURIComponent(slug)}&mode=bm25&limit=10`, {headers: hdr()});
+    if (!resp.ok) { el.innerHTML = '<p>Search unavailable.</p>'; return; }
+    const data = await resp.json();
+    if (!data.results || !data.results.length) { el.innerHTML = '<p>No backlinks found.</p>'; return; }
+    let html = '';
+    for (const r of data.results) {
+      const rpath = r.path || r.file || '';
+      if (rpath === path) continue; // skip self
+      html += `<div style="padding:0.2rem 0;cursor:pointer;color:var(--accent);" onclick="loadKnowledgeFile('${rpath}')">${rpath}</div>`;
+    }
+    el.innerHTML = html || '<p>No backlinks found.</p>';
+  } catch (err) { el.innerHTML = '<p>Error loading backlinks.</p>'; }
+}
 
 async function loadKnowledgeTree() {
   if (_knowledgeLoaded) return;
@@ -1342,6 +1392,8 @@ async function loadKnowledgeFile(path) {
     md = md.replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg);padding:0.5rem;border-radius:4px;overflow-x:auto;">$1</pre>');
     md = md.replace(/^---$/gm, '<hr style="border-color:var(--border);">');
     el.innerHTML = `<div style="max-width:800px;">${md}</div>`;
+    _currentKBPath = path;
+    loadBacklinks(path);
   } catch (err) { el.textContent = 'Error: ' + err.message; }
 }
 

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>~/life Knowledge Graph</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+body { margin: 0; background: #0a0e17; font-family: system-ui; color: #e0e0e0; }
+svg { width: 100vw; height: 100vh; }
+.node circle { stroke: #333; stroke-width: 1.5px; cursor: pointer; }
+.node.orphan circle { stroke-dasharray: 4; opacity: 0.6; }
+.node text { font-size: 11px; fill: #ccc; pointer-events: none; }
+.edge line { stroke: #555; stroke-width: 1px; }
+.edge text { font-size: 9px; fill: #888; }
+.tooltip { position: absolute; background: #1a1f2e; border: 1px solid #333;
+  padding: 8px 12px; border-radius: 6px; font-size: 12px; pointer-events: none; }
+h1 { position: absolute; top: 10px; left: 20px; font-size: 16px; color: #4f8ff7; }
+</style>
+</head><body>
+<h1>~/life Knowledge Graph</h1>
+<div id="tooltip" class="tooltip" style="display:none"></div>
+<svg></svg>
+<script>
+const data = {"nodes": [{"id": "gym-tracker-app", "type": "project", "label": "Gym Tracker App", "status": "active", "facts": 1, "has_dir": true}, {"id": "openclaw-maxwell", "type": "project", "label": "Openclaw Maxwell", "status": "active", "facts": 1, "has_dir": true}, {"id": "pi-cluster", "type": "project", "label": "Pi Cluster", "status": "active", "facts": 131, "has_dir": true}, {"id": "polymarket-bot", "type": "project", "label": "Polymarket Bot", "status": "active", "facts": 12, "has_dir": true}, {"id": "archie", "type": "person", "label": "Archie", "status": "active", "facts": 0, "has_dir": true}, {"id": "coding", "type": "person", "label": "Coding", "status": "active", "facts": 0, "has_dir": true}, {"id": "harbor", "type": "person", "label": "Harbor", "status": "active", "facts": 0, "has_dir": true}, {"id": "pixel", "type": "person", "label": "Pixel", "status": "active", "facts": 0, "has_dir": true}, {"id": "sentinel", "type": "person", "label": "Sentinel", "status": "active", "facts": 0, "has_dir": true}, {"id": "anthropic", "type": "company", "label": "Anthropic", "status": "active", "facts": 0, "has_dir": true}, {"id": "cloudflare", "type": "company", "label": "Cloudflare", "status": "active", "facts": 0, "has_dir": true}, {"id": "openrouter", "type": "company", "label": "Openrouter", "status": "active", "facts": 0, "has_dir": true}], "edges": [{"source": "archie", "target": "pi-cluster", "relation": "works-on"}, {"source": "pixel", "target": "pi-cluster", "relation": "works-on"}, {"source": "harbor", "target": "pi-cluster", "relation": "works-on"}, {"source": "sentinel", "target": "pi-cluster", "relation": "works-on"}, {"source": "anthropic", "target": "openclaw-maxwell", "relation": "provides"}, {"source": "openrouter", "target": "pi-cluster", "relation": "provides"}, {"source": "cloudflare", "target": "pi-cluster", "relation": "provides"}, {"source": "coding", "target": "pi-cluster", "relation": "works-on"}, {"source": "pixel", "target": "gym-tracker-app", "relation": "manages"}]};
+const colors = {"project": "#50C878", "person": "#4A90D9", "company": "#F5A623"};
+const width = window.innerWidth, height = window.innerHeight;
+
+const svg = d3.select("svg").attr("viewBox", [0, 0, width, height]);
+const g = svg.append("g");
+svg.call(d3.zoom().on("zoom", (e) => g.attr("transform", e.transform)));
+
+const sim = d3.forceSimulation(data.nodes)
+  .force("link", d3.forceLink(data.edges).id(d => d.id).distance(120))
+  .force("charge", d3.forceManyBody().strength(-300))
+  .force("center", d3.forceCenter(width/2, height/2));
+
+const edge = g.selectAll(".edge").data(data.edges).join("g").attr("class","edge");
+edge.append("line");
+edge.append("text").text(d => d.relation).attr("text-anchor","middle");
+
+const node = g.selectAll(".node").data(data.nodes).join("g")
+  .attr("class", d => "node" + (d.has_dir ? "" : " orphan"))
+  .call(d3.drag().on("start",(e,d)=>{sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y})
+    .on("drag",(e,d)=>{d.fx=e.x;d.fy=e.y}).on("end",(e,d)=>{sim.alphaTarget(0);d.fx=null;d.fy=null}));
+
+node.append("circle").attr("r", d => 8 + Math.sqrt(d.facts))
+  .attr("fill", d => colors[d.type] || "#999");
+node.append("text").text(d => d.label).attr("dx", 14).attr("dy", 4);
+
+const tip = d3.select("#tooltip");
+node.on("mouseover", (e,d) => {
+  tip.style("display","block").html(
+    `<b>${d.label}</b><br>Type: ${d.type}<br>Status: ${d.status}<br>Facts: ${d.facts}`
+  ).style("left",(e.pageX+12)+"px").style("top",(e.pageY-12)+"px");
+}).on("mouseout", () => tip.style("display","none"));
+
+sim.on("tick", () => {
+  edge.select("line").attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+    .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+  edge.select("text").attr("x",d=>(d.source.x+d.target.x)/2).attr("y",d=>(d.source.y+d.target.y)/2);
+  node.attr("transform",d=>`translate(${d.x},${d.y})`);
+});
+</script></body></html>
