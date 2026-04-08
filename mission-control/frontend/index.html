@@ -450,7 +450,7 @@ function getTab() {
   return ['tasks', 'memories', 'team', 'cluster', 'dispatch', 'knowledge'].includes(h) ? h : 'tasks';
 }
 
-document.querySelectorAll('.tab-btn').forEach(btn => {
+document.querySelectorAll('.tab-bar > .tab-btn[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => {
     location.hash = btn.dataset.tab;
   });
