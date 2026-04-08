@@ -385,7 +385,7 @@ check_life_sync() {
         return
     fi
     # Check git fsck
-    if ! git -C "$life_dir" fsck --no-dangling --quiet 2>/dev/null; then
+    if ! git -C "$life_dir" fsck --no-dangling 2>/dev/null; then
         check_service "life-sync" "degraded" "git fsck failed"
         return
     fi

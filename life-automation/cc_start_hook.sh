@@ -54,8 +54,8 @@ DAILY_NOTE="$LIFE_DIR/Daily/$YEAR/$MONTH/$TODAY.md"
 if [ -f "$DAILY_NOTE" ]; then
     echo ""
     echo "## Daily Note Summary"
-    /usr/bin/awk '/^## Active Projects/,/^## [^A]/{print}' "$DAILY_NOTE" 2>/dev/null | head -20
-    /usr/bin/awk '/^## Pending Items/,/^## [^P]/{print}' "$DAILY_NOTE" 2>/dev/null | head -10
+    /usr/bin/awk '/^## [^A]/ && p{p=0} /^## Active Projects/{p=1} p' "$DAILY_NOTE" 2>/dev/null | head -20
+    /usr/bin/awk '/^## [^P]/ && p{p=0} /^## Pending Items/{p=1} p' "$DAILY_NOTE" 2>/dev/null | head -10
 fi
 
 # --- Yesterday's session digests ---

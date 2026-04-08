@@ -185,7 +185,7 @@ if [ -d "$LIFE_DIR/.git" ]; then
     else
         fail "life commit freshness" "last commit ${age_hours}h ago (>48h)"
     fi
-    if git -C "$LIFE_DIR" fsck --no-dangling --quiet 2>/dev/null; then
+    if git -C "$LIFE_DIR" fsck --no-dangling 2>/dev/null; then
         pass "life git fsck clean"
     else
         fail "life git fsck" "repository corruption detected"
