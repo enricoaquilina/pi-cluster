@@ -200,6 +200,10 @@ python3 "$LIFE_DIR/scripts/dedup_skills.py" 2>&1 | tee -a "$LOG_DIR/consolidate.
 log "Running fact decay..."
 python3 "$LIFE_DIR/scripts/decay_facts.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
+# --- Decay dashboard (Phase 4: fact health report) ---
+log "Generating decay dashboard..."
+python3 "$LIFE_DIR/scripts/generate_decay_dashboard.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
 # --- Summary size check ---
 log "Checking summary sizes..."
 python3 "$LIFE_DIR/scripts/check_summary_size.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
@@ -229,6 +233,10 @@ python3 "$LIFE_DIR/scripts/session_search.py" --backfill-maxwell 2>&1 | tee -a "
 # --- Generate index.md (Phase 3: content catalog) ---
 log "Generating knowledge base index..."
 python3 "$LIFE_DIR/scripts/generate_index.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+# --- Knowledge graph (Phase 4: visualization) ---
+log "Generating knowledge graph..."
+python3 "$LIFE_DIR/scripts/generate_graph.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
 # --- Knowledge lint (Phase 3: consistency checks) ---
 log "Running knowledge lint..."

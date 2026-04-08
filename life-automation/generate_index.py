@@ -5,6 +5,7 @@ Regenerated nightly. Only writes if body content changed (avoids noisy git diffs
 
 Usage:
     python3 generate_index.py              # Generate/update index.md
+    python3 generate_index.py --llm        # Use Claude Haiku for entity descriptions
     python3 generate_index.py --dry-run    # Print to stdout, don't write
 
 Environment:
@@ -14,7 +15,10 @@ Environment:
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
@@ -24,7 +28,9 @@ if not TODAY:
     TODAY = str(date.today())
 
 DRY_RUN = "--dry-run" in sys.argv
+LLM_MODE = "--llm" in sys.argv
 ENTITY_TYPES = ["Projects", "People", "Companies"]
+CACHE_FILE = LIFE_DIR / ".index-cache.json"
 
 
 def _strip_frontmatter(text: str) -> str:
@@ -84,7 +90,57 @@ def _get_last_updated(summary_path: Path) -> str:
         return ""
 
 
-def scan_entities(entity_type: str) -> list[dict]:
+def _load_cache() -> dict:
+    """Load {slug: {desc, date}} LLM description cache."""
+    if CACHE_FILE.exists():
+        try:
+            return json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def _save_cache(cache: dict) -> None:
+    CACHE_FILE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+
+
+def _get_llm_description(entity_dir: Path, slug: str, cache: dict) -> str | None:
+    """Get LLM description from cache or generate via Claude Haiku."""
+    # Check cache (valid for 7 days)
+    entry = cache.get(slug)
+    if entry:
+        try:
+            if entry.get("date", "") >= str(date.fromisoformat(TODAY) - timedelta(days=7)):
+                return entry["desc"]
+        except ValueError:
+            pass
+
+    # Generate via Claude Haiku
+    summary_path = entity_dir / "summary.md"
+    if not summary_path.exists():
+        return None
+    content = summary_path.read_text(encoding="utf-8")[:500]
+    prompt = f"Summarize this entity in one sentence (under 80 chars): {slug}. {content}"
+    claude_bin = shutil.which("claude")
+    if not claude_bin:
+        return None
+    try:
+        result = subprocess.run(
+            [claude_bin, "-p", prompt,
+             "--output-format", "text", "--no-session-persistence",
+             "--model", "claude-haiku-4-5-20251001"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            desc = result.stdout.strip().strip('"').strip()[:80]
+            cache[slug] = {"desc": desc, "date": TODAY}
+            return desc
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+def scan_entities(entity_type: str, llm_cache: dict | None = None) -> list[dict]:
     """Scan an entity type directory and return metadata."""
     entity_dir = LIFE_DIR / entity_type
     if not entity_dir.is_dir():
@@ -96,7 +152,12 @@ def scan_entities(entity_type: str) -> list[dict]:
         summary = d / "summary.md"
         if not summary.exists():
             continue
-        desc = _first_content_line(summary) or d.name
+        # Description: LLM (if enabled) → first content line → dir name
+        desc = None
+        if LLM_MODE and llm_cache is not None:
+            desc = _get_llm_description(d, d.name, llm_cache)
+        if not desc:
+            desc = _first_content_line(summary) or d.name
         items_count = _count_items(d / "items.json")
         status = _get_status(summary)
         updated = _get_last_updated(summary)
@@ -185,6 +246,8 @@ def count_relationships() -> tuple[int, str]:
 
 def generate() -> str:
     """Generate the index.md content."""
+    llm_cache = _load_cache() if LLM_MODE else None
+
     lines = [
         f"---\ngenerated: {TODAY}\nauto_maintained: true\n---\n",
         "# Knowledge Base Index\n",
@@ -192,7 +255,7 @@ def generate() -> str:
     ]
 
     for entity_type in ENTITY_TYPES:
-        entities = scan_entities(entity_type)
+        entities = scan_entities(entity_type, llm_cache)
         active = [e for e in entities if e["status"] == "active"]
         count_label = f" ({len(active)} active)" if active else ""
         lines.append(f"## {entity_type}{count_label}\n")
@@ -243,6 +306,10 @@ def generate() -> str:
     lines.append("## Stats\n")
     lines.append(f"- {', '.join(stats_parts)}")
     lines.append("")
+
+    # Save LLM cache if used
+    if LLM_MODE and llm_cache is not None:
+        _save_cache(llm_cache)
 
     return "\n".join(lines)
 
