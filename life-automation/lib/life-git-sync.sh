@@ -15,20 +15,30 @@ life_git_sync() {
     local LIFE_DIR="${1:-$HOME/life}"
     cd "$LIFE_DIR" || return 0
     git rev-parse --git-dir >/dev/null 2>&1 || return 0
+    git config core.hooksPath .githooks 2>/dev/null  # self-heal
 
-    # Stage all changes (.gitignore handles exclusions)
-    git add -A 2>/dev/null
-
-    # Only commit if there are staged changes
-    if ! git diff --cached --quiet 2>/dev/null; then
-        local stats
-        stats=$(git diff --cached --stat 2>/dev/null | tail -1)
-        git commit -m "auto: $(hostname) $(date +%Y-%m-%d-%H%M) [${stats}]" 2>/dev/null || return 0
-
-        if ! timeout 30 git push origin main 2>/dev/null; then
-            _life_sync_alert "git push failed on $(hostname)" 2>/dev/null
+    local LOCKFILE="$LIFE_DIR/.git/life-sync.lock"
+    (
+        # Acquire exclusive lock (30s timeout — matches push timeout)
+        if ! flock -w 30 9; then
+            echo "life-git-sync: lock timeout — another sync in progress" >&2
+            return 0
         fi
-    fi
+
+        # Stage all changes (.gitignore handles exclusions)
+        git add -A 2>/dev/null
+
+        # Only commit if there are staged changes
+        if ! git diff --cached --quiet 2>/dev/null; then
+            local stats
+            stats=$(git diff --cached --stat 2>/dev/null | tail -1)
+            git commit -m "auto: $(hostname) $(date +%Y-%m-%d-%H%M) [${stats}]" 2>/dev/null || return 0
+
+            if ! timeout 30 git push origin main 2>/dev/null; then
+                _life_sync_alert "git push failed on $(hostname)" 2>/dev/null
+            fi
+        fi
+    ) 9>"$LOCKFILE"
 }
 
 life_git_pull() {
@@ -37,15 +47,23 @@ life_git_pull() {
     local LIFE_DIR="${1:-$HOME/life}"
     cd "$LIFE_DIR" || return 0
     git rev-parse --git-dir >/dev/null 2>&1 || return 0
-
-    # Check if remote exists
     git remote get-url origin >/dev/null 2>&1 || return 0
+    git config core.hooksPath .githooks 2>/dev/null  # self-heal
+    # NOTE: --rebase produces binary conflicts on git-crypt encrypted files.
+    # Currently safe (no encrypted files). If git-crypt added later, use --no-rebase.
 
-    if ! timeout 30 git pull --rebase --autostash origin main 2>/dev/null; then
-        # If rebase fails (conflict), abort and alert
-        git rebase --abort 2>/dev/null
-        _life_sync_alert "git pull conflict on $(hostname) — manual resolution needed" 2>/dev/null
-    fi
+    local LOCKFILE="$LIFE_DIR/.git/life-sync.lock"
+    (
+        if ! flock -w 30 9; then
+            echo "life-git-pull: lock timeout — another sync in progress" >&2
+            return 0
+        fi
+
+        if ! timeout 30 git pull --rebase --autostash origin main 2>/dev/null; then
+            git rebase --abort 2>/dev/null
+            _life_sync_alert "git pull conflict on $(hostname) — manual resolution needed" 2>/dev/null
+        fi
+    ) 9>"$LOCKFILE"
 }
 
 _life_sync_alert() {

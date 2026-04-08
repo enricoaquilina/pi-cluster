@@ -11,3 +11,13 @@ if command -v git >/dev/null 2>&1; then
         | grep -v '^\*\|master' | xargs -r git -C /home/enrico/pi-cluster branch -d 2>/dev/null || true
     git -C /home/enrico/pi-cluster worktree prune 2>/dev/null || true
 fi
+
+# Sync ~/life to git (capture session changes)
+if [ -d "$HOME/life/.git" ]; then
+    # shellcheck source=/dev/null
+    for _lib in "$HOME/pi-cluster/life-automation/lib/life-git-sync.sh" \
+                "$HOME/life/scripts/lib/life-git-sync.sh"; do
+        [ -f "$_lib" ] && { source "$_lib"; break; }
+    done
+    life_git_sync "$HOME/life" || true
+fi

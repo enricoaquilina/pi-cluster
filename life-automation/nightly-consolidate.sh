@@ -226,6 +226,33 @@ if [ -x "$QMD_BIN" ]; then
     fi
 fi
 
+# --- Git sync (push changes to GitHub) ---
+if [ -d "$LIFE_DIR/.git" ]; then
+    log "Syncing ~/life to git..."
+    # shellcheck source=/dev/null
+    for _lib in "$HOME/pi-cluster/life-automation/lib/life-git-sync.sh" \
+                "$LIFE_DIR/scripts/lib/life-git-sync.sh"; do
+        [ -f "$_lib" ] && { source "$_lib"; break; }
+    done
+    life_git_sync "$LIFE_DIR" 2>&1 | tee -a "$LOG_DIR/consolidate.log" || log "WARNING: git sync failed"
+fi
+
+# --- Weekly checks (Sundays only) ---
+DOW=$(date +%u)
+if [ "$DOW" = "7" ] && [ -d "$LIFE_DIR/.git" ]; then
+    commit_count=$(git -C "$LIFE_DIR" rev-list --count HEAD 2>/dev/null || echo "?")
+    log "$HOME/life has $commit_count commits"
+    [ "${commit_count:-0}" -gt 1000 ] && log "WARNING: >1000 commits — consider squashing"
+fi
+
+# --- AGENTS.md / CLAUDE.md drift check ---
+if [ -f "$HOME/AGENTS.md" ] && [ -f "$HOME/CLAUDE.md" ]; then
+    if [ "$HOME/CLAUDE.md" -nt "$HOME/AGENTS.md" ]; then
+        age_diff=$(( $(stat -c %Y "$HOME/CLAUDE.md") - $(stat -c %Y "$HOME/AGENTS.md") ))
+        [ "$age_diff" -gt 2592000 ] && log "WARNING: AGENTS.md >30 days stale vs CLAUDE.md"
+    fi
+fi
+
 # --- Healthcheck heartbeat (touch file — absence = failure) ---
 touch "$HEARTBEAT_FILE"
 log "Consolidation complete for $TODAY"

@@ -167,6 +167,33 @@ if [ -n "${LATEST_FILE:-}" ]; then
     fi
 fi
 
+# 6. life knowledge base git repo health
+echo "6. life knowledge base"
+if gh repo view enricoaquilina/life --json name >/dev/null 2>&1; then
+    pass "life GitHub repo accessible"
+else
+    fail "life GitHub repo" "not accessible via gh"
+fi
+
+LIFE_DIR="$HOME/life"
+if [ -d "$LIFE_DIR/.git" ]; then
+    last_commit_ts=$(git -C "$LIFE_DIR" log -1 --format='%ct' 2>/dev/null || echo 0)
+    now_ts=$(date +%s)
+    age_hours=$(( (now_ts - last_commit_ts) / 3600 ))
+    if [ "$age_hours" -lt 48 ]; then
+        pass "life last commit ${age_hours}h ago"
+    else
+        fail "life commit freshness" "last commit ${age_hours}h ago (>48h)"
+    fi
+    if git -C "$LIFE_DIR" fsck --no-dangling --quiet 2>/dev/null; then
+        pass "life git fsck clean"
+    else
+        fail "life git fsck" "repository corruption detected"
+    fi
+else
+    fail "life git repo" "not initialized"
+fi
+
 # Summary
 echo ""
 echo "=== DR Validation Results ==="
