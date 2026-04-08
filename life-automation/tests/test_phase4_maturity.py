@@ -229,7 +229,14 @@ MCP_SCRIPT = Path(__file__).parent.parent / "mcp_write_server.py"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+try:
+    import mcp  # noqa: F401
+    _HAS_MCP = True
+except ImportError:
+    _HAS_MCP = False
 
+
+@pytest.mark.skipif(not _HAS_MCP, reason="mcp package not installed")
 class TestMCPWriteServer:
     @pytest.fixture(autouse=True)
     def _setup_mcp(self, life_dir, monkeypatch):
