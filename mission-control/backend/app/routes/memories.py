@@ -285,6 +285,28 @@ def life_heartbeat():
         return {"error": str(e)}
 
 
+@router.get("/api/life/tree")
+def life_tree():
+    """Return ~/life directory tree grouped by PARA categories."""
+    tree = {}
+    for category in ["Projects", "People", "Companies", "Areas", "Resources", "Daily"]:
+        cat_dir = LIFE_DIR / category
+        if not cat_dir.is_dir():
+            tree[category] = []
+            continue
+        entries = []
+        for item in sorted(cat_dir.iterdir()):
+            if item.name.startswith(("_", ".")):
+                continue
+            if item.is_dir():
+                files = [f.name for f in sorted(item.iterdir()) if f.is_file()]
+                entries.append({"name": item.name, "type": "dir", "files": files})
+            elif item.is_file():
+                entries.append({"name": item.name, "type": "file"})
+        tree[category] = entries
+    return tree
+
+
 @router.get("/api/life/graph")
 def life_graph(
     entity: Optional[str] = Query(None),

@@ -1,4 +1,4 @@
-"""Phase 4 tests — lint auto-fix, index LLM, decay dashboard, graph viz.
+"""Phase 4 tests — lint auto-fix, index LLM, decay dashboard, graph viz, MCP write.
 All tests use real files in tmp_path. No mocking."""
 import json
 import os
@@ -221,3 +221,108 @@ class TestKnowledgeGraph:
         _run(GRAPH_SCRIPT, life_dir, "--dry-run")
         result = _run(GRAPH_SCRIPT, life_dir, "--dry-run")
         assert "(orphan)" not in result.stdout
+
+
+# ── 4C: MCP Write Server (core function tests) ──────────────────────────
+
+MCP_SCRIPT = Path(__file__).parent.parent / "mcp_write_server.py"
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+class TestMCPWriteServer:
+    @pytest.fixture(autouse=True)
+    def _setup_mcp(self, life_dir, monkeypatch):
+        """Import MCP module with LIFE_DIR pointed to tmp_path."""
+        monkeypatch.setenv("LIFE_DIR", str(life_dir))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("mcp_ws", str(MCP_SCRIPT))
+        self.mod = importlib.util.module_from_spec(spec)
+        # Patch LIFE_DIR before exec
+        import mcp_write_server
+        monkeypatch.setattr(mcp_write_server, "LIFE_DIR", life_dir)
+        monkeypatch.setattr(mcp_write_server, "LOCK_PATH", life_dir / "logs" / "consolidate.lock")
+        monkeypatch.setattr(mcp_write_server, "TODAY", TODAY)
+        self.ws = mcp_write_server
+
+    def test_normalize_slug(self):
+        assert self.ws._normalize_slug("Test Entity") == "test-entity"
+        assert self.ws._normalize_slug("") == ""
+        assert self.ws._normalize_slug("!!!") == ""
+
+    def test_validate_path_blocks_traversal(self, life_dir):
+        with pytest.raises(ValueError, match="traversal"):
+            self.ws._validate_path(life_dir / ".." / "etc" / "passwd")
+
+    def test_validate_path_allows_valid(self, life_dir):
+        self.ws._validate_path(life_dir / "test.md")  # should not raise
+
+    def test_find_entity(self, life_dir):
+        result = self.ws._find_entity("test-proj")
+        assert result is not None
+        assert result.name == "test-proj"
+
+    def test_find_entity_missing(self, life_dir):
+        assert self.ws._find_entity("nonexistent") is None
+
+    def test_create_entity_from_template(self, life_dir):
+        result = self.ws.create_entity("person", "bob", "Bob Smith")
+        assert "Created" in result
+        assert (life_dir / "People" / "bob" / "summary.md").exists()
+        summary = (life_dir / "People" / "bob" / "summary.md").read_text()
+        assert "type: person" in summary
+        assert "Bob Smith" in summary
+
+    def test_create_entity_rejects_existing(self, life_dir):
+        result = self.ws.create_entity("project", "test-proj", "Test")
+        assert "already exists" in result
+
+    def test_create_entity_rejects_invalid_type(self, life_dir):
+        result = self.ws.create_entity("alien", "x", "X")
+        assert "invalid type" in result
+
+    def test_create_entity_rejects_empty_slug(self, life_dir):
+        result = self.ws.create_entity("person", "!!!", "Bad")
+        assert "empty" in result.lower()
+
+    def test_add_fact_to_entity(self, life_dir):
+        result = self.ws.add_fact("test-proj", "New fact from MCP", "event")
+        assert "Added" in result
+        items = json.loads((life_dir / "Projects" / "test-proj" / "items.json").read_text())
+        mcp_items = [i for i in items if i.get("fact") == "New fact from MCP"]
+        assert len(mcp_items) == 1
+        assert mcp_items[0]["source"] == "mcp/life-write"
+        assert mcp_items[0]["confidence"] == "single"
+
+    def test_add_fact_invalid_category(self, life_dir):
+        result = self.ws.add_fact("test-proj", "fact", "invalid-cat")
+        assert "invalid category" in result
+
+    def test_add_fact_missing_entity(self, life_dir):
+        result = self.ws.add_fact("nonexistent", "fact", "event")
+        assert "not found" in result
+
+    def test_append_daily_note_creates_note(self, life_dir):
+        # Remove existing note to test creation
+        daily = life_dir / "Daily" / "2026" / "04" / f"{TODAY}.md"
+        if daily.exists():
+            daily.unlink()
+        result = self.ws.append_daily_note("Test entry", "New Facts")
+        assert "Appended" in result
+        assert daily.exists()
+        content = daily.read_text()
+        assert "Test entry" in content
+        assert "source: mcp" in content
+
+    def test_append_daily_note_existing_section(self, life_dir):
+        daily = life_dir / "Daily" / "2026" / "04" / f"{TODAY}.md"
+        daily.write_text("## Active Projects\n- [[test-proj]]\n\n## New Facts\n- old fact\n")
+        result = self.ws.append_daily_note("MCP fact", "New Facts")
+        assert "Appended" in result
+        content = daily.read_text()
+        assert "MCP fact" in content
+        assert "old fact" in content  # preserved
+
+    def test_append_daily_note_invalid_section(self, life_dir):
+        result = self.ws.append_daily_note("content", "Invalid Section Name")
+        assert "invalid section" in result.lower()

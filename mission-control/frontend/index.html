@@ -228,6 +228,7 @@
     <button class="tab-btn" data-tab="team">Team</button>
     <button class="tab-btn" data-tab="cluster">Infrastructure</button>
     <button class="tab-btn" data-tab="dispatch">Dispatch Log</button>
+    <button class="tab-btn" data-tab="knowledge">Knowledge</button>
     <a href="/trading/" class="tab-btn" style="text-decoration:none;">Trading</a>
     <a href="https://n8n.siliconsentiments.work" target="_blank" rel="noopener" class="tab-btn" style="text-decoration:none;">n8n ↗</a>
   </div>
@@ -342,6 +343,23 @@
   <div id="dispatch-pagination" class="dispatch-pagination"></div>
 </div>
 
+<!-- Knowledge Base -->
+<div class="screen" id="screen-knowledge">
+  <div style="display:grid;grid-template-columns:280px 1fr;gap:1rem;height:calc(100vh - 180px);">
+    <div style="background:var(--surface);border-radius:8px;padding:1rem;overflow-y:auto;">
+      <h3 style="margin:0 0 0.75rem;color:var(--accent);">Browse ~/life</h3>
+      <input type="text" id="knowledge-search" placeholder="Search..." onkeydown="if(event.key==='Enter')searchKnowledge()"
+        style="width:100%;padding:0.4rem;margin-bottom:0.75rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);">
+      <div id="knowledge-tree" style="font-size:0.85rem;"></div>
+    </div>
+    <div style="background:var(--surface);border-radius:8px;padding:1.5rem;overflow-y:auto;">
+      <div id="knowledge-content" style="line-height:1.6;">
+        <p style="color:var(--muted);">Select a file from the tree or search to view content.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 
 <!-- Task Modal -->
 <div class="modal-overlay" id="modal-overlay">
@@ -391,6 +409,7 @@
 
 <script>
 const API = '/api';
+const LIFE_DIR_PREFIX = '/home/enrico/life';
 const COLUMNS = ['todo','in_progress','blocked','review','done'];
 const COL_LABELS = {todo:'To Do',in_progress:'In Progress',blocked:'Blocked',review:'Review',done:'Done'};
 let tasks = [];
@@ -1262,6 +1281,98 @@ setInterval(() => {
   if (tab === 'tasks') load();
   if (tab === 'cluster') { loadCluster(); loadServices(); loadBudget(); }
 }, 120000);
+
+// ── Knowledge Base ──────────────────────────────────────────────────────────
+
+let _knowledgeLoaded = false;
+
+async function loadKnowledgeTree() {
+  if (_knowledgeLoaded) return;
+  const el = document.getElementById('knowledge-tree');
+  try {
+    const resp = await fetch(`${API}/life/tree`, {headers: hdr()});
+    if (!resp.ok) { el.textContent = 'Failed to load tree'; return; }
+    const tree = await resp.json();
+    let html = '';
+    const icons = { Projects: '📁', People: '👤', Companies: '🏢', Areas: '📋', Resources: '📚', Daily: '📅' };
+    for (const [cat, entries] of Object.entries(tree)) {
+      html += `<details${cat === 'Projects' ? ' open' : ''}>`;
+      html += `<summary style="cursor:pointer;padding:0.2rem 0;font-weight:600;">${icons[cat] || '📂'} ${cat} (${entries.length})</summary>`;
+      html += '<div style="padding-left:1rem;">';
+      for (const e of entries) {
+        if (e.type === 'dir') {
+          html += `<details><summary style="cursor:pointer;padding:0.15rem 0;">${e.name}/</summary>`;
+          html += '<div style="padding-left:0.75rem;">';
+          for (const f of e.files) {
+            const path = `${cat}/${e.name}/${f}`;
+            html += `<div style="padding:0.1rem 0;cursor:pointer;color:var(--accent);" onclick="loadKnowledgeFile('${path}')">${f}</div>`;
+          }
+          html += '</div></details>';
+        } else {
+          const path = `${cat}/${e.name}`;
+          html += `<div style="padding:0.1rem 0;cursor:pointer;color:var(--accent);" onclick="loadKnowledgeFile('${path}')">${e.name}</div>`;
+        }
+      }
+      html += '</div></details>';
+    }
+    el.innerHTML = html;
+    _knowledgeLoaded = true;
+  } catch (err) { el.textContent = 'Error: ' + err.message; }
+}
+
+async function loadKnowledgeFile(path) {
+  const el = document.getElementById('knowledge-content');
+  el.innerHTML = '<p style="color:var(--muted);">Loading...</p>';
+  try {
+    const fullPath = LIFE_DIR_PREFIX + '/' + path;
+    const resp = await fetch(`${API}/memories/file?path=${encodeURIComponent(fullPath)}`, {headers: hdr()});
+    if (!resp.ok) { el.textContent = 'Failed to load file'; return; }
+    const data = await resp.json();
+    // Simple markdown rendering (headers, bold, links, code blocks, lists)
+    let md = data.content || '';
+    md = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    md = md.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    md = md.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    md = md.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+    md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    md = md.replace(/\[\[([a-z0-9-]+)\]\]/g, '<a style="color:var(--accent);cursor:pointer;" onclick="searchKnowledge(\'$1\')">$1</a>');
+    md = md.replace(/^- \[x\] (.+)$/gm, '<div>☑ $1</div>');
+    md = md.replace(/^- \[ \] (.+)$/gm, '<div>☐ $1</div>');
+    md = md.replace(/^- (.+)$/gm, '<div style="padding-left:1rem;">• $1</div>');
+    md = md.replace(/```([\s\S]*?)```/g, '<pre style="background:var(--bg);padding:0.5rem;border-radius:4px;overflow-x:auto;">$1</pre>');
+    md = md.replace(/^---$/gm, '<hr style="border-color:var(--border);">');
+    el.innerHTML = `<div style="max-width:800px;">${md}</div>`;
+  } catch (err) { el.textContent = 'Error: ' + err.message; }
+}
+
+async function searchKnowledge(query) {
+  if (!query) query = document.getElementById('knowledge-search').value;
+  if (!query) return;
+  const el = document.getElementById('knowledge-content');
+  el.innerHTML = '<p style="color:var(--muted);">Searching...</p>';
+  try {
+    const resp = await fetch(`${API}/qmd/search?q=${encodeURIComponent(query)}&mode=bm25&limit=10`, {headers: hdr()});
+    if (!resp.ok) { el.textContent = 'Search failed'; return; }
+    const data = await resp.json();
+    if (!data.results || !data.results.length) { el.innerHTML = '<p>No results found.</p>'; return; }
+    let html = `<h2>Search: "${query}" (${data.results.length} results)</h2>`;
+    for (const r of data.results) {
+      const path = r.path || r.file || '';
+      html += `<div style="background:var(--bg);padding:0.75rem;margin:0.5rem 0;border-radius:6px;cursor:pointer;" onclick="loadKnowledgeFile('${path}')">`;
+      html += `<div style="color:var(--accent);font-weight:600;">${path}</div>`;
+      if (r.snippet) html += `<div style="font-size:0.85rem;color:var(--muted);margin-top:0.25rem;">${r.snippet}</div>`;
+      html += '</div>';
+    }
+    el.innerHTML = html;
+  } catch (err) { el.textContent = 'Error: ' + err.message; }
+}
+
+// Hook into tab switching to load knowledge tree on first visit
+const _origSwitchTab = switchTab;
+switchTab = function(tab) {
+  _origSwitchTab(tab);
+  if (tab === 'knowledge') loadKnowledgeTree();
+};
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 
