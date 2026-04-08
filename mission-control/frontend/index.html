@@ -409,7 +409,7 @@
 
 <script>
 const API = '/api';
-const LIFE_DIR_PREFIX = '/home/enrico/life';
+const LIFE_DIR_PREFIX = 'life';
 const COLUMNS = ['todo','in_progress','blocked','review','done'];
 const COL_LABELS = {todo:'To Do',in_progress:'In Progress',blocked:'Blocked',review:'Review',done:'Done'};
 let tasks = [];
@@ -431,7 +431,7 @@ function switchTab(tab) {
 
 function getTab() {
   const h = location.hash.replace('#', '') || 'tasks';
-  return ['tasks', 'memories', 'team', 'cluster', 'dispatch'].includes(h) ? h : 'tasks';
+  return ['tasks', 'memories', 'team', 'cluster', 'dispatch', 'knowledge'].includes(h) ? h : 'tasks';
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
