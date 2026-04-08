@@ -274,8 +274,8 @@ def log_spend(task: str, cost_usd: float) -> None:
         "task": task[:200],
         "cost_usd": cost_usd,
     })
-    # Keep last 30 days
-    cutoff = str(date.today() - timedelta(days=30))
+    # Keep last 30 days (use TODAY for testability, not date.today())
+    cutoff = str(date.fromisoformat(TODAY) - timedelta(days=30))
     entries = [e for e in entries if e.get("date", "") >= cutoff]
     SPEND_LOG.write_text(json.dumps(entries, indent=2), encoding="utf-8")
 
