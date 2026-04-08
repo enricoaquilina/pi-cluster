@@ -25,6 +25,18 @@ flock -n 9 || exit 0
 # 2. Run ingest_dispatches.py (get Maxwell's latest activity)
 timeout 15 /usr/bin/python3 "$LIFE_DIR/scripts/ingest_dispatches.py" 2>/dev/null || true
 
+# 2b. Incremental QMD embedding (skip if embedded <10 min ago)
+QMD_BIN="$HOME/.local/bin/qmd"
+EMBED_STATE="$LOG_DIR/.qmd-embed-mtime"
+if [ -x "$QMD_BIN" ]; then
+    LAST_EMBED=$(cat "$EMBED_STATE" 2>/dev/null || echo 0)
+    [[ "$LAST_EMBED" =~ ^[0-9]+$ ]] || LAST_EMBED=0
+    NOW=$(date +%s)
+    if [ $(( NOW - LAST_EMBED )) -gt 600 ]; then
+        timeout 240 "$QMD_BIN" embed 2>/dev/null && echo "$NOW" > "$EMBED_STATE" || true
+    fi
+fi
+
 # 3. Check if daily note has changed since last mini-consolidation
 [ -f "$DAILY_NOTE" ] || exit 0
 CURRENT_MTIME=$(stat -c %Y "$DAILY_NOTE" 2>/dev/null || echo 0)

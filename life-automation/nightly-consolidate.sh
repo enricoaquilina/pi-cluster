@@ -214,6 +214,14 @@ if [ "$(date +%u)" -eq 7 ]; then
     python3 "$LIFE_DIR/scripts/weekly_summary.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 fi
 
+# --- Generate index.md (Phase 3: content catalog) ---
+log "Generating knowledge base index..."
+python3 "$LIFE_DIR/scripts/generate_index.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+# --- Knowledge lint (Phase 3: consistency checks) ---
+log "Running knowledge lint..."
+python3 "$LIFE_DIR/scripts/lint_knowledge.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
 # --- QMD re-index (Phase 2: semantic search) ---
 QMD_BIN="$HOME/.local/bin/qmd"
 if [ -x "$QMD_BIN" ]; then

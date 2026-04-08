@@ -259,6 +259,18 @@ def _append_digest(digest: dict, digest_path: Path) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
 
+    # Index into FTS5 for cross-session search (non-critical)
+    try:
+        import subprocess as _sp
+        _sp.run(
+            [sys.executable, str(LIFE_DIR / "scripts" / "session_search.py"),
+             "--index-stdin"],
+            input=json.dumps(output), text=True, timeout=5,
+            capture_output=True,
+        )
+    except Exception:
+        pass
+
 
 def _run_hook_mode() -> bool:
     """Process a single transcript from Stop hook stdin. Returns True if handled."""
