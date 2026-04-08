@@ -90,6 +90,30 @@ def _get_last_updated(summary_path: Path) -> str:
         return ""
 
 
+def _clean_description(desc: str) -> str:
+    """Clean LLM description — truncate at word boundary, strip artifacts."""
+    desc = desc.strip().strip('"').strip("*").strip()
+    # Remove "Summary:" prefixes
+    desc = re.sub(r"^(\*\*)?Summary:?\*?\*?\s*", "", desc, flags=re.IGNORECASE)
+    # Remove parenthetical char counts like "(57 chars)" or "(52 cha"
+    desc = re.sub(r"\(\d+ char?s?\)?", "", desc).strip()
+    # Remove trailing incomplete parenthetical or fragments
+    desc = re.sub(r"\(\d+\s*\w{0,4}$", "", desc).strip()
+    # Remove lines starting with "I notice" or "I need" (LLM meta-commentary)
+    if desc.lower().startswith(("i notice", "i need", "this entity", "based on the")):
+        # Take only first clause
+        for sep in (".", ",", ";", "—"):
+            if sep in desc:
+                desc = desc.split(sep)[0].strip()
+                break
+    # Strip trailing fragments like "acters)" or "ters)"
+    desc = re.sub(r"\w{0,6}\)[\s.]*$", "", desc).strip().rstrip("*")
+    # Truncate at word boundary
+    if len(desc) > 80:
+        desc = desc[:80].rsplit(" ", 1)[0] + "..."
+    return desc
+
+
 def _load_cache() -> dict:
     """Load {slug: {desc, date}} LLM description cache."""
     if CACHE_FILE.exists():
@@ -132,9 +156,10 @@ def _get_llm_description(entity_dir: Path, slug: str, cache: dict) -> str | None
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode == 0 and result.stdout.strip():
-            desc = result.stdout.strip().strip('"').strip()[:80]
-            cache[slug] = {"desc": desc, "date": TODAY}
-            return desc
+            desc = _clean_description(result.stdout.strip())
+            if desc:
+                cache[slug] = {"desc": desc, "date": TODAY}
+                return desc
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return None
@@ -306,6 +331,31 @@ def generate() -> str:
     lines.append("## Stats\n")
     lines.append(f"- {', '.join(stats_parts)}")
     lines.append("")
+
+    # Recently Changed — entities with items.json modified in last 24h
+    import time
+    cutoff_mtime = time.time() - 86400
+    changed = []
+    for entity_type in ENTITY_TYPES:
+        for e_info in scan_entities(entity_type, llm_cache):
+            items_path = LIFE_DIR / entity_type / e_info["slug"] / "items.json"
+            if items_path.exists() and items_path.stat().st_mtime > cutoff_mtime and e_info["items"]:
+                changed.append(f"- **[[{e_info['slug']}]]** — {e_info['items']} facts")
+    if changed:
+        lines.append("## Recently Changed\n")
+        lines.extend(changed)
+        lines.append("")
+
+    # Knowledge Gaps — entities with <3 facts
+    gaps = []
+    for entity_type in ENTITY_TYPES:
+        for e_info in scan_entities(entity_type, llm_cache):
+            if e_info["items"] < 3:
+                gaps.append(f"[[{e_info['slug']}]]")
+    if gaps:
+        lines.append("## Knowledge Gaps\n")
+        lines.append(f"- {', '.join(gaps)} — fewer than 3 facts each, need enrichment")
+        lines.append("")
 
     # Save LLM cache if used
     if LLM_MODE and llm_cache is not None:

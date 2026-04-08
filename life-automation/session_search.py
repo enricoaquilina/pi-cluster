@@ -96,9 +96,17 @@ def index_session(conn: sqlite3.Connection, digest: dict, force: bool = False) -
     return True
 
 
+def _escape_fts5_query(query: str) -> str:
+    """Escape hyphenated terms for FTS5 (treats - as MINUS operator)."""
+    import re
+    # Wrap terms containing hyphens in double quotes so FTS5 treats them as phrases
+    return re.sub(r"(\w+-\w[\w-]*)", r'"\1"', query)
+
+
 def search(conn: sqlite3.Connection, query: str, limit: int = 10,
            session_type: str | None = None) -> list[dict]:
     """Search sessions by FTS5 query."""
+    query = _escape_fts5_query(query)
     try:
         if session_type:
             rows = conn.execute(
