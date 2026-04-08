@@ -29,13 +29,20 @@ CLAUDE_PROJECTS = Path(os.environ.get(
     Path.home() / ".claude" / "projects" / "-home-enrico",
 ))
 MIN_MESSAGES = 5  # Skip trivial sessions
-MAX_ASSISTANT_SCAN = 50  # Only scan last N assistant messages for decisions
+MAX_ASSISTANT_SCAN = 100  # Scan last N assistant messages for decisions
 MAX_DECISIONS = 3
 
 DECISION_PATTERNS = [
     re.compile(r"(?i)\b(decided to|decision:|chose|choosing|switched to|replaced .+ with|going with|opted for)\b"),
     re.compile(r"(?i)\b(keep .+ (?:instead|over)|drop(?:ping)? .+ in favor)\b"),
+    re.compile(r"(?i)\b(deferred|defer(?:ring)?|built .+ instead|use .+ instead of)\b"),
+    re.compile(r"(?i)\b(moved to|migrated? to|upgraded? to|reverted? to)\b"),
 ]
+
+# Pattern to extract decisions from daily note "## Decisions Made" section
+DECISION_SECTION_PATTERN = re.compile(
+    r"(?m)^##\s*Decisions?\s*(?:Made)?\s*\n((?:[-*]\s+.+\n?)+)"
+)
 
 # Paths to exclude from key files
 KEY_FILE_EXCLUDES = [".claude/plans/", "/life/logs/", "/tmp/"]
@@ -60,13 +67,38 @@ def _classify_session(tool_counts: dict) -> str:
     return "mixed"
 
 
-def _extract_decisions(assistant_texts: list[str]) -> list[str]:
-    """Extract decision sentences from assistant message texts (max MAX_DECISIONS)."""
-    decisions = []
+def _daily_note_path() -> Path:
+    """Get today's daily note path."""
+    today = str(date.today())
+    parts = today.split("-")
+    return LIFE_DIR / "Daily" / parts[0] / parts[1] / f"{today}.md"
+
+
+def _extract_decisions(assistant_texts: list[str], daily_note: Path | None = None) -> list[str]:
+    """Extract decisions from daily note section AND assistant message text."""
+    decisions: list[str] = []
+
+    # 1. Try daily note "Decisions Made" section first (most reliable)
+    if daily_note is None:
+        daily_note = _daily_note_path()
+    if daily_note.exists():
+        try:
+            text = daily_note.read_text(encoding="utf-8")
+            match = DECISION_SECTION_PATTERN.search(text)
+            if match:
+                for line in match.group(1).strip().splitlines():
+                    line = line.lstrip("-* ").strip()
+                    if line and len(line) > 10:
+                        decisions.append(line[:100])
+                        if len(decisions) >= MAX_DECISIONS:
+                            return decisions
+        except OSError:
+            pass
+
+    # 2. Fall back to regex on assistant text
     for text in assistant_texts[-MAX_ASSISTANT_SCAN:]:
         for pattern in DECISION_PATTERNS:
             for match in pattern.finditer(text):
-                # Extract the sentence containing the match
                 start = text.rfind(".", 0, match.start())
                 start = start + 1 if start >= 0 else max(0, match.start() - 50)
                 end = text.find(".", match.end())
@@ -76,7 +108,7 @@ def _extract_decisions(assistant_texts: list[str]) -> list[str]:
                     decisions.append(sentence[:100])
                     if len(decisions) >= MAX_DECISIONS:
                         return decisions
-                    break  # One decision per text block per pattern
+                    break
     return decisions
 
 

@@ -524,7 +524,8 @@ class TestDecisionDetection:
     def test_decision_detected(self):
         """Assistant says 'decided to use QMD' → appears in decisions."""
         texts = ["After reviewing options, we decided to use QMD for semantic search."]
-        decisions = csd._extract_decisions(texts)
+        no_note = Path("/nonexistent-daily-note.md")
+        decisions = csd._extract_decisions(texts, daily_note=no_note)
         assert len(decisions) >= 1
         assert any("QMD" in d for d in decisions)
 
@@ -554,20 +555,23 @@ class TestDecisionDetection:
             "We decided to drop memsearch.",
             "We switched to Haiku for extraction.",
         ]
-        decisions = csd._extract_decisions(texts)
+        no_note = Path("/nonexistent-daily-note.md")
+        decisions = csd._extract_decisions(texts, daily_note=no_note)
         assert len(decisions) == 3
 
     def test_decisions_truncated(self):
         """Long decision text → truncated to 100 chars."""
         long_text = "We decided to " + "implement a very complex feature that requires extensive refactoring across multiple files and services and databases " * 3
-        decisions = csd._extract_decisions([long_text])
+        no_note = Path("/nonexistent-daily-note.md")
+        decisions = csd._extract_decisions([long_text], daily_note=no_note)
         if decisions:
             assert len(decisions[0]) <= 100
 
     def test_no_decisions(self):
         """Transcript with no decision patterns → empty list."""
         texts = ["The gateway is running fine.", "All tests are passing.", "Let me check the logs."]
-        decisions = csd._extract_decisions(texts)
+        no_note = Path("/nonexistent-daily-note.md")
+        decisions = csd._extract_decisions(texts, daily_note=no_note)
         assert decisions == []
 
 

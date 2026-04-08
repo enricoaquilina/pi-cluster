@@ -232,7 +232,7 @@ python3 "$LIFE_DIR/scripts/session_search.py" --backfill-maxwell 2>&1 | tee -a "
 
 # --- Generate index.md (Phase 3: content catalog) ---
 log "Generating knowledge base index..."
-python3 "$LIFE_DIR/scripts/generate_index.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+python3 "$LIFE_DIR/scripts/generate_index.py" --llm 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
 # --- Knowledge graph (Phase 4: visualization) ---
 log "Generating knowledge graph..."

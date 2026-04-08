@@ -51,7 +51,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install test dependencies
-        run: pip install pytest
+        run: pip install pytest "mcp>=1.20"
 
       - name: Run life-automation tests
         run: >
