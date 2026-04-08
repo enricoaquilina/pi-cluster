@@ -58,8 +58,40 @@ if [ -f "$DAILY_NOTE" ]; then
     /usr/bin/awk '/^## [^P]/ && p{p=0} /^## Pending Items/{p=1} p' "$DAILY_NOTE" 2>/dev/null | head -10
 fi
 
-# --- Recent sessions (from FTS5 search) ---
+# --- Project context (detect from working directory) ---
 SESSION_SEARCH="$LIFE_DIR/scripts/session_search.py"
+PROJECT_SLUG=""
+case "$PWD" in
+    */pi-cluster*) PROJECT_SLUG="pi-cluster" ;;
+    */polymarket*) PROJECT_SLUG="polymarket-bot" ;;
+    */gym-tracker*) PROJECT_SLUG="gym-tracker-app" ;;
+    */openclaw*|*/maxwell*) PROJECT_SLUG="openclaw-maxwell" ;;
+esac
+
+if [ -n "$PROJECT_SLUG" ] && [ -f "$SESSION_SEARCH" ]; then
+    echo ""
+    echo "## Project Context: $PROJECT_SLUG"
+    # Show entity summary first paragraph
+    PROJ_SUMMARY="$LIFE_DIR/Projects/$PROJECT_SLUG/summary.md"
+    if [ -f "$PROJ_SUMMARY" ]; then
+        /usr/bin/awk '/^---/{f++} f==2{p=1;next} p && /^$/{exit} p' "$PROJ_SUMMARY" 2>/dev/null | head -3
+    fi
+    # Show related sessions
+    echo ""
+    echo "### Related Sessions"
+    /usr/bin/python3 "$SESSION_SEARCH" --query "$PROJECT_SLUG" --recent 3 --json 2>/dev/null | /usr/bin/python3 -c "
+import sys, json
+try:
+    for d in json.load(sys.stdin):
+        ts = d.get('ts','')[:10]
+        stype = d.get('session_type','?')
+        summary = d.get('summary','')[:100]
+        print(f'- {ts} [{stype}] {summary}')
+except: pass
+" 2>/dev/null
+fi
+
+# --- Recent sessions (from FTS5 search) ---
 if [ -f "$SESSION_SEARCH" ]; then
     echo ""
     echo "## Recent Sessions"

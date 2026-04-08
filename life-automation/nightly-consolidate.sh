@@ -216,6 +216,12 @@ python3 "$LIFE_DIR/scripts/heartbeat_check.py" 2>&1 | tee -a "$LOG_DIR/consolida
 if [ "$(date +%u)" -eq 7 ]; then
     log "Generating weekly summary..."
     python3 "$LIFE_DIR/scripts/weekly_summary.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+    log "Running entity enrichment (weekly)..."
+    python3 "$LIFE_DIR/scripts/enrich_entities.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+    log "Running LLM knowledge lint (weekly)..."
+    python3 "$LIFE_DIR/scripts/lint_knowledge_llm.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 fi
 
 # --- Ingest raw documents (Phase 3b: Karpathy-style) ---
