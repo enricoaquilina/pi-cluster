@@ -214,6 +214,18 @@ if [ "$(date +%u)" -eq 7 ]; then
     python3 "$LIFE_DIR/scripts/weekly_summary.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 fi
 
+# --- Ingest raw documents (Phase 3b: Karpathy-style) ---
+if ls "$LIFE_DIR/raw/"*.md "$LIFE_DIR/raw/"*.txt 2>/dev/null | head -1 > /dev/null; then
+    log "Ingesting raw documents..."
+    for f in "$LIFE_DIR/raw/"*.md "$LIFE_DIR/raw/"*.txt; do
+        [ -f "$f" ] && timeout 120 python3 "$LIFE_DIR/scripts/ingest_raw.py" "$f" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+    done
+fi
+
+# --- Maxwell FTS5 indexing (Phase 3b: unified search) ---
+log "Indexing Maxwell dispatches..."
+python3 "$LIFE_DIR/scripts/session_search.py" --backfill-maxwell 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
 # --- Generate index.md (Phase 3: content catalog) ---
 log "Generating knowledge base index..."
 python3 "$LIFE_DIR/scripts/generate_index.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"

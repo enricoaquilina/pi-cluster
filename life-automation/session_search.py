@@ -51,8 +51,12 @@ def ensure_db(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
-def index_session(conn: sqlite3.Connection, digest: dict) -> bool:
-    """Index a single session digest. Returns True if new, False if duplicate."""
+def index_session(conn: sqlite3.Connection, digest: dict, force: bool = False) -> bool:
+    """Index a single session digest. Returns True if new/updated, False if skipped.
+
+    Args:
+        force: If True, delete and re-insert existing records (for maxwell upserts).
+    """
     sid = digest.get("session_id", "")
     if not sid:
         return False
@@ -61,8 +65,13 @@ def index_session(conn: sqlite3.Connection, digest: dict) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sessions_meta WHERE session_id = ?", (sid,)
     ).fetchone()
-    if row:
+    if row and not force:
         return False
+    if row:
+        # FTS5 requires DELETE then INSERT (no UPDATE)
+        conn.execute("DELETE FROM sessions WHERE session_id = ?", (sid,))
+        conn.execute("DELETE FROM sessions_meta WHERE session_id = ?", (sid,))
+        conn.commit()
 
     # Prepare fields with defaults for schema evolution
     ts = digest.get("ts", "")
@@ -121,21 +130,21 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 10,
 
 def recent(conn: sqlite3.Connection, limit: int = 10,
            session_type: str | None = None) -> list[dict]:
-    """Get most recent sessions."""
+    """Get most recent sessions with summaries (queries FTS5 table directly)."""
     if session_type:
         rows = conn.execute(
-            "SELECT session_id, ts, session_type, msg_count "
-            "FROM sessions_meta WHERE session_type = ? ORDER BY ts DESC LIMIT ?",
+            "SELECT session_id, ts, summary, session_type "
+            "FROM sessions WHERE session_type = ? ORDER BY ts DESC LIMIT ?",
             (session_type, limit),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT session_id, ts, session_type, msg_count "
-            "FROM sessions_meta ORDER BY ts DESC LIMIT ?",
+            "SELECT session_id, ts, summary, session_type "
+            "FROM sessions ORDER BY ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
     return [
-        {"session_id": r[0], "ts": r[1], "session_type": r[2], "msg_count": r[3]}
+        {"session_id": r[0], "ts": r[1], "summary": r[2], "session_type": r[3]}
         for r in rows
     ]
 
@@ -159,6 +168,78 @@ def backfill(conn: sqlite3.Connection, life_dir: Path | None = None) -> int:
                     count += 1
             except (json.JSONDecodeError, KeyError):
                 continue
+    return count
+
+
+def _parse_maxwell(path: Path) -> dict | None:
+    """Parse a maxwell-YYYY-MM-DD.md file into a searchable digest."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    # Extract date from filename: maxwell-YYYY-MM-DD
+    date_str = path.stem.replace("maxwell-", "")
+
+    dispatches: list[str] = []
+    heartbeat_counts: dict[str, int] = {}
+    section = ""
+    in_frontmatter = False
+
+    for line in text.splitlines():
+        if line.strip() == "---":
+            in_frontmatter = not in_frontmatter
+            continue
+        if in_frontmatter:
+            continue
+        if line.startswith("## "):
+            section = line
+            continue
+        if not line.startswith("- "):
+            continue
+
+        if "Dispatch" in section:
+            dispatches.append(line.lstrip("- ").strip())
+        elif "Heartbeat" in section:
+            # Uses Unicode em-dash (U+2014), not ASCII hyphen
+            parts = line.split("\u2014", 1)
+            if len(parts) == 2:
+                key = parts[1].strip()
+                heartbeat_counts[key] = heartbeat_counts.get(key, 0) + 1
+
+    # Build summary
+    summary_parts: list[str] = []
+    if dispatches:
+        summary_parts.append("Dispatches: " + "; ".join(dispatches[:5]))
+    else:
+        summary_parts.append("No dispatches")
+    if heartbeat_counts:
+        hb = "; ".join(f"{k} ({v}x)" for k, v in heartbeat_counts.items())
+        summary_parts.append("Heartbeat: " + hb)
+
+    if not dispatches and not heartbeat_counts:
+        return None
+
+    return {
+        "session_id": f"maxwell-{date_str}",
+        "ts": f"{date_str}T00:00:00Z",
+        "summary": ". ".join(summary_parts),
+        "session_type": "maxwell",
+        "decisions": [],
+        "files_touched": [],
+        "tool_counts": {},
+        "msg_count": len(dispatches) + sum(heartbeat_counts.values()),
+    }
+
+
+def backfill_maxwell(conn: sqlite3.Connection, life_dir: Path | None = None) -> int:
+    """Index all maxwell-*.md files. Uses force=True to update stale records."""
+    ld = life_dir or LIFE_DIR
+    count = 0
+    for path in sorted(ld.rglob("maxwell-*.md")):
+        digest = _parse_maxwell(path)
+        if digest and index_session(conn, digest, force=True):
+            count += 1
     return count
 
 
@@ -194,6 +275,16 @@ def main() -> None:
     if "--backfill" in sys.argv or "--rebuild" in sys.argv:
         count = backfill(conn)
         print(f"[session-search] Backfilled {count} sessions")
+        if "--rebuild" in sys.argv:
+            mcount = backfill_maxwell(conn)
+            print(f"[session-search] Backfilled {mcount} maxwell entries")
+        conn.close()
+        return
+
+    # --backfill-maxwell: ingest all maxwell markdown files
+    if "--backfill-maxwell" in sys.argv:
+        count = backfill_maxwell(conn)
+        print(f"[session-search] Backfilled {count} maxwell entries")
         conn.close()
         return
 

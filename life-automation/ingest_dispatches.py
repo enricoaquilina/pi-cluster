@@ -185,6 +185,17 @@ def main():
     out_path.write_text(content, encoding="utf-8")
     print(f"[ingest] Wrote {out_path} ({len(dispatches) if dispatches else 0} dispatches, {len(heartbeat)} heartbeat actions)")
 
+    # Index into FTS5 for unified search (non-critical, force=True for upsert)
+    try:
+        import subprocess as _sp
+        _sp.run(
+            [sys.executable, str(LIFE_DIR / "scripts" / "session_search.py"),
+             "--backfill-maxwell"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except Exception:
+        pass
+
 
 if __name__ == "__main__":
     main()

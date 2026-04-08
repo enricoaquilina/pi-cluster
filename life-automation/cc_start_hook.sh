@@ -58,19 +58,19 @@ if [ -f "$DAILY_NOTE" ]; then
     /usr/bin/awk '/^## [^P]/ && p{p=0} /^## Pending Items/{p=1} p' "$DAILY_NOTE" 2>/dev/null | head -10
 fi
 
-# --- Yesterday's session digests ---
-YESTERDAY=$(date -d "yesterday" +%Y-%m-%d 2>/dev/null || date -v-1d +%Y-%m-%d 2>/dev/null)
-YMONTH=$(date -d "yesterday" +%m 2>/dev/null || date -v-1d +%m 2>/dev/null)
-DIGEST_FILE="$LIFE_DIR/Daily/$YEAR/$YMONTH/sessions-digest-${YESTERDAY}.jsonl"
-if [ -f "$DIGEST_FILE" ]; then
+# --- Recent sessions (from FTS5 search) ---
+SESSION_SEARCH="$LIFE_DIR/scripts/session_search.py"
+if [ -f "$SESSION_SEARCH" ]; then
     echo ""
-    echo "## Yesterday's Sessions"
-    /usr/bin/tail -3 "$DIGEST_FILE" | /usr/bin/python3 -c "
+    echo "## Recent Sessions"
+    /usr/bin/python3 "$SESSION_SEARCH" --recent 5 --json 2>/dev/null | /usr/bin/python3 -c "
 import sys, json
-for line in sys.stdin:
-    try:
-        d = json.loads(line.strip())
-        print(f\"- [{d.get('session_type','?')}] {d.get('summary','no summary')}\")
-    except: pass
+try:
+    for d in json.load(sys.stdin):
+        ts = d.get('ts','')[:10]
+        stype = d.get('session_type','?')
+        summary = d.get('summary','')[:120]
+        print(f'- {ts} [{stype}] {summary}')
+except: pass
 " 2>/dev/null
 fi

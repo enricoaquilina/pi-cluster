@@ -1,5 +1,4 @@
 """Phase 2 tests — git sync, start hook context injection, gitleaks hook."""
-import json
 import os
 import subprocess
 from datetime import date, timedelta
@@ -104,19 +103,29 @@ class TestDailyContextInjection:
         result = _run_hook(life_dir)
         assert result.returncode == 0
 
-    def test_yesterday_sessions_injected(self, life_dir):
-        """Session digest from yesterday → shows in start hook output."""
-        yparts = YESTERDAY.split("-")
-        digest = life_dir / "Daily" / yparts[0] / yparts[1] / f"sessions-digest-{YESTERDAY}.jsonl"
-        digest.write_text(
-            json.dumps({"session_type": "coding", "summary": "Fixed auth bug"}) + "\n"
-            + json.dumps({"session_type": "research", "summary": "Explored caching"}) + "\n",
-            encoding="utf-8",
-        )
+    def test_recent_sessions_section_present(self, life_dir):
+        """Start hook has Recent Sessions section (FTS5-powered, replaced Yesterday's)."""
+        # Create session_search.py in the expected location + a sessions.db
+        import shutil
+        scripts_dir = life_dir / "scripts"
+        scripts_dir.mkdir(exist_ok=True)
+        search_script = Path(__file__).parent.parent / "session_search.py"
+        shutil.copy2(search_script, scripts_dir / "session_search.py")
+        # Create DB with a test entry
+        import importlib
+        spec = importlib.util.spec_from_file_location("ss", search_script)
+        ss = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(ss)
+        conn = ss.ensure_db(life_dir / "sessions.db")
+        ss.index_session(conn, {
+            "session_id": "test-1", "ts": "2026-04-07T10:00:00Z",
+            "summary": "Fixed auth bug", "session_type": "coding",
+            "decisions": [], "files_touched": [], "tool_counts": {}, "msg_count": 10,
+        })
+        conn.close()
         result = _run_hook(life_dir)
         assert result.returncode == 0
-        assert "Yesterday's Sessions" in result.stdout
-        assert "Fixed auth bug" in result.stdout
+        assert "Recent Sessions" in result.stdout
 
     def test_no_section_leak_between_active_and_pending(self, life_dir):
         """Active Projects section shouldn't include Pending Items header."""

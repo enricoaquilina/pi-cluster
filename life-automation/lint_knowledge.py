@@ -17,6 +17,7 @@ Environment:
 """
 import json
 import os
+import re
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -94,6 +95,68 @@ def check_empty_entity_dirs() -> None:
                 )
 
 
+def _load_aliases() -> dict[str, str]:
+    """Load .wiki-link-aliases file. Returns slug→canonical mapping."""
+    aliases: dict[str, str] = {}
+    path = LIFE_DIR / ".wiki-link-aliases"
+    if not path.exists():
+        return aliases
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" in line:
+            key, val = line.split("=", 1)
+            aliases[key.strip()] = val.strip()
+    return aliases
+
+
+def check_wiki_links() -> None:
+    """Check [[wiki-links]] in recent daily notes against entity dirs."""
+    aliases = _load_aliases()
+    # Build set of all entity dir names
+    entity_dirs: set[str] = set()
+    for etype in ENTITY_TYPES:
+        edir = LIFE_DIR / etype
+        if edir.is_dir():
+            entity_dirs.update(
+                d.name for d in edir.iterdir()
+                if d.is_dir() and not d.name.startswith("_")
+            )
+
+    # Scan daily notes from last 30 days (by filename date)
+    cutoff = date.fromisoformat(TODAY) - timedelta(days=30)
+    seen_slugs: set[str] = set()
+    daily_dir = LIFE_DIR / "Daily"
+    if not daily_dir.is_dir():
+        return
+    for note in daily_dir.rglob("*.md"):
+        try:
+            note_date = date.fromisoformat(note.stem)
+        except ValueError:
+            continue
+        if note_date < cutoff:
+            continue
+        try:
+            text = note.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for match in re.finditer(r"\[\[([a-z0-9-]+)\]\]", text):
+            slug = match.group(1)
+            if slug in seen_slugs:
+                continue
+            seen_slugs.add(slug)
+            canonical = aliases.get(slug, slug)
+            if canonical == "SKIP":
+                continue
+            if canonical not in entity_dirs:
+                finding(
+                    "BROKEN_LINK",
+                    f"[[{slug}]] in {note.name} — no entity dir found",
+                    str(note),
+                )
+
+
 def main() -> None:
     # Load relationships
     rel_path = LIFE_DIR / "relationships.json"
@@ -110,6 +173,7 @@ def main() -> None:
         check_stale_relationships(relationships)
 
     check_empty_entity_dirs()
+    check_wiki_links()
 
     if JSON_OUTPUT:
         json.dump(findings, sys.stdout, indent=2)
