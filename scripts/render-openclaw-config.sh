@@ -2,7 +2,7 @@
 # render-openclaw-config.sh — render openclaw.json from its checked-in
 # template plus an env file, substituting ONLY the explicit allowlist
 # of variables.
-set -uo pipefail
+set -euo pipefail
 #
 # Why this exists: before PR #132, `~/.openclaw/openclaw.json` was the
 # sole copy and it drifted in three problematic ways over time —

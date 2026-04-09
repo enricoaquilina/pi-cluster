@@ -1,7 +1,7 @@
 #!/bin/bash
 # openclaw-restart-count-alerter.sh — watch docker RestartCount deltas
 # for the watchdog-managed services and page on flapping.
-set -uo pipefail
+set -euo pipefail
 #
 # Why this exists: the mission-control-watchdog restarts unhealthy
 # services, but it doesn't itself notice when a service crosses the
@@ -47,7 +47,17 @@ STATE_DIR="${RESTART_COUNT_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/pi-c
 WINDOW_SECS="${RESTART_COUNT_WINDOW_SECS:-1800}"
 THRESHOLD="${RESTART_COUNT_THRESHOLD:-3}"
 DEDUP_SECS="${RESTART_COUNT_DEDUP_SECS:-3600}"
-SERVICES="${RESTART_COUNT_SERVICES:-openclaw-openclaw-gateway-1 mission-control-api-1 mission-control-proxy-1 mongodb n8n-n8n-1 openclaw-router-api}"
+# Default service list is based on the actual container names on
+# heavy as of 2026-04-09. Names differ from what a naive
+# compose-project-prefix guess would give: mission-control and n8n
+# use their bare service names, not <project>-<name>-1. openclaw
+# gateway uses the doubled "openclaw-openclaw-gateway-1" form.
+# openclaw-router-api is a systemd unit, not a docker container,
+# and is deliberately NOT in this list — systemd already tracks
+# restart counts via StartLimitBurst for non-docker services.
+# Override via RESTART_COUNT_SERVICES env on any host with a
+# different topology.
+SERVICES="${RESTART_COUNT_SERVICES:-openclaw-openclaw-gateway-1 mission-control-api mission-control-proxy mongodb n8n}"
 
 # Dependency injection for tests. In production these are plain
 # `docker` and `curl`; in tests, pointed at shim scripts that emit
@@ -126,8 +136,13 @@ check_service() {
     printf '%s\t%s\n' "$now" "$count" >> "$state_file"
 
     # Prune rows older than the window. Rewrite the file in place
-    # (via tmpfile) so a concurrent reader never sees a partial state.
-    local tmp="${state_file}.tmp.$$"
+    # (via tmpfile in the same dir so the mv is atomic rename) so a
+    # concurrent reader never sees a partial state. Use mktemp with
+    # an in-dir template rather than "$state_file.tmp.$$" — PID
+    # collisions are unlikely at a 5min cadence but the suggestion
+    # is free to apply and safer under any future cadence.
+    local tmp
+    tmp=$(mktemp "${state_file}.tmp.XXXXXX")
     awk -F'\t' -v cutoff="$cutoff" '$1 >= cutoff' "$state_file" > "$tmp"
     mv "$tmp" "$state_file"
 

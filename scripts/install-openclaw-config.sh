@@ -64,7 +64,17 @@ if [ ! -x "$VALIDATOR" ]; then
     exit 1
 fi
 
-tmp="$(mktemp -t openclaw-install.XXXXXX)"
+# Create the tmp file in the same directory as $TARGET so the final
+# `mv` is a rename on the same filesystem — atomic instead of
+# copy-and-delete across mounts. If $TARGET's parent dir doesn't
+# exist yet (first-ever install), fall back to $TMPDIR; the later
+# `mv "$tmp" "$TARGET"` will still work for that first-install case.
+target_dir="$(dirname "$TARGET")"
+if [ -d "$target_dir" ] && [ -w "$target_dir" ]; then
+    tmp="$(mktemp -p "$target_dir" ".openclaw-install.XXXXXX")"
+else
+    tmp="$(mktemp -t openclaw-install.XXXXXX)"
+fi
 cleanup() { rm -f "$tmp"; }
 trap cleanup EXIT
 
