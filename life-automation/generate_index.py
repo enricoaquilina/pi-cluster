@@ -32,6 +32,105 @@ LLM_MODE = "--llm" in sys.argv
 ENTITY_TYPES = ["Projects", "People", "Companies"]
 CACHE_FILE = LIFE_DIR / ".index-cache.json"
 
+# Phase 8D: allow importing shared life_graph module
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from life_graph import Adjacency, build_adjacency, known_entities, load_relationships  # noqa: E402
+
+INDEX_MAX_RELATED_PER_RELATION = int(os.environ.get("INDEX_MAX_RELATED_PER_RELATION", "10"))
+
+# Directional labels for asymmetric relations: (out_side, in_side)
+RELATION_LABELS: dict[str, tuple[str, str]] = {
+    "uses": ("Uses", "Used by"),
+    "works-on": ("Works on", "Worked on by"),
+    "provides": ("Provides", "Provided by"),
+    "manages": ("Manages", "Managed by"),
+    "reports-to": ("Reports to", "Direct reports"),
+    "owns": ("Owns", "Owned by"),
+    "contributes-to": ("Contributes to", "Contributors"),
+    "depends-on": ("Depends on", "Depended on by"),
+    "blocks": ("Blocks", "Blocked by"),
+    "replaces": ("Replaces", "Replaced by"),
+    "deprecates": ("Deprecates", "Deprecated by"),
+}
+
+SYMMETRIC_LABELS: dict[str, str] = {
+    "related-to": "Related",
+    "similar-to": "Similar",
+    "collaborates-with": "Collaborates with",
+}
+
+
+def _load_adjacency() -> Adjacency:
+    """Phase 8D: build the shared graph once per run."""
+    edges, warnings = load_relationships(LIFE_DIR / "relationships.json")
+    if warnings:
+        for w in warnings:
+            print(f"[generate_index] {w}", file=sys.stderr)
+    known = known_entities(LIFE_DIR)
+    return build_adjacency(edges, known)
+
+
+def _sort_edges(edges: list) -> list:
+    """Sort by (-last_seen, slug) — newest first, alphabetical tiebreak."""
+    return sorted(
+        edges,
+        key=lambda e: (
+            -1 if e.last_seen else 0,  # present > absent
+            e.last_seen,
+            e.to if hasattr(e, "to") else "",
+            e.from_ if hasattr(e, "from_") else "",
+        ),
+        reverse=True,
+    )
+
+
+def _render_related_sub_bullets(slug: str, adj: Adjacency) -> list[str]:
+    """Return a list of markdown lines (0 or more) for related entities.
+
+    Emits indented sub-bullets under the parent entity bullet, grouped by
+    relation with directional labels and ``INDEX_MAX_RELATED_PER_RELATION``
+    truncation.
+    """
+    lines: list[str] = []
+
+    # Asymmetric outbound
+    out_buckets = adj.out.get(slug, {})
+    for relation in sorted(out_buckets.keys()):
+        edges = sorted(out_buckets[relation],
+                       key=lambda e: (e.last_seen or "", e.to), reverse=True)
+        targets = [e.to for e in edges][:INDEX_MAX_RELATED_PER_RELATION]
+        if not targets:
+            continue
+        if relation in SYMMETRIC_LABELS:
+            label = SYMMETRIC_LABELS[relation]
+        else:
+            label = RELATION_LABELS.get(relation, (relation.replace("-", " ").title(), ""))[0]
+        links = ", ".join(f"[[{t}]]" for t in targets)
+        more = len(out_buckets[relation]) - len(targets)
+        suffix = f" _(+{more} more)_" if more > 0 else ""
+        lines.append(f"  - {label}: {links}{suffix}")
+
+    # Asymmetric inbound (skip symmetric relations — they were handled as outbound
+    # on the canonical side to avoid double-rendering)
+    in_buckets = adj.in_.get(slug, {})
+    for relation in sorted(in_buckets.keys()):
+        if relation in SYMMETRIC_LABELS:
+            continue  # already rendered on the canonical-pair side
+        edges = sorted(in_buckets[relation],
+                       key=lambda e: (e.last_seen or "", e.from_), reverse=True)
+        targets = [e.from_ for e in edges][:INDEX_MAX_RELATED_PER_RELATION]
+        if not targets:
+            continue
+        label = RELATION_LABELS.get(relation, ("", relation.replace("-", " ").title()))[1]
+        if not label:
+            continue
+        links = ", ".join(f"[[{t}]]" for t in targets)
+        more = len(in_buckets[relation]) - len(targets)
+        suffix = f" _(+{more} more)_" if more > 0 else ""
+        lines.append(f"  - {label}: {links}{suffix}")
+
+    return lines
+
 
 def _strip_frontmatter(text: str) -> str:
     """Remove YAML frontmatter for comparison."""
@@ -272,6 +371,7 @@ def count_relationships() -> tuple[int, str]:
 def generate() -> str:
     """Generate the index.md content."""
     llm_cache = _load_cache() if LLM_MODE else None
+    adj = _load_adjacency()
 
     lines = [
         f"---\ngenerated: {TODAY}\nauto_maintained: true\n---\n",
@@ -295,6 +395,8 @@ def generate() -> str:
                     parts.append(f"updated {e['updated']}")
                 meta = f" ({', '.join(parts)})" if parts else ""
                 lines.append(f"- **[[{e['slug']}]]** — {e['desc']}{meta}")
+                # Phase 8D: emit cross-reference sub-bullets
+                lines.extend(_render_related_sub_bullets(e["slug"], adj))
             lines.append("")
 
     areas = scan_areas()
