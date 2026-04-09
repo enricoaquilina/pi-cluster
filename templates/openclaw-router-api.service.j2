@@ -6,8 +6,11 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=enrico
-EnvironmentFile=/home/enrico/homelab/scripts/.env.cluster
-ExecStart=/usr/bin/python3 /home/enrico/homelab/scripts/openclaw-cluster-service.py
+EnvironmentFile=/home/enrico/pi-cluster/scripts/.env.cluster
+# Dedicated venv avoids constraint drift from user-site pip installs
+# (fastapi 0.115.6 pins starlette<0.42; user site had starlette 1.0.0).
+# Create / refresh with: scripts/install-openclaw-router-venv.sh
+ExecStart=/home/enrico/.local/openclaw-router-venv/bin/python /home/enrico/pi-cluster/scripts/openclaw-cluster-service.py
 Restart=always
 RestartSec=5
 TimeoutStopSec=30
