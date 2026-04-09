@@ -1,6 +1,7 @@
 #!/bin/bash
 # openclaw-config-canary.sh — independent hourly schema check for
 # ~/.openclaw/openclaw.json.
+set -uo pipefail
 #
 # Context: the mission-control-watchdog only validates the config as part
 # of a restart decision. That means a schema-tightening upstream release
@@ -25,8 +26,6 @@
 #
 # Usage:
 #   openclaw-config-canary.sh            # one-shot check
-
-set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
