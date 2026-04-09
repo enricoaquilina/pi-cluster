@@ -34,14 +34,21 @@ CREATE TABLE IF NOT EXISTS sessions_meta (
     msg_count INTEGER,
     tool_counts TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_sessions_meta_ts ON sessions_meta(ts DESC);
 """
 
 
 def ensure_db(db_path: Path | None = None) -> sqlite3.Connection:
-    """Create DB and tables if needed. Returns connection."""
+    """Create DB and tables if needed. Returns connection.
+
+    Phase 8B hardening: pass ``timeout=1.5`` to ``sqlite3.connect`` and set
+    ``PRAGMA busy_timeout=1500`` so a WAL lock held by the nightly indexer
+    never hangs the hook.
+    """
     path = db_path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), timeout=1.5)
+    conn.execute("PRAGMA busy_timeout=1500")
     conn.execute("PRAGMA journal_mode=WAL")
     for stmt in SCHEMA.strip().split(";"):
         stmt = stmt.strip()
@@ -96,11 +103,51 @@ def index_session(conn: sqlite3.Connection, digest: dict, force: bool = False) -
     return True
 
 
+_FTS5_QUERY_MAX_LEN = 512
+_FTS5_RESERVED = {"AND", "OR", "NOT", "NEAR"}
+# Characters that force a token into quoted form (beyond whitespace)
+_FTS5_SPECIAL_CHARS = set('-"*:().\\/')
+
+
 def _escape_fts5_query(query: str) -> str:
-    """Escape hyphenated terms for FTS5 (treats - as MINUS operator)."""
-    import re
-    # Wrap terms containing hyphens in double quotes so FTS5 treats them as phrases
-    return re.sub(r"(\w+-\w[\w-]*)", r'"\1"', query)
+    """Escape a user query so FTS5 ``MATCH`` treats hyphenated or reserved
+    tokens as phrases rather than operators or syntax errors.
+
+    Rules (plan v3 §8B):
+
+    * Truncate to 512 characters before escaping (prevents pathological input).
+    * Split on whitespace, preserve order.
+    * For each token: wrap in double quotes and double-escape embedded ``"``
+      if the token
+        - contains any FTS5-special character (``- " * : ( ) . / \\``), OR
+        - matches a reserved bareword (``AND``, ``OR``, ``NOT``, ``NEAR``)
+          case-insensitively.
+    * Tokens that are already quoted (``"pi-cluster"``) are passed through
+      unchanged so the function is idempotent.
+    * ASCII-only slug convention: non-ASCII tokens are passed through but the
+      operator-word check is ASCII-case-insensitive.
+    """
+    if not query:
+        return query
+    if len(query) > _FTS5_QUERY_MAX_LEN:
+        query = query[:_FTS5_QUERY_MAX_LEN]
+    tokens = query.split()
+    out: list[str] = []
+    for tok in tokens:
+        # Already-quoted phrase: leave alone (idempotent)
+        if len(tok) >= 2 and tok.startswith('"') and tok.endswith('"'):
+            out.append(tok)
+            continue
+        needs_quoting = (
+            tok.upper() in _FTS5_RESERVED
+            or any(ch in _FTS5_SPECIAL_CHARS for ch in tok)
+        )
+        if needs_quoting:
+            escaped = tok.replace('"', '""')  # FTS5 phrase escape
+            out.append(f'"{escaped}"')
+        else:
+            out.append(tok)
+    return " ".join(out)
 
 
 def search(conn: sqlite3.Connection, query: str, limit: int = 10,
@@ -138,21 +185,33 @@ def search(conn: sqlite3.Connection, query: str, limit: int = 10,
 
 def recent(conn: sqlite3.Connection, limit: int = 10,
            session_type: str | None = None) -> list[dict]:
-    """Get most recent sessions with summaries (queries FTS5 table directly)."""
+    """Get most recent sessions with summaries.
+
+    Phase 8B scalability fix: routes through the indexed ``sessions_meta``
+    table (``idx_sessions_meta_ts``) and joins the FTS5 virtual table for the
+    summary payload. The pre-v3 version did ``ORDER BY ts DESC`` directly on
+    the FTS5 virtual table, which has no ts index — O(N) scan at scale.
+    """
     if session_type:
         rows = conn.execute(
-            "SELECT session_id, ts, summary, session_type "
-            "FROM sessions WHERE session_type = ? ORDER BY ts DESC LIMIT ?",
+            "SELECT m.session_id, m.ts, s.summary, m.session_type "
+            "FROM sessions_meta m "
+            "LEFT JOIN sessions s ON s.session_id = m.session_id "
+            "WHERE m.session_type = ? "
+            "ORDER BY m.ts DESC LIMIT ?",
             (session_type, limit),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT session_id, ts, summary, session_type "
-            "FROM sessions ORDER BY ts DESC LIMIT ?",
+            "SELECT m.session_id, m.ts, s.summary, m.session_type "
+            "FROM sessions_meta m "
+            "LEFT JOIN sessions s ON s.session_id = m.session_id "
+            "ORDER BY m.ts DESC LIMIT ?",
             (limit,),
         ).fetchall()
     return [
-        {"session_id": r[0], "ts": r[1], "summary": r[2], "session_type": r[3]}
+        {"session_id": r[0], "ts": r[1], "summary": r[2] or "",
+         "session_type": r[3]}
         for r in rows
     ]
 

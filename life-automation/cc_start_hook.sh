@@ -2,6 +2,12 @@
 # Claude Code SessionStart hook — briefs on Maxwell activity.
 # Output goes to stdout → injected into Claude Code context (max 10K chars).
 # Uses absolute paths for non-interactive shell safety.
+#
+# Phase 8B hook-wide invariant: this script must ALWAYS exit 0 on every error
+# path so a broken hook never blocks a Claude Code session start.
+set +e
+trap 'exit 0' EXIT
+
 LIFE_DIR="${LIFE_DIR:-$HOME/life}"
 
 # Pull latest ~/life from git (sync from other nodes/sessions)
@@ -59,14 +65,40 @@ if [ -f "$DAILY_NOTE" ]; then
 fi
 
 # --- Project context (detect from working directory) ---
+# Phase 8B: segment-match resolution via config/project-slugs.json.
+# The pre-v3 substring match (`*/pi-cluster*`) misfired on paths like
+# `/tmp/not-pi-cluster-backup`. Instead we walk $PWD segments from the
+# deepest ancestor upward and return the first exact segment match.
 SESSION_SEARCH="$LIFE_DIR/scripts/session_search.py"
+SLUGS_CONFIG="$HOME/pi-cluster/life-automation/config/project-slugs.json"
+[ -f "$SLUGS_CONFIG" ] || SLUGS_CONFIG="$LIFE_DIR/scripts/config/project-slugs.json"
 PROJECT_SLUG=""
-case "$PWD" in
-    */pi-cluster*) PROJECT_SLUG="pi-cluster" ;;
-    */polymarket*) PROJECT_SLUG="polymarket-bot" ;;
-    */gym-tracker*) PROJECT_SLUG="gym-tracker-app" ;;
-    */openclaw*|*/maxwell*) PROJECT_SLUG="openclaw-maxwell" ;;
-esac
+if [ -f "$SLUGS_CONFIG" ]; then
+    PROJECT_SLUG=$(/usr/bin/python3 - "$PWD" "$SLUGS_CONFIG" <<'PY' 2>/dev/null
+import json, sys
+pwd = sys.argv[1]
+cfg_path = sys.argv[2]
+try:
+    cfg = json.load(open(cfg_path))
+    slugs = cfg.get("slugs", {})
+except Exception:
+    sys.exit(0)
+
+# Build segment → slug map (first segment wins if duplicate)
+seg_to_slug = {}
+for slug, data in slugs.items():
+    for seg in data.get("segments", [slug]):
+        seg_to_slug.setdefault(seg, slug)
+
+# Walk segments from the deepest to the shallowest; first match wins.
+parts = [p for p in pwd.split("/") if p]
+for seg in reversed(parts):
+    if seg in seg_to_slug:
+        print(seg_to_slug[seg])
+        break
+PY
+    )
+fi
 
 if [ -n "$PROJECT_SLUG" ] && [ -f "$SESSION_SEARCH" ]; then
     echo ""

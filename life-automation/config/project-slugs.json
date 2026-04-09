@@ -1,0 +1,17 @@
+{
+  "_doc": "Phase 8B — slug → optional PWD segment aliases for cc_start_hook.sh. Each key is the canonical slug (matching the entity folder name). The `segments` list contains additional path segments that should resolve to this slug (e.g., git worktrees).",
+  "slugs": {
+    "pi-cluster": {
+      "segments": ["pi-cluster"]
+    },
+    "polymarket-bot": {
+      "segments": ["polymarket-bot", "polymarket"]
+    },
+    "gym-tracker-app": {
+      "segments": ["gym-tracker-app", "gym-tracker"]
+    },
+    "openclaw-maxwell": {
+      "segments": ["openclaw-maxwell", "openclaw", "maxwell"]
+    }
+  }
+}
