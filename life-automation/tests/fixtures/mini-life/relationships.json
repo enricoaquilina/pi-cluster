@@ -1,0 +1,7 @@
+[
+  {"from": "beta", "from_type": "person", "to": "gadget", "to_type": "project", "relation": "works-on", "first_seen": "2026-01-01", "last_seen": "2026-04-02"},
+  {"from": "delta", "from_type": "person", "to": "gadget", "to_type": "project", "relation": "works-on", "first_seen": "2026-01-05", "last_seen": "2026-04-01"},
+  {"from": "delta", "from_type": "person", "to": "gadget", "to_type": "project", "relation": "manages", "first_seen": "2026-02-10", "last_seen": "2026-04-01"},
+  {"from": "acme", "from_type": "company", "to": "gadget", "to_type": "project", "relation": "provides", "first_seen": "2026-01-01", "last_seen": "2026-03-15"},
+  {"from": "gadget", "from_type": "project", "to": "pi-hole", "to_type": "project", "relation": "uses", "first_seen": "2026-02-01", "last_seen": "2026-04-01"}
+]

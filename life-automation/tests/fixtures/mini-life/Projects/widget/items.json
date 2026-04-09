@@ -1,0 +1,6 @@
+[
+  {"fact": "widget was prototype", "category": "status", "confidence": "confirmed", "date": "2024-11-01", "source": "test"},
+  {"fact": "widget used Go", "category": "tech", "confidence": "confirmed", "date": "2024-11-01", "source": "test"},
+  {"fact": "widget had 3 users", "category": "metric", "confidence": "stale", "date": "2024-12-15", "source": "test"},
+  {"fact": "widget sunset in 2025", "category": "status", "confidence": "confirmed", "date": "2025-01-15", "source": "test"}
+]

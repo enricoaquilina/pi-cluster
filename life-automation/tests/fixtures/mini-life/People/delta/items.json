@@ -1,0 +1,12 @@
+[
+  {"fact": "delta joined 2026-01", "category": "role", "confidence": "confirmed", "date": "2026-01-05", "source": "test"},
+  {"fact": "delta manages gadget", "category": "role", "confidence": "confirmed", "date": "2026-02-10", "source": "test"},
+  {"fact": "delta reports to beta", "category": "role", "confidence": "confirmed", "date": "2026-02-10", "source": "test"},
+  {"fact": "delta speaks Norwegian", "category": "skill", "confidence": "confirmed", "date": "2026-01-05", "source": "test"},
+  {"fact": "delta prefers tabs", "category": "preference", "confidence": "single", "date": "2026-03-01", "source": "test"},
+  {"fact": "delta owns laptop X1", "category": "asset", "confidence": "confirmed", "date": "2026-01-05", "source": "test"},
+  {"fact": "delta uses vim", "category": "tool", "confidence": "single", "date": "2026-03-01", "source": "test"},
+  {"fact": "delta is on call weekends", "category": "schedule", "confidence": "stale", "date": "2025-09-01", "source": "test"},
+  {"fact": "delta maintains gadget", "category": "role", "confidence": "confirmed", "date": "2026-04-01", "source": "test"},
+  {"fact": "delta archived old project X", "category": "role", "confidence": "archived", "date": "2025-06-01", "source": "test"}
+]

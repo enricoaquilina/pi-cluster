@@ -1,0 +1,5 @@
+[
+  {"fact": "beta works on gadget", "category": "role", "confidence": "confirmed", "date": "2026-04-02", "source": "test"},
+  {"fact": "beta lives in Oslo", "category": "location", "confidence": "single", "date": "2026-04-02", "source": "test"},
+  {"fact": "beta prefers Python", "category": "preference", "confidence": "stale", "date": "2025-10-01", "source": "test"}
+]
