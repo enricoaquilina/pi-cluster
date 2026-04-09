@@ -22,7 +22,14 @@ set -uo pipefail
 #
 # Environment:
 #   OPENCLAW_CONFIG    path to openclaw.json (default: $HOME/.openclaw/openclaw.json)
-#   OPENCLAW_VALIDATOR path to validator script (default: sibling openclaw-config-validate.sh)
+#   OPENCLAW_VALIDATOR path to validator script. Default is a canary-scoped
+#                      sibling (openclaw-config-validate-canary.sh) so this
+#                      tool is fully independent of the watchdog's own
+#                      validator resolution (which targets the un-suffixed
+#                      openclaw-config-validate.sh). Keeping the filenames
+#                      distinct means installing the canary can't silently
+#                      flip the watchdog's #124 validation gate from "no-op"
+#                      to "active" — that's tracked as a separate change.
 #
 # Usage:
 #   openclaw-config-canary.sh            # one-shot check
@@ -30,7 +37,7 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 OPENCLAW_CONFIG="${OPENCLAW_CONFIG:-$HOME/.openclaw/openclaw.json}"
-VALIDATOR="${OPENCLAW_VALIDATOR:-$SCRIPT_DIR/openclaw-config-validate.sh}"
+VALIDATOR="${OPENCLAW_VALIDATOR:-$SCRIPT_DIR/openclaw-config-validate-canary.sh}"
 
 ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
@@ -38,8 +45,15 @@ if [ ! -x "$VALIDATOR" ]; then
     echo "[canary] $(ts) INVOCATION_FAILED validator not executable: $VALIDATOR" >&2
     exit 3
 fi
-if [ ! -f "$OPENCLAW_CONFIG" ]; then
-    echo "[canary] $(ts) INVOCATION_FAILED config not found: $OPENCLAW_CONFIG" >&2
+# Use -r (readable) not just -f (exists) so perms problems become a
+# first-class invocation failure with a clear message, instead of being
+# rediscovered inside the validator's docker cp.
+if [ ! -r "$OPENCLAW_CONFIG" ]; then
+    if [ ! -e "$OPENCLAW_CONFIG" ]; then
+        echo "[canary] $(ts) INVOCATION_FAILED config not found: $OPENCLAW_CONFIG" >&2
+    else
+        echo "[canary] $(ts) INVOCATION_FAILED config not readable: $OPENCLAW_CONFIG" >&2
+    fi
     exit 3
 fi
 

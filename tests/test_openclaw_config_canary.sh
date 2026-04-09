@@ -148,4 +148,63 @@ else
     fail "validator rc=3 -> stderr contains INVOCATION_FAILED" "err=$(cat "$err_file")"
 fi
 
+# --- Case 6: default validator path resolution ------------------------
+# Regression guard for the PR #127 follow-up: the canary must find its
+# sibling validator WITHOUT OPENCLAW_VALIDATOR being set. Cases 1-5 all
+# override the env var, so they silently tolerated a broken default.
+# Here we stage a fake deployment layout (canary + validator living side
+# by side in the same bin-dir) and run the canary with NO env overrides.
+DEPLOY="$TMP/deploy-bin"
+mkdir -p "$DEPLOY"
+cp "$CANARY" "$DEPLOY/openclaw-config-canary"
+chmod +x "$DEPLOY/openclaw-config-canary"
+# The canary's default expects this exact name: canary-scoped, NOT the
+# watchdog's openclaw-config-validate.sh.
+cat > "$DEPLOY/openclaw-config-validate-canary.sh" <<'BASH'
+#!/bin/bash
+# stand-in validator for the default-path test: always reports valid
+exit 0
+BASH
+chmod +x "$DEPLOY/openclaw-config-validate-canary.sh"
+
+out_file="$TMP/case6.out"
+err_file="$TMP/case6.err"
+env -u OPENCLAW_VALIDATOR -u OPENCLAW_VALIDATE_CMD \
+    OPENCLAW_CONFIG="$FAKE_CONFIG" \
+    "$DEPLOY/openclaw-config-canary" >"$out_file" 2>"$err_file"
+rc=$?
+if [ "$rc" -eq 0 ]; then
+    pass "default validator path resolves to canary-scoped sibling"
+else
+    fail "default validator path resolves to canary-scoped sibling" \
+        "rc=$rc err=$(cat "$err_file")"
+fi
+if grep -q "OK" "$out_file"; then
+    pass "default path resolution emits OK line"
+else
+    fail "default path resolution emits OK line" "out=$(cat "$out_file")"
+fi
+
+# Negative half of the regression guard: if the sibling is named the
+# WAY THE WATCHDOG expects (no `-canary` suffix), the canary must NOT
+# find it — otherwise we're silently coupling the two and defeating the
+# whole point of the split. This is the assertion that would have failed
+# on PR #127 and caught the bug pre-merge.
+rm -f "$DEPLOY/openclaw-config-validate-canary.sh"
+cp "$VALIDATOR" "$DEPLOY/openclaw-config-validate.sh"
+chmod +x "$DEPLOY/openclaw-config-validate.sh"
+
+out_file="$TMP/case6b.out"
+err_file="$TMP/case6b.err"
+env -u OPENCLAW_VALIDATOR -u OPENCLAW_VALIDATE_CMD \
+    OPENCLAW_CONFIG="$FAKE_CONFIG" \
+    "$DEPLOY/openclaw-config-canary" >"$out_file" 2>"$err_file"
+rc=$?
+if [ "$rc" -eq 3 ]; then
+    pass "un-suffixed validator name does NOT satisfy canary default"
+else
+    fail "un-suffixed validator name does NOT satisfy canary default" \
+        "rc=$rc (canary is silently using the watchdog's validator path)"
+fi
+
 test_summary

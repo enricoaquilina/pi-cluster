@@ -5,8 +5,11 @@ set -euo pipefail
 #
 # Installs:
 #   ~/.local/bin/openclaw-config-canary
-#   ~/.local/bin/openclaw-config-validate   (if not already present — the
-#                                            canary wrapper invokes it)
+#   ~/.local/bin/openclaw-config-validate-canary.sh  (canary-scoped copy
+#        of scripts/openclaw-config-validate.sh — deliberately NOT the
+#        un-suffixed path the watchdog looks for, so this installer
+#        cannot silently activate the #124 validation gate as a side
+#        effect. That activation is tracked in its own PR.)
 #   ~/.config/systemd/user/openclaw-config-canary.service
 #   ~/.config/systemd/user/openclaw-config-canary.timer
 #
@@ -29,7 +32,14 @@ BIN_DIR="${OPENCLAW_CANARY_BIN_DIR:-$HOME/.local/bin}"
 UNIT_DIR="${OPENCLAW_CANARY_UNIT_DIR:-$HOME/.config/systemd/user}"
 
 CANARY_DEST="$BIN_DIR/openclaw-config-canary"
-VALIDATOR_DEST="$BIN_DIR/openclaw-config-validate"
+# Canary-scoped validator filename: distinct from the watchdog's
+# expected `openclaw-config-validate.sh` so this installer never
+# activates PR #124's validation gate as a side effect.
+VALIDATOR_DEST="$BIN_DIR/openclaw-config-validate-canary.sh"
+# Stale name from the PR #127 version of this installer. If present,
+# it's an orphan (neither the canary nor the watchdog resolve to it),
+# so clean it up on upgrade.
+LEGACY_VALIDATOR_DEST="$BIN_DIR/openclaw-config-validate"
 SERVICE_DEST="$UNIT_DIR/openclaw-config-canary.service"
 TIMER_DEST="$UNIT_DIR/openclaw-config-canary.timer"
 
@@ -39,7 +49,9 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --no-enable) ENABLE=false; shift ;;
         -h|--help)
-            grep '^#' "$0" | sed 's/^# \?//'
+            # Prefer BASH_SOURCE[0] over $0 so --help works even when
+            # this script is invoked via a symlink or through $PATH.
+            grep '^#' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
             exit 0
             ;;
         *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -86,14 +98,16 @@ install_if_changed() {
 
 install_if_changed "$CANARY_SRC" "$CANARY_DEST"
 
-# Only install the validator if it isn't already deployed — it has its
-# own release path and we don't want to shadow a newer copy.
-if [ ! -f "$VALIDATOR_DEST" ]; then
-    install -m 755 "$VALIDATOR_SRC" "$VALIDATOR_DEST"
-    log "installed $VALIDATOR_SRC -> $VALIDATOR_DEST (fresh)"
-else
-    log "$VALIDATOR_DEST already present — leaving untouched"
+# Clean up the orphan left by the PR #127 version of this installer.
+if [ -f "$LEGACY_VALIDATOR_DEST" ]; then
+    orphan_backup="${LEGACY_VALIDATOR_DEST}.orphan-$(date +%Y%m%d-%H%M%S)"
+    mv "$LEGACY_VALIDATOR_DEST" "$orphan_backup"
+    log "moved orphan $LEGACY_VALIDATOR_DEST -> $orphan_backup"
 fi
+
+# The canary-scoped validator is a captive copy — always keep it in
+# sync with the repo so the canary and the source validator can't drift.
+install_if_changed "$VALIDATOR_SRC" "$VALIDATOR_DEST"
 
 # --- Install unit files ------------------------------------------------
 install_unit_if_changed() {
@@ -128,7 +142,10 @@ if ! systemctl --user daemon-reload 2>/dev/null; then
 fi
 log "systemctl --user daemon-reload ok"
 
-if ! $ENABLE; then
+# Compare against the literal string rather than running "$ENABLE" as a
+# command — current values happen to be the `true`/`false` builtins, but
+# string comparison is safer if this variable ever holds anything else.
+if [ "$ENABLE" = false ]; then
     log "--no-enable: skipping enable/start"
     exit 0
 fi
