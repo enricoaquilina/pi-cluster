@@ -102,11 +102,15 @@ else
     log "$TARGET not present or not readable — will install fresh"
 fi
 
-if $DRY_RUN; then
+# Use string-literal comparisons rather than `if $var; then` — the
+# latter works today because "true"/"false" are shell builtins, but
+# a malformed value would get exec'd as a command. Same class of
+# fix as PR #130's ENABLE check in install-mc-watchdog.sh.
+if [ "$DRY_RUN" = true ]; then
     log "--dry-run: not touching live config"
     # Skip to mount check (same end-of-script path as a real install)
     post_install_skipped_install=true
-elif $identical; then
+elif [ "$identical" = true ]; then
     # No-op install: byte-identical to existing target. Still run
     # the mount check below because compose-drift is independent of
     # whether the rendered bytes changed.
@@ -115,7 +119,7 @@ else
     post_install_skipped_install=false
 fi
 
-if ! $post_install_skipped_install; then
+if [ "$post_install_skipped_install" = false ]; then
 
 # 3. Backup existing live config (if any) with a timestamped name.
 if [ -f "$TARGET" ]; then
