@@ -52,8 +52,30 @@ if [ -z "$CONFIG" ]; then
     log_err "usage: openclaw-config-validate.sh [--quiet] <path>"
     exit 3
 fi
-if [ ! -f "$CONFIG" ]; then
+if [ ! -e "$CONFIG" ]; then
     log_err "config not found: $CONFIG"
+    exit 3
+fi
+if [ ! -f "$CONFIG" ]; then
+    log_err "config is not a regular file: $CONFIG"
+    exit 3
+fi
+# Upfront readability check. Without this, a root-owned config (the
+# 2026-04-07 incident pattern) slips past the existence check, the
+# cp below silently fails, docker then runs doctor against an empty
+# mount, and the validator cheerfully returns "config valid" for a
+# file it never actually read. That silent-lie behaviour would defeat
+# the entire point of #124's validation gate — turning it from "skips
+# on missing validator" into "always green on unreadable config",
+# which is strictly worse. Catch it here, exit 3, name the owner so
+# the operator can chown it.
+if [ ! -r "$CONFIG" ]; then
+    owner="unknown"
+    if command -v stat >/dev/null 2>&1; then
+        owner="$(stat -c '%U:%G (mode %a)' "$CONFIG" 2>/dev/null || echo unknown)"
+    fi
+    log_err "config not readable by $(id -un): $CONFIG (owned by $owner)"
+    log_err "fix: sudo chown $(id -un):$(id -gn) $CONFIG"
     exit 3
 fi
 
@@ -79,9 +101,29 @@ fi
 # from whatever the on-disk filename happens to be.
 WORK_DIR="$(mktemp -d -t openclaw-validate.XXXXXX)"
 TMP_OUT="$WORK_DIR/doctor.out"
-cp "$CONFIG" "$WORK_DIR/openclaw.json"
-chmod 644 "$WORK_DIR/openclaw.json"
 trap 'rm -rf "$WORK_DIR"' EXIT
+# Belt-and-braces: even though the upfront -r check above should have
+# caught any permission problems, still verify that the copy actually
+# produced the expected file before proceeding. `set -e` is NOT active
+# in this script (we rely on explicit exit-code inspection elsewhere),
+# so a silent cp failure is otherwise recoverable only by checking
+# the destination. If either step fails, exit 3 — do NOT let docker
+# run against an empty mount and report "valid" on a file we never
+# actually copied.
+if ! cp "$CONFIG" "$WORK_DIR/openclaw.json" 2>"$WORK_DIR/cp.err"; then
+    log_err "failed to stage config for validation:"
+    sed -n '1,5p' "$WORK_DIR/cp.err" >&2 2>/dev/null || true
+    exit 3
+fi
+if [ ! -s "$WORK_DIR/openclaw.json" ]; then
+    log_err "staged config is empty or missing: $WORK_DIR/openclaw.json"
+    exit 3
+fi
+if ! chmod 644 "$WORK_DIR/openclaw.json" 2>>"$WORK_DIR/cp.err"; then
+    log_err "failed to chmod staged config:"
+    sed -n '1,5p' "$WORK_DIR/cp.err" >&2 2>/dev/null || true
+    exit 3
+fi
 
 docker run --rm \
     -v "$WORK_DIR:/home/node/.openclaw:ro" \
