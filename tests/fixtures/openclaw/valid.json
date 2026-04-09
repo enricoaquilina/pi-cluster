@@ -1,0 +1,20 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.4.8",
+    "lastTouchedAt": "2026-04-09T00:00:00.000Z"
+  },
+  "gateway": {
+    "mode": "local"
+  },
+  "plugins": {
+    "slots": {},
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "browser": {
+        "enabled": true
+      }
+    }
+  }
+}
