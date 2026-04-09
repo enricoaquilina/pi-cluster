@@ -87,13 +87,11 @@ fi
 log "rendered to $tmp ($(wc -c < "$tmp") bytes)"
 
 # 2. Diff against the live target to show what would change.
+identical=false
 if [ -f "$TARGET" ] && [ -r "$TARGET" ]; then
     if cmp -s "$tmp" "$TARGET"; then
         log "rendered output is byte-identical to $TARGET — nothing to do"
-        if $DRY_RUN; then
-            exit 0
-        fi
-        exit 0
+        identical=true
     else
         log "rendered output differs from $TARGET:"
         if command -v diff >/dev/null 2>&1; then
@@ -106,8 +104,18 @@ fi
 
 if $DRY_RUN; then
     log "--dry-run: not touching live config"
-    exit 0
+    # Skip to mount check (same end-of-script path as a real install)
+    post_install_skipped_install=true
+elif $identical; then
+    # No-op install: byte-identical to existing target. Still run
+    # the mount check below because compose-drift is independent of
+    # whether the rendered bytes changed.
+    post_install_skipped_install=true
+else
+    post_install_skipped_install=false
 fi
+
+if ! $post_install_skipped_install; then
 
 # 3. Backup existing live config (if any) with a timestamped name.
 if [ -f "$TARGET" ]; then
@@ -141,6 +149,40 @@ if ! "$VALIDATOR" --quiet "$TARGET"; then
     exit 1
 fi
 log "post-install validation OK"
+
+fi  # end of "if ! $post_install_skipped_install"
+
+# 6. Post-install mount check: confirm the running gateway has
+# openclaw.json mounted read-only. This catches the compose-drift
+# scenario where a `git pull` on the upstream openclaw repo blows
+# away the local per-file :ro overlay and reverts the mount to
+# rw. See configs/openclaw/README.md for the required YAML snippet.
+# A warn-only check — the install has already succeeded and this
+# doesn't affect the rendered file's correctness.
+if command -v docker >/dev/null 2>&1; then
+    gateway="${OPENCLAW_GATEWAY_CONTAINER:-openclaw-openclaw-gateway-1}"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$gateway"; then
+        mount_check=$(docker exec -u 0 "$gateway" sh -c \
+            'touch /home/node/.openclaw/openclaw.json 2>&1; echo rc=$?' \
+            2>/dev/null || true)
+        case "$mount_check" in
+            *"Read-only file system"*|*"rc=1"*)
+                log "mount check: $gateway has openclaw.json :ro (good)"
+                ;;
+            *"rc=0"*)
+                log "WARN: $gateway has openclaw.json MOUNTED RW"
+                log "      the 2026-04-07 root:root incident class is not"
+                log "      structurally prevented. See pi-cluster/configs/openclaw/"
+                log "      README.md for the required compose :ro overlay."
+                ;;
+            *)
+                log "mount check: indeterminate ($mount_check) — skipping"
+                ;;
+        esac
+    else
+        log "mount check: $gateway not running — skipped"
+    fi
+fi
 
 log "done. Gateway container is unaffected until next restart; the"
 log "watchdog's #124 gate will validate this file again at that point."
