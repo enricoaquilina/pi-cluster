@@ -45,9 +45,11 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
     delegate, static_system_prompt = route
 
     # Build the system prompt. For vault-aware personas, assemble from the
-    # knowledge base and wrap the user prompt as untrusted input.
+    # knowledge base and wrap the user prompt as untrusted input. Preserve the
+    # original persona casing so per-persona IDENTITY dirs like
+    # ~/.openclaw/workspace/Maxwell/IDENTITY.md are found by the builder.
     if req.persona in DYNAMIC_SYSTEM_PROMPT_PERSONAS:
-        system_prompt = prompt_to_string(build_system_prompt(persona=req.persona.lower()))
+        system_prompt = prompt_to_string(build_system_prompt(persona=req.persona))
         chat_prompt = f"<untrusted_user_message>\n{req.prompt}\n</untrusted_user_message>"
     else:
         system_prompt = static_system_prompt

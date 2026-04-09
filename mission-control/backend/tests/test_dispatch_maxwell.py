@@ -130,6 +130,41 @@ async def test_maxwell_response_passes_through_outbound_guard(
     assert "~/.openclaw/workspace/memory" not in data["response"]
 
 
+async def test_maxwell_dispatch_preserves_persona_casing(client, auth_headers, fake_vault_env):
+    """Per-persona IDENTITY.md (e.g. workspace/Maxwell/IDENTITY.md) must be found.
+
+    Regression guard: a previous revision lowercased req.persona before passing
+    it to build_system_prompt, which broke the per-persona IDENTITY directory
+    lookup in _identity_segment(). Ensure we preserve the exact casing.
+    """
+    # Create per-persona identity dir with the exact 'Maxwell' casing
+    openclaw_workspace = fake_vault_env.parent / ".openclaw" / "workspace"
+    (openclaw_workspace / "Maxwell").mkdir(parents=True, exist_ok=True)
+    (openclaw_workspace / "Maxwell" / "IDENTITY.md").write_text(
+        "# Maxwell cased identity marker\nPER_PERSONA_SENTINEL=abc123\n"
+    )
+
+    captured = {}
+
+    async def fake_chat(prompt, system_prompt, timeout):
+        captured["system_prompt"] = system_prompt
+        return "ok"
+
+    with _freeze_today(date(2026, 4, 9)), \
+         patch("app.routes.dispatch._is_gateway_reachable", new=AsyncMock(return_value=True)), \
+         patch("app.routes.dispatch._openclaw_chat", side_effect=fake_chat):
+        await client.post(
+            "/api/dispatch",
+            headers=auth_headers,
+            json={"persona": "Maxwell", "prompt": "hi", "timeout": 10},
+        )
+
+    sp = captured.get("system_prompt", "")
+    # The per-persona IDENTITY.md under workspace/Maxwell/ must have been read,
+    # proving the casing was preserved (workspace/maxwell/ wouldn't exist).
+    assert "PER_PERSONA_SENTINEL=abc123" in sp
+
+
 async def test_non_maxwell_persona_unchanged(client, auth_headers, fake_vault_env):
     """Existing personas (Archie, Pixel, ...) still use their static system prompts."""
     captured = {}
