@@ -58,24 +58,60 @@ ENTITY_PATTERNS = [
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from life_kill_switch import check_llm_kill_switch  # noqa: E402
 import backup as _backup  # noqa: E402
+import yaml  # noqa: E402
+
+# Scoped to the first ---...--- frontmatter block only. Body text cannot
+# trigger false positives because we never parse outside this block.
+_FM_RE = re.compile(r"^---\n(.*?)\n---\n", re.DOTALL)
+
+
+def _parse_frontmatter(summary_path: Path) -> dict:
+    """Parse the YAML frontmatter block and return the resulting dict.
+
+    Hardened against (per plan v3 Step 0.5 + Agent 1 P0 critique):
+    - BOM (stripped before parse)
+    - CRLF line endings (YAML is tolerant, but we normalise for the regex)
+    - Missing frontmatter (returns {})
+    - Malformed YAML (returns {}, fail-closed)
+    - Non-dict top level (returns {})
+    - Matches ONLY the first frontmatter block; body text is ignored
+    """
+    try:
+        text = summary_path.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    if text.startswith("\ufeff"):
+        text = text[1:]
+    # Normalise CRLF → LF so the regex anchor behaves
+    text = text.replace("\r\n", "\n")
+    match = _FM_RE.match(text)
+    if not match:
+        return {}
+    try:
+        data = yaml.safe_load(match.group(1)) or {}
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def _is_auto_maintained(summary_path: Path) -> bool:
-    """Check if entity opts in to auto-rewriting."""
-    try:
-        text = summary_path.read_text(encoding="utf-8")
-        return "auto_maintained: true" in text
-    except OSError:
-        return False
+    """Check if entity opts in to auto-rewriting.
+
+    Uses ``is True`` so that string ``"true"``, int ``1``, or missing key
+    all return False. YAML's alt booleans (``yes`` / ``on``) parse to
+    Python ``True`` and are honored.
+    """
+    return _parse_frontmatter(summary_path).get("auto_maintained") is True
 
 
 def _is_protected(summary_path: Path) -> bool:
-    """Hard opt-out: ``protected: true`` in frontmatter."""
-    try:
-        text = summary_path.read_text(encoding="utf-8")
-        return bool(re.search(r"^protected:\s*true\s*$", text, re.MULTILINE))
-    except OSError:
-        return False
+    """Hard opt-out: ``protected: true`` in frontmatter only.
+
+    Scoped to the frontmatter block — body text mentioning ``protected: true``
+    in prose cannot trigger a false positive. Uses ``is True`` so non-boolean
+    values (e.g. ``protected: "true"`` as string) do NOT count as protection.
+    """
+    return _parse_frontmatter(summary_path).get("protected") is True
 
 
 def _get_last_rewritten(summary_path: Path) -> str:

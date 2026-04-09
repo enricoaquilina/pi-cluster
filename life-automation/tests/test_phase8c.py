@@ -98,6 +98,83 @@ def test_unprotected_flag_not_detected(tmp_path):
     assert rw._is_protected(p) is False
 
 
+# ================================ Step 0.5 YAML parser regression (Agent 1 P0)
+
+
+def test_protected_false_when_only_in_body(tmp_path):
+    """The pre-v3 regex matched body text; the YAML parser must not."""
+    p = tmp_path / "summary.md"
+    p.write_text(
+        "---\ntype: project\n---\n\n"
+        "# body\n\n"
+        "Last week we set protected: true on this file but then reverted it.\n"
+    )
+    assert rw._is_protected(p) is False
+
+
+def test_auto_maintained_false_when_only_in_body(tmp_path):
+    """Substring match in pre-v3 false-matched prose like this."""
+    p = tmp_path / "summary.md"
+    p.write_text(
+        "---\ntype: project\n---\n\n"
+        "Note: auto_maintained: true was set experimentally last week.\n"
+    )
+    assert rw._is_auto_maintained(p) is False
+
+
+def test_protected_true_with_inline_comment(tmp_path):
+    """YAML comments are valid — regex rejected them."""
+    p = tmp_path / "summary.md"
+    p.write_text("---\ntype: project\nprotected: true  # hand-curated\n---\n")
+    assert rw._is_protected(p) is True
+
+
+def test_protected_false_for_quoted_string(tmp_path):
+    """protected: \"true\" is a string, not a bool — must NOT protect."""
+    p = tmp_path / "summary.md"
+    p.write_text('---\ntype: project\nprotected: "true"\n---\n')
+    assert rw._is_protected(p) is False
+
+
+def test_auto_maintained_honors_yaml_alt_boolean(tmp_path):
+    """YAML parses `yes` as True — honour it."""
+    p = tmp_path / "summary.md"
+    p.write_text("---\ntype: project\nauto_maintained: yes\n---\n")
+    assert rw._is_auto_maintained(p) is True
+
+
+def test_handles_bom(tmp_path):
+    """UTF-8 BOM prefix must not break frontmatter detection."""
+    p = tmp_path / "summary.md"
+    p.write_bytes("\ufeff---\ntype: project\nprotected: true\n---\n".encode("utf-8"))
+    assert rw._is_protected(p) is True
+
+
+def test_handles_crlf(tmp_path):
+    """CRLF line endings must not break the frontmatter regex anchor."""
+    p = tmp_path / "summary.md"
+    p.write_bytes(b"---\r\ntype: project\r\nprotected: true\r\n---\r\n")
+    assert rw._is_protected(p) is True
+
+
+def test_malformed_yaml_fails_closed(tmp_path):
+    """Malformed YAML must return False (fail-closed), not raise."""
+    p = tmp_path / "summary.md"
+    p.write_text("---\ntype: : broken\nprotected: true\n---\n")
+    # Either the YAML parser raises internally (returning {}) or it parses
+    # but the structure is malformed; either way both helpers must be False
+    # because the dict does not have a clean {protected: True} entry.
+    assert rw._is_protected(p) is False
+    assert rw._is_auto_maintained(p) is False
+
+
+def test_missing_frontmatter_returns_false(tmp_path):
+    p = tmp_path / "summary.md"
+    p.write_text("# just a body\n\nno frontmatter at all.\n")
+    assert rw._is_protected(p) is False
+    assert rw._is_auto_maintained(p) is False
+
+
 def test_protected_overrides_auto_maintained_in_dry_run(mini_life):
     """Entity with both flags set -> skipped."""
     delta = mini_life / "People" / "delta" / "summary.md"
