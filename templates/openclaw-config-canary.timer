@@ -1,0 +1,18 @@
+[Unit]
+Description=Run OpenClaw config schema canary hourly
+Documentation=https://github.com/enricoaquilina/pi-cluster/blob/master/scripts/openclaw-config-canary.sh
+
+[Timer]
+# Five minutes after login/boot so we never race docker.service.
+OnBootSec=5min
+# Hourly, independent of restart events — this is the whole point.
+OnUnitActiveSec=1h
+AccuracySec=1min
+# Stagger across hosts if this ever lands on more than one node.
+RandomizedDelaySec=5min
+# Fire a catch-up run if the host was off when a tick was due.
+Persistent=true
+Unit=openclaw-config-canary.service
+
+[Install]
+WantedBy=timers.target
