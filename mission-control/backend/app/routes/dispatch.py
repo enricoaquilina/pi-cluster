@@ -8,28 +8,50 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..auth import verify_api_key, rate_limit
 from ..db import get_db
 from ..event_bus import event_bus
+from ..maxwell_prompt import build_system_prompt, prompt_to_string
 from ..models.dispatch import DispatchRequest, DispatchResponse, DispatchLogEntry
 from ..dispatch_engine import (
-    PERSONA_ROUTING, OPENCLAW_GATEWAY,
+    PERSONA_ROUTING,
     rate_limiter, _openclaw_chat, _is_gateway_reachable, _log_dispatch,
 )
+from ..outbound_guard import guard_reply
 from ..trading_helpers import TEAM_ROSTER
 
 import logging
 logger = logging.getLogger("mission-control")
+
+# Personas whose system prompt is built dynamically at request time from the
+# ~/life/ vault. Extend this set when new vault-aware personas are added.
+DYNAMIC_SYSTEM_PROMPT_PERSONAS = {"Maxwell"}
 
 router = APIRouter()
 
 
 @router.post("/api/dispatch", response_model=DispatchResponse)
 async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depends(rate_limit)):
-    """Dispatch a prompt to a persona via the OpenClaw gateway."""
+    """Dispatch a prompt to a persona via the OpenClaw gateway.
+
+    For personas in DYNAMIC_SYSTEM_PROMPT_PERSONAS (Maxwell), the system prompt
+    is rebuilt from the ~/life/ vault per-request and the user prompt is wrapped
+    in <untrusted_user_message> tags. The response is then passed through the
+    outbound regex guard so any hallucinated filesystem paths are replaced with
+    a safe fallback before the caller sees them.
+    """
     route = PERSONA_ROUTING.get(req.persona)
     if not route:
         available = sorted(PERSONA_ROUTING.keys())
         raise HTTPException(status_code=400, detail=f"Unknown persona '{req.persona}'. Available: {available}")
 
-    delegate, system_prompt = route
+    delegate, static_system_prompt = route
+
+    # Build the system prompt. For vault-aware personas, assemble from the
+    # knowledge base and wrap the user prompt as untrusted input.
+    if req.persona in DYNAMIC_SYSTEM_PROMPT_PERSONAS:
+        system_prompt = prompt_to_string(build_system_prompt(persona=req.persona.lower()))
+        chat_prompt = f"<untrusted_user_message>\n{req.prompt}\n</untrusted_user_message>"
+    else:
+        system_prompt = static_system_prompt
+        chat_prompt = req.prompt
 
     # Check gateway reachability
     if not await _is_gateway_reachable():
@@ -47,12 +69,22 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
 
     start = datetime.now(timezone.utc)
     try:
-        response = await _openclaw_chat(req.prompt, system_prompt, req.timeout)
+        response = await _openclaw_chat(chat_prompt, system_prompt, req.timeout)
     except HTTPException as e:
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
         _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, "",
                       elapsed_ms, "error", e.detail)
         raise
+
+    # Outbound regex guard — last line of defense against known-bad path
+    # hallucinations. If a match is found, replace the reply with a safe
+    # fallback; dispatch_log still records the (guarded) preview.
+    guard_hit, response = guard_reply(response)
+    if guard_hit:
+        logger.warning(
+            "dispatch: outbound_guard replaced hallucinated-path reply for persona=%s",
+            req.persona,
+        )
 
     elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
     _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, response, elapsed_ms)

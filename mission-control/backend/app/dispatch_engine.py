@@ -6,7 +6,6 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException
@@ -26,7 +25,14 @@ OPENCLAW_GATEWAY = {
 
 # Map personas -> (delegate, system_prompt)
 # Node assignment removed — the gateway handles routing to slave0/slave1
+#
+# "Maxwell" is registered here so the dispatch endpoint accepts it, but its
+# actual system prompt is built dynamically at request time by
+# app.maxwell_prompt.build_system_prompt() — it reads hard-rules, daily note,
+# vault inventory, etc. The placeholder string below is never sent to the LLM.
 PERSONA_ROUTING = {
+    # Orchestrator / meta (dynamic system prompt — see routes/dispatch.py)
+    "Maxwell":  ("orchestrator", "__dynamic__"),
     # Engineering (coding-focused)
     "Archie":   ("coder",     "You are Archie, a backend developer. Focus on APIs, databases, and server architecture."),
     "Pixel":    ("coder",     "You are Pixel, a frontend developer. Focus on UI, layouts, and client-side logic."),
