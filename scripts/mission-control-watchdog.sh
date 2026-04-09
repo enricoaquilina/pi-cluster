@@ -1,4 +1,5 @@
 #!/bin/bash
+set -uo pipefail
 # Service watchdog — checks all critical services on heavy, auto-restarts and alerts.
 # Runs every 5 min via cron on heavy.
 #
@@ -28,8 +29,6 @@
 #   OPENCLAW_CONFIG      path to openclaw.json (default: /home/enrico/.openclaw/openclaw.json)
 #   OPENCLAW_VALIDATE_CMD alternative validator executable (default: alongside this script)
 #   MC_DIR, GW_DIR, HEAVY_IP, MC_API_URL, MC_API_KEY — as before
-
-set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/.env.cluster" 2>/dev/null || true
