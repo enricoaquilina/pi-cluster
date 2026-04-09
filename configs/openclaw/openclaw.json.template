@@ -1,0 +1,963 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.4.5",
+    "lastTouchedAt": "2026-04-07T02:07:59.454Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-03-10T19:26:12.393Z",
+    "lastRunVersion": "2026.2.3",
+    "lastRunCommand": "configure",
+    "lastRunMode": "local"
+  },
+  "browser": {
+    "enabled": true,
+    "executablePath": "/usr/bin/chromium",
+    "defaultProfile": "openclaw"
+  },
+  "models": {
+    "providers": {
+      "google": {
+        "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "gemini-2.0-flash",
+            "name": "Gemini 2.0 Flash",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192,
+            "compat": {
+              "supportsStore": false
+            }
+          },
+          {
+            "id": "gemini-2.0-flash-lite",
+            "name": "Gemini 2.0 Flash Lite",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192,
+            "compat": {
+              "supportsStore": false
+            }
+          }
+        ]
+      },
+      "moonshot": {
+        "baseUrl": "https://api.moonshot.ai/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "moonshot-v1-32k",
+            "name": "Moonshot v1 32K",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 32768,
+            "maxTokens": 8192
+          },
+          {
+            "id": "kimi-k2.5",
+            "name": "Kimi K2.5",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "kimi-k2-thinking",
+            "name": "Kimi K2 Thinking",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "deepseek": {
+        "baseUrl": "https://api.deepseek.com/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "deepseek-chat",
+            "name": "DeepSeek V3",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek-reasoner",
+            "name": "DeepSeek Reasoner",
+            "reasoning": true,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "zai": {
+        "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "glm-4.5-air",
+            "name": "GLM-4.5 Air",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "glm-4",
+            "name": "GLM-4",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "glm-4-plus",
+            "name": "GLM-4 Plus",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      },
+      "anthropic": {
+        "baseUrl": "https://api.anthropic.com/v1",
+        "api": "anthropic-messages",
+        "models": [
+          {
+            "id": "claude-opus-4-6",
+            "name": "Claude Opus 4.6",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 16384
+          }
+        ]
+      },
+      "openrouter": {
+        "baseUrl": "https://openrouter.ai/api/v1",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "google/gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash (OR)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "deepseek/deepseek-chat-v3-0324",
+            "name": "DeepSeek V3 0324 (OR)",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "openrouter/google/gemini-2.5-flash",
+        "fallbacks": [
+          "openrouter/deepseek/deepseek-chat-v3-0324",
+          "moonshot/kimi-k2.5",
+          "deepseek/deepseek-chat",
+          "google/gemini-2.0-flash"
+        ]
+      },
+      "models": {
+        "openrouter/google/gemini-2.5-flash": {
+          "alias": "default"
+        }
+      },
+      "workspace": "/home/enrico/.openclaw/workspace",
+      "heartbeat": {
+        "every": "0m",
+        "model": "openrouter/google/gemini-2.5-flash",
+        "target": "telegram",
+        "to": "1630148884",
+        "ackMaxChars": 300,
+        "lightContext": true
+      },
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8,
+        "model": "openrouter/google/gemini-2.5-flash"
+      }
+    },
+    "list": [
+      {
+        "id": "main",
+        "default": true,
+        "name": "Main",
+        "workspace": "/home/enrico/.openclaw/workspace",
+        "model": {
+          "primary": "openrouter/google/gemini-2.5-flash",
+          "fallbacks": [
+            "openrouter/deepseek/deepseek-chat-v3-0324",
+            "moonshot/kimi-k2.5",
+            "deepseek/deepseek-chat",
+            "google/gemini-2.0-flash"
+          ]
+        }
+      },
+      {
+        "id": "bug-fix_triager",
+        "name": "Triager",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/bug-fix/agents/triager",
+        "agentDir": "/home/enrico/.openclaw/agents/bug-fix_triager/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "bug-fix_investigator",
+        "name": "Investigator",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/bug-fix/agents/investigator",
+        "agentDir": "/home/enrico/.openclaw/agents/bug-fix_investigator/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "bug-fix_setup",
+        "name": "Setup",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/bug-fix/agents/setup",
+        "agentDir": "/home/enrico/.openclaw/agents/bug-fix_setup/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "bug-fix_fixer",
+        "name": "Fixer",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/bug-fix/agents/fixer",
+        "agentDir": "/home/enrico/.openclaw/agents/bug-fix_fixer/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "bug-fix_verifier",
+        "name": "Verifier",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/bug-fix/agents/verifier",
+        "agentDir": "/home/enrico/.openclaw/agents/bug-fix_verifier/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "bug-fix_pr",
+        "name": "PR Creator",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/bug-fix/agents/pr",
+        "agentDir": "/home/enrico/.openclaw/agents/bug-fix_pr/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "feature-dev_planner",
+        "name": "Planner",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/feature-dev/agents/planner",
+        "agentDir": "/home/enrico/.openclaw/agents/feature-dev_planner/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "feature-dev_setup",
+        "name": "Setup",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/feature-dev/agents/setup",
+        "agentDir": "/home/enrico/.openclaw/agents/feature-dev_setup/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "feature-dev_developer",
+        "name": "Developer",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/feature-dev/agents/developer",
+        "agentDir": "/home/enrico/.openclaw/agents/feature-dev_developer/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "feature-dev_verifier",
+        "name": "Verifier",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/feature-dev/agents/verifier",
+        "agentDir": "/home/enrico/.openclaw/agents/feature-dev_verifier/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "feature-dev_tester",
+        "name": "Tester",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/feature-dev/agents/tester",
+        "agentDir": "/home/enrico/.openclaw/agents/feature-dev_tester/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "browser",
+            "web_search",
+            "web_fetch"
+          ],
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts"
+          ]
+        }
+      },
+      {
+        "id": "feature-dev_reviewer",
+        "name": "Reviewer",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/feature-dev/agents/reviewer",
+        "agentDir": "/home/enrico/.openclaw/agents/feature-dev_reviewer/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_scanner",
+        "name": "Scanner",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/scanner",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_scanner/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "web_search",
+            "web_fetch"
+          ],
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_prioritizer",
+        "name": "Prioritizer",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/prioritizer",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_prioritizer/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_setup",
+        "name": "Setup",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/setup",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_setup/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_fixer",
+        "name": "Fixer",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/fixer",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_fixer/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_verifier",
+        "name": "Verifier",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/verifier",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_verifier/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_tester",
+        "name": "Tester",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/tester",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_tester/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "browser",
+            "web_search",
+            "web_fetch"
+          ],
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts"
+          ]
+        }
+      },
+      {
+        "id": "security-audit_pr",
+        "name": "PR Creator",
+        "workspace": "/home/enrico/.openclaw/workspaces/workflows/security-audit/agents/pr",
+        "agentDir": "/home/enrico/.openclaw/agents/security-audit_pr/agent",
+        "subagents": {
+          "allowAgents": []
+        },
+        "tools": {
+          "profile": "coding",
+          "deny": [
+            "gateway",
+            "cron",
+            "message",
+            "nodes",
+            "canvas",
+            "sessions_send",
+            "write",
+            "edit",
+            "apply_patch",
+            "image",
+            "tts",
+            "group:ui"
+          ]
+        }
+      }
+    ]
+  },
+  "tools": {
+    "agentToAgent": {
+      "enabled": true,
+      "allow": [
+        "bug-fix_triager",
+        "bug-fix_investigator",
+        "bug-fix_setup",
+        "bug-fix_fixer",
+        "bug-fix_verifier",
+        "bug-fix_pr",
+        "feature-dev_planner",
+        "feature-dev_setup",
+        "feature-dev_developer",
+        "feature-dev_verifier",
+        "feature-dev_tester",
+        "feature-dev_reviewer",
+        "security-audit_scanner",
+        "security-audit_prioritizer",
+        "security-audit_setup",
+        "security-audit_fixer",
+        "security-audit_verifier",
+        "security-audit_tester",
+        "security-audit_pr"
+      ]
+    },
+    "media": {
+      "audio": {
+        "enabled": true,
+        "models": [
+          {
+            "provider": "google",
+            "model": "gemini-2.0-flash"
+          },
+          {
+            "provider": "groq",
+            "model": "whisper-large-v3-turbo"
+          }
+        ],
+        "echoTranscript": true,
+        "maxBytes": 20971520,
+        "scope": {
+          "default": "allow",
+          "rules": [
+            {
+              "action": "deny",
+              "match": {
+                "chatType": "group"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {},
+  "cron": {},
+  "web": {
+    "reconnect": {
+      "maxAttempts": 50
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": true,
+      "dmPolicy": "allowlist",
+      "selfChatMode": true,
+      "allowFrom": [
+        "+35699624524"
+      ],
+      "groupPolicy": "allowlist",
+      "historyLimit": 20,
+      "dmHistoryLimit": 20,
+      "groups": {
+        "*": {
+          "requireMention": true
+        }
+      },
+      "ackReaction": {
+        "emoji": "👀",
+        "direct": true,
+        "group": "mentions"
+      },
+      "debounceMs": 500,
+      "mediaMaxMb": 50
+    },
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "pairing",
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": [
+        1630148884
+      ],
+      "groupPolicy": "allowlist",
+      "streaming": "partial"
+    }
+  },
+  "discovery": {
+    "mdns": {
+      "mode": "off"
+    }
+  },
+  "skills": {
+    "install": {
+      "nodeManager": "npm"
+    },
+    "entries": {
+      "tavily": {
+        "enabled": true
+      },
+      "n8n": {
+        "enabled": true
+      },
+      "context7": {
+        "enabled": true
+      }
+    }
+  },
+  "plugins": {
+    "slots": {},
+    "entries": {
+      "telegram": {
+        "enabled": true
+      },
+      "whatsapp": {
+        "enabled": true
+      },
+      "browser": {
+        "enabled": true
+      },
+      "openrouter": {
+        "enabled": true
+      },
+      "moonshot": {
+        "enabled": true
+      },
+      "deepseek": {
+        "enabled": true
+      },
+      "google": {
+        "enabled": true
+      }
+    }
+  },
+  "gateway": {
+    "mode": "local",
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  }
+}
