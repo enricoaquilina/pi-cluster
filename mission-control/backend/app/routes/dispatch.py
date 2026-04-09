@@ -76,7 +76,11 @@ def _current_degradation() -> DegradationLevel:
 def _append_dead_letter(req: DispatchRequest, exc: BaseException) -> None:
     """Append a raw request + error to the dead-letter log.
 
-    Never raises — dead-letter failures must not mask the original error.
+    Never raises — dead-letter failures must NOT mask the original error
+    that triggered dead-letter in the first place. Catches ``Exception``
+    broadly (not just ``OSError``) because the path can also fail on
+    ``TypeError`` from the serializer, ``UnicodeError`` on encoding,
+    ``ValueError`` from an unexpected mock, etc.
     """
     path = _dead_letter_path()
     try:
@@ -99,7 +103,7 @@ def _append_dead_letter(req: DispatchRequest, exc: BaseException) -> None:
             os.write(fd, (line + "\n").encode("utf-8"))
         finally:
             os.close(fd)
-    except OSError as e:
+    except Exception as e:
         logger.warning("dispatch: failed to write dead-letter entry: %s", e)
 
 

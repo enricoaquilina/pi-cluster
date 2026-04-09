@@ -90,11 +90,14 @@ async def call_with_retry(
     exception propagates immediately after the first attempt.
     """
     attempts = max_retries + 1
-    last_exc: Optional[BaseException] = None
+    last_exc: Optional[Exception] = None
     for i in range(attempts):
         try:
             return await fn()
-        except BaseException as exc:
+        except Exception as exc:
+            # Catch ``Exception``, not ``BaseException`` — ctrl-C
+            # (KeyboardInterrupt) and shutdown (SystemExit) must propagate
+            # cleanly; only application errors are candidates for retry.
             last_exc = exc
             if not is_retryable(exc) or i == attempts - 1:
                 raise
@@ -151,8 +154,13 @@ class CircuitBreaker:
             return True
         if self._state == "half_open":
             return True
-        # open
-        assert self._opened_at is not None
+        # open — explicit runtime check instead of ``assert`` (which
+        # disappears under ``python -O`` and would crash with a cryptic
+        # TypeError on ``None`` arithmetic below).
+        if self._opened_at is None:
+            raise RuntimeError(
+                "CircuitBreaker state corruption: opened_at is None while state=open"
+            )
         if (time.monotonic() - self._opened_at) >= self.cooldown_seconds:
             self._state = "half_open"
             return True
