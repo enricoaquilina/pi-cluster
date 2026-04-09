@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenClaw config schema canary (independent hourly check)
+Documentation=https://github.com/enricoaquilina/pi-cluster/blob/master/scripts/openclaw-config-canary.sh
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/openclaw-config-canary
+# Non-zero exits are captured in the journal. This unit intentionally
+# does NOT restart the gateway — mission-control-watchdog owns the
+# remediation path. This is a pure detector, decoupled from restart
+# events, so upstream schema tightening is caught on an hourly cadence
+# instead of on the next unrelated restart.
+Nice=10
