@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """Compile-once wiki: LLM rewrites entity summaries from facts.
 
-Only rewrites entities with `auto_maintained: true` in frontmatter.
-Preserves manual prose — only updates "What Matters Right Now" and "Key Facts" sections.
+Only rewrites entities with ``auto_maintained: true`` in frontmatter.
+Preserves manual prose — only updates "What Matters Right Now" and "Key Facts".
+
+Phase 8C additions (plan v3):
+  * Honors the global ``LIFE_LLM_DISABLED`` kill switch (plan v3 §8.0.1).
+  * ``protected: true`` in frontmatter is a hard opt-out — overrides
+    ``auto_maintained`` and prevents any mutation.
+  * Fact schema v1: ``archived`` excluded by default (stale/single/confirmed
+    count as active). Override via ``LIFE_EXCLUDED_CONFIDENCE``.
+  * Versioned backups via ``backup.snapshot()`` — no more single-slot clobber.
+  * Self-amplification ban: the rewrite prompt receives ONLY facts, never the
+    current summary body (structural invariant — enforced by code shape).
 
 Usage:
     python3 rewrite_summaries.py              # Rewrite all eligible entities
@@ -10,7 +20,10 @@ Usage:
     python3 rewrite_summaries.py --dry-run    # Preview without writing
 
 Environment:
-    LIFE_DIR  — path to ~/life/ (default: ~/life)
+    LIFE_DIR                    — path to ~/life/ (default: ~/life)
+    LIFE_EXCLUDED_CONFIDENCE    — comma-separated confidence values to exclude
+                                  (default: "archived")
+    LIFE_LLM_DISABLED           — if set, exits 0 without any LLM calls
 """
 import json
 import os
@@ -30,11 +43,21 @@ DRY_RUN = "--dry-run" in sys.argv
 CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
 MIN_FACTS = 3  # Only rewrite entities with enough facts
 
+# Fact schema v1: default exclusion is just "archived". Configurable via env.
+EXCLUDED_CONFIDENCE = frozenset(
+    os.environ.get("LIFE_EXCLUDED_CONFIDENCE", "archived").split(",")
+)
+
 ENTITY_PATTERNS = [
     "Projects/*/summary.md",
     "People/*/summary.md",
     "Companies/*/summary.md",
 ]
+
+# Shared helpers
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from life_kill_switch import check_llm_kill_switch  # noqa: E402
+import backup as _backup  # noqa: E402
 
 
 def _is_auto_maintained(summary_path: Path) -> bool:
@@ -42,6 +65,15 @@ def _is_auto_maintained(summary_path: Path) -> bool:
     try:
         text = summary_path.read_text(encoding="utf-8")
         return "auto_maintained: true" in text
+    except OSError:
+        return False
+
+
+def _is_protected(summary_path: Path) -> bool:
+    """Hard opt-out: ``protected: true`` in frontmatter."""
+    try:
+        text = summary_path.read_text(encoding="utf-8")
+        return bool(re.search(r"^protected:\s*true\s*$", text, re.MULTILINE))
     except OSError:
         return False
 
@@ -57,11 +89,15 @@ def _get_last_rewritten(summary_path: Path) -> str:
 
 
 def _load_facts(entity_dir: Path) -> list[dict]:
-    """Load active facts from items.json."""
+    """Load active facts from items.json.
+
+    Fact schema v1: excludes only ``archived`` by default. ``stale``,
+    ``single``, ``confirmed`` all count as active.
+    """
     items_path = entity_dir / "items.json"
     try:
         items = json.loads(items_path.read_text(encoding="utf-8"))
-        return [i for i in items if i.get("confidence") not in ("superseded", "archived")]
+        return [i for i in items if i.get("confidence") not in EXCLUDED_CONFIDENCE]
     except (OSError, json.JSONDecodeError):
         return []
 
@@ -100,6 +136,12 @@ def rewrite_entity(summary_path: Path) -> bool:
     slug = entity_dir.name
     entity_type = entity_dir.parent.name
 
+    # Phase 8C: protected flag is a hard opt-out (overrides auto_maintained)
+    if _is_protected(summary_path):
+        if DRY_RUN:
+            print(f"[rewrite] SKIP protected: {entity_type}/{slug}")
+        return False
+
     facts = _load_facts(entity_dir)
     if len(facts) < MIN_FACTS:
         return False
@@ -108,14 +150,20 @@ def rewrite_entity(summary_path: Path) -> bool:
         print(f"[rewrite] DRY RUN: {entity_type}/{slug} ({len(facts)} facts)")
         return False
 
-    # Backup
-    backup = summary_path.with_suffix(".md.bak")
-    shutil.copy2(summary_path, backup)
+    # Phase 8C: versioned backup via backup.snapshot (no more single-slot clobber).
+    try:
+        _backup.snapshot(summary_path, keep=5)
+    except (OSError, ValueError) as exc:
+        print(f"[rewrite] ERROR: backup failed for {slug}: {exc}", file=sys.stderr)
+        # Caller contract: if snapshot() raises, DO NOT mutate the original.
+        return False
 
     # Get new sections from LLM
+    # Self-amplification invariant: the rewrite prompt receives ONLY facts,
+    # never the current summary body. See _rewrite_sections().
     new_sections = _rewrite_sections(summary_path, slug, facts)
     if not new_sections:
-        backup.unlink(missing_ok=True)
+        # Backup is retained for audit; no cleanup needed with versioned backups.
         return False
 
     # Read current summary
@@ -145,6 +193,12 @@ def rewrite_entity(summary_path: Path) -> bool:
 
 
 def main() -> None:
+    # Phase 8C: global kill switch. Honor it unconditionally, including in
+    # dry-run mode, so there is ONE predictable behavior when operators flip
+    # the switch: nothing happens.
+    if check_llm_kill_switch(script="rewrite_summaries"):
+        return
+
     target = None
     for i, arg in enumerate(sys.argv):
         if arg == "--entity" and i + 1 < len(sys.argv):
