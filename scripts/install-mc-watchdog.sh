@@ -105,16 +105,16 @@ else
 fi
 
 # --- Post-install sanity: watchdog can actually see its validator ---
-# The watchdog's DEFAULT_VALIDATOR is computed at runtime from its own
-# $SCRIPT_DIR. Here we reproduce that computation and verify the file
-# is executable. This turns future drift (e.g. someone renaming the
-# validator source) into a loud install-time failure instead of a
-# silent gate skip at cron-tick time.
-expected_validator="$(dirname "$DEST")/openclaw-config-validate.sh"
-if [ ! -x "$expected_validator" ]; then
+# $VALIDATOR_DEST is defined at the top of this script as
+#   "$(dirname "$DEST")/openclaw-config-validate.sh"
+# which is exactly what the watchdog's DEFAULT_VALIDATOR resolves to
+# at runtime. Reuse that one source of truth here instead of
+# recomputing it — a second local expression would be an internal
+# drift risk of the exact class this sanity check exists to prevent.
+if [ ! -x "$VALIDATOR_DEST" ]; then
     log "ERROR: post-install sanity check failed"
     log "       watchdog expects an executable validator at:"
-    log "         $expected_validator"
+    log "         $VALIDATOR_DEST"
     log "       but it is missing or not executable. The #124 gate will"
     log "       silently skip at every cron tick."
     exit 1
@@ -122,7 +122,7 @@ fi
 if $validator_was_fresh; then
     log "ACTIVATED: PR #124 config-validation gate is now live."
     log "           Before this install, the validator was absent at"
-    log "           $expected_validator, so the watchdog was skipping"
+    log "           $VALIDATOR_DEST, so the watchdog was skipping"
     log "           validation and restarting the gateway without any"
     log "           pre-flight config check. Starting with the next"
     log "           cron tick, restarts are gated on 'openclaw doctor'"
