@@ -233,6 +233,17 @@ python3 "$LIFE_DIR/scripts/check_summary_size.py" 2>&1 | tee -a "$LOG_DIR/consol
 log "Running heartbeat check..."
 python3 "$LIFE_DIR/scripts/heartbeat_check.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
+# >>> PHASE 8A: orphan entity detection (non-LLM, daily) >>>
+# Writes logs/pending-entities.log. Does NOT honor LIFE_LLM_DISABLED —
+# --orphans runs before the kill-switch check in lint_knowledge_llm.main()
+# so orphan signals keep flowing during an LLM outage.
+log "Running orphan entity detection..."
+if ! python3 "$LIFE_DIR/scripts/lint_knowledge_llm.py" --orphans \
+        2>&1 | tee -a "$LOG_DIR/consolidate.log"; then
+    log "WARNING: orphan entity detection exited non-zero; continuing"
+fi
+# <<< PHASE 8A <<<
+
 # --- Weekly summary (only on Sundays) ---
 if [ "$(date +%u)" -eq 7 ]; then
     log "Generating weekly summary..."
@@ -243,6 +254,22 @@ if [ "$(date +%u)" -eq 7 ]; then
 
     log "Running LLM knowledge lint (weekly)..."
     python3 "$LIFE_DIR/scripts/lint_knowledge_llm.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+    # >>> PHASE 8C: wiki rewrite (weekly, Sunday only) >>>
+    # LLM-calling: honors LIFE_LLM_DISABLED internally. Wrapped in timeout
+    # as a safety cap against a runaway claude CLI hang at scale. Dual tee
+    # writes to both consolidate.log (for the unified view) and rewrite.log
+    # (dedicated per-phase log for trivial Monday verification).
+    #
+    # Freshness invariant: Monday-Saturday edits to items.json are NOT
+    # reflected in summaries until the following Sunday. By design
+    # (cost vs freshness tradeoff).
+    log "Rewriting auto-maintained entity summaries (weekly)..."
+    if ! timeout 900 python3 "$LIFE_DIR/scripts/rewrite_summaries.py" \
+            2>&1 | tee -a "$LOG_DIR/consolidate.log" "$LOG_DIR/rewrite.log"; then
+        log "WARNING: rewrite_summaries exited non-zero or timed out; continuing"
+    fi
+    # <<< PHASE 8C <<<
 fi
 
 # --- Ingest raw documents (Phase 3b: Karpathy-style) ---
