@@ -24,6 +24,24 @@ mkdir -p "$LOG_DIR"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [consolidate] $*" | tee -a "$LOG_DIR/consolidate.log"; }
 
+# --- Phase 8.0.1: topology invariant ---
+# ~/life/scripts must be a symlink into canonical. If someone has replaced it
+# with a real directory, deploy topology has drifted and the run is unsafe.
+if [[ ! -L "$LIFE_DIR/scripts" ]]; then
+    log "ERROR: $LIFE_DIR/scripts is not a symlink; topology has drifted"
+    log "Expected: symlink to ~/pi-cluster/life-automation/"
+    exit 1
+fi
+
+# --- Phase 8.0.1: global LLM kill switch ---
+# Honored by nightly (skips LLM phases) and by every LLM-calling script.
+if [[ -n "${LIFE_LLM_DISABLED:-}" ]]; then
+    log "LLM kill switch active (env LIFE_LLM_DISABLED=$LIFE_LLM_DISABLED); LLM phases will be skipped"
+elif [[ -f "$LIFE_DIR/.llm-disabled" ]]; then
+    export LIFE_LLM_DISABLED=1
+    log "LLM kill switch active (sentinel $LIFE_DIR/.llm-disabled); LLM phases will be skipped"
+fi
+
 # --- Log rotation: keep last 30 days ---
 find "$LOG_DIR" -name "consolidate-errors-*.json" -mtime +30 -delete 2>/dev/null || true
 if [[ -f "$LOG_DIR/consolidate.log" ]] && [[ $(wc -c < "$LOG_DIR/consolidate.log") -gt 1048576 ]]; then
