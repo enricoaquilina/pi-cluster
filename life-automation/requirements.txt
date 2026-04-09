@@ -1,0 +1,11 @@
+# Phase 8 dependency pinning.
+# Loose >= pinning; hash-pinning deferred per plan v3 decisions.
+#
+# Intentionally NOT added:
+#   - tenacity       (retries hand-rolled in llm_client.py)
+#   - anthropic      (LLM via `claude` CLI subprocess, not SDK)
+#   - python-frontmatter  (in-repo PyYAML splitter in rewrite_summaries.py)
+
+jsonschema>=4.26
+PyYAML>=6.0
+hypothesis>=6.0

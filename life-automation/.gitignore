@@ -1,0 +1,16 @@
+# Runtime state (never committed from canonical tree)
+logs/
+*.bak
+*.bak.*
+.rewrite.lock
+.sync-tmp/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Editor/OS artifacts
+*.swp
+*~
+.DS_Store
