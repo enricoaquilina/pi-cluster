@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenClaw restart-count alerter (sliding-window flapping detector)
+Documentation=https://github.com/enricoaquilina/pi-cluster/blob/master/scripts/openclaw-restart-count-alerter.sh
+
+[Service]
+Type=oneshot
+EnvironmentFile=-%h/openclaw/.env
+ExecStart=%h/.local/bin/openclaw-restart-count-alerter
+# Alerts are sent via Telegram when TELEGRAM_BOT_TOKEN/CHAT_ID are set
+# (sourced from ~/openclaw/.env). State lives under
+# $XDG_STATE_HOME/pi-cluster/restart-count/ by default.
+Nice=10

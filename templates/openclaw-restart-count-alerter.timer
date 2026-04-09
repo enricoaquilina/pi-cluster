@@ -1,0 +1,19 @@
+[Unit]
+Description=Run OpenClaw restart-count alerter every 5 minutes
+Documentation=https://github.com/enricoaquilina/pi-cluster/blob/master/scripts/openclaw-restart-count-alerter.sh
+
+[Timer]
+# Give docker time to stabilise after boot before the first sample.
+OnBootSec=3min
+# Match the watchdog's cadence (every 5 min). Any faster and the
+# sliding-window math becomes noisy; any slower and we risk missing
+# the window the restart loop fits into.
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+# Fire a catch-up run if the host was off when a tick was due.
+Persistent=true
+Unit=openclaw-restart-count-alerter.service
+
+[Install]
+WantedBy=timers.target
