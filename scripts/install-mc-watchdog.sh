@@ -10,6 +10,19 @@ set -euo pipefail
 # version into place, ensures it's executable, and optionally re-enables
 # a paused cron line.
 #
+# ACTIVATES the PR #124 config-validation gate. The watchdog's
+# DEFAULT_VALIDATOR resolves to `$SCRIPT_DIR/openclaw-config-validate.sh`,
+# i.e. a sibling of wherever the watchdog lives. Before this installer
+# started depositing the validator alongside the watchdog, that path was
+# empty on heavy, so `[ ! -x "$validator" ]` in the watchdog flipped the
+# gate into a silent no-op: every cron tick logged "validator not
+# executable (skipping gate)" and restarts proceeded without any config
+# validation. After this installer runs, the validator is on disk and
+# the gate actually runs. The gate's behaviour is load-reducing: if the
+# config is valid (current state) the gate is a no-op; if it ever goes
+# invalid, the watchdog refuses to restart the gateway instead of
+# thrashing. See the post-install sanity check below.
+#
 # Idempotent. Safe to re-run. Exits 0 if nothing needed to change.
 #
 # Usage:
@@ -18,7 +31,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SRC="$SCRIPT_DIR/mission-control-watchdog.sh"
+VALIDATOR_SRC="$SCRIPT_DIR/openclaw-config-validate.sh"
 DEST="${MC_WATCHDOG_INSTALL_PATH:-$HOME/.local/bin/mission-control-watchdog}"
+# The watchdog resolves its validator via:
+#   DEFAULT_VALIDATOR="$SCRIPT_DIR/openclaw-config-validate.sh"
+# where $SCRIPT_DIR is dirname of the *installed* watchdog. So deposit
+# the validator next to $DEST under the exact basename the watchdog
+# computes. Keeping these two paths coupled is what makes the gate
+# actually run.
+VALIDATOR_DEST="$(dirname "$DEST")/openclaw-config-validate.sh"
 ENABLE_CRON=false
 
 while [ $# -gt 0 ]; do
@@ -38,10 +59,18 @@ if [ ! -f "$SRC" ]; then
     echo "source script missing: $SRC" >&2
     exit 1
 fi
+if [ ! -f "$VALIDATOR_SRC" ]; then
+    echo "validator source missing: $VALIDATOR_SRC" >&2
+    exit 1
+fi
 
 # Syntax-check before overwriting the live copy.
 if ! bash -n "$SRC"; then
     echo "source script has bash syntax errors — refusing to install" >&2
+    exit 1
+fi
+if ! bash -n "$VALIDATOR_SRC"; then
+    echo "validator source has bash syntax errors — refusing to install" >&2
     exit 1
 fi
 
@@ -57,6 +86,49 @@ else
     fi
     install -m 755 "$SRC" "$DEST"
     log "installed $SRC → $DEST"
+fi
+
+# --- Deposit validator alongside watchdog (activates the #124 gate) ---
+validator_was_fresh=false
+if [ -f "$VALIDATOR_DEST" ] && cmp -s "$VALIDATOR_SRC" "$VALIDATOR_DEST"; then
+    log "$VALIDATOR_DEST already matches $VALIDATOR_SRC — nothing to do"
+else
+    if [ -f "$VALIDATOR_DEST" ]; then
+        backup="${VALIDATOR_DEST}.bak-$(date +%Y%m%d-%H%M%S)"
+        cp "$VALIDATOR_DEST" "$backup"
+        log "backed up existing validator copy to $backup"
+    else
+        validator_was_fresh=true
+    fi
+    install -m 755 "$VALIDATOR_SRC" "$VALIDATOR_DEST"
+    log "installed $VALIDATOR_SRC → $VALIDATOR_DEST"
+fi
+
+# --- Post-install sanity: watchdog can actually see its validator ---
+# The watchdog's DEFAULT_VALIDATOR is computed at runtime from its own
+# $SCRIPT_DIR. Here we reproduce that computation and verify the file
+# is executable. This turns future drift (e.g. someone renaming the
+# validator source) into a loud install-time failure instead of a
+# silent gate skip at cron-tick time.
+expected_validator="$(dirname "$DEST")/openclaw-config-validate.sh"
+if [ ! -x "$expected_validator" ]; then
+    log "ERROR: post-install sanity check failed"
+    log "       watchdog expects an executable validator at:"
+    log "         $expected_validator"
+    log "       but it is missing or not executable. The #124 gate will"
+    log "       silently skip at every cron tick."
+    exit 1
+fi
+if $validator_was_fresh; then
+    log "ACTIVATED: PR #124 config-validation gate is now live."
+    log "           Before this install, the validator was absent at"
+    log "           $expected_validator, so the watchdog was skipping"
+    log "           validation and restarting the gateway without any"
+    log "           pre-flight config check. Starting with the next"
+    log "           cron tick, restarts are gated on 'openclaw doctor'"
+    log "           passing against the on-disk config."
+else
+    log "validator already present — #124 gate was already active"
 fi
 
 # Report current cron state (user crontab only — don't touch root).
