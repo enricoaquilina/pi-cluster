@@ -21,9 +21,9 @@ set -uo pipefail
 #   - Telegram alerts are deduped (same {service,reason} within 30 min).
 #
 # Environment overrides (mostly for tests):
-#   WATCHDOG_STATE       path to JSON state file (default: /var/lib/watchdog/state.json)
-#   WATCHDOG_LOCK_FILE   path to the flock file (default: /var/lock/mc-watchdog.lock)
-#   WATCHDOG_ALERT_CACHE path to the alert dedup cache (default: /var/lib/watchdog/last_alert.json)
+#   WATCHDOG_STATE       path to JSON state file (default: ~/.local/state/watchdog/state.json)
+#   WATCHDOG_LOCK_FILE   path to the flock file (default: ~/.local/state/watchdog/lock)
+#   WATCHDOG_ALERT_CACHE path to the alert dedup cache (default: ~/.local/state/watchdog/last_alert.json)
 #   WATCHDOG_ALERT_DEDUP_SECS dedup window in seconds (default: 1800)
 #   WATCHDOG_CIRCUIT_THRESHOLD consecutive failures to open circuit (default: 3)
 #   OPENCLAW_CONFIG      path to openclaw.json (default: /home/enrico/.openclaw/openclaw.json)
@@ -40,9 +40,10 @@ MC_API_URL="${MC_API_URL:-http://${HEAVY_IP}:8000/api}"
 MC_API_KEY="${MC_API_KEY:-$(grep '^API_KEY=' /mnt/external/mission-control/.env 2>/dev/null | cut -d= -f2)}"
 
 OPENCLAW_CONFIG="${OPENCLAW_CONFIG:-/home/enrico/.openclaw/openclaw.json}"
-WATCHDOG_STATE="${WATCHDOG_STATE:-/var/lib/watchdog/state.json}"
-WATCHDOG_LOCK_FILE="${WATCHDOG_LOCK_FILE:-/var/lock/mc-watchdog.lock}"
-WATCHDOG_ALERT_CACHE="${WATCHDOG_ALERT_CACHE:-/var/lib/watchdog/last_alert.json}"
+WATCHDOG_STATE_DIR_DEFAULT="${XDG_STATE_HOME:-$HOME/.local/state}/watchdog"
+WATCHDOG_STATE="${WATCHDOG_STATE:-$WATCHDOG_STATE_DIR_DEFAULT/state.json}"
+WATCHDOG_LOCK_FILE="${WATCHDOG_LOCK_FILE:-$WATCHDOG_STATE_DIR_DEFAULT/lock}"
+WATCHDOG_ALERT_CACHE="${WATCHDOG_ALERT_CACHE:-$WATCHDOG_STATE_DIR_DEFAULT/last_alert.json}"
 WATCHDOG_ALERT_DEDUP_SECS="${WATCHDOG_ALERT_DEDUP_SECS:-1800}"
 WATCHDOG_CIRCUIT_THRESHOLD="${WATCHDOG_CIRCUIT_THRESHOLD:-3}"
 
