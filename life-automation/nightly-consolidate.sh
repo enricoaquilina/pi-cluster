@@ -319,6 +319,13 @@ if [ -d "$LIFE_DIR/.git" ]; then
     life_git_sync "$LIFE_DIR" 2>&1 | tee -a "$LOG_DIR/consolidate.log" || log "WARNING: git sync failed"
 fi
 
+# --- Sync daily note + skill pointers to openclaw gateway ---
+if [[ "${LIFE_SYNC_ENABLED:-1}" != "0" ]]; then
+    timeout 60 bash "$(dirname "$0")/sync-openclaw-memory.sh" 2>&1 | head -5 >> "$LOG_DIR/consolidate.log" || {
+        log "WARNING: sync-openclaw-memory exited $?"
+    }
+fi
+
 # --- Weekly checks (Sundays only) ---
 DOW=$(date +%u)
 if [ "$DOW" = "7" ] && [ -d "$LIFE_DIR/.git" ]; then

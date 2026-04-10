@@ -48,4 +48,11 @@ LAST_MTIME=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
 # For now, mini-consolidation just ensures session digests and maxwell notes
 # are captured. Entity extraction happens at nightly consolidation.
 
+# 5. Sync daily note + skill pointers to openclaw gateway
+if [[ "${LIFE_SYNC_ENABLED:-1}" != "0" ]]; then
+    timeout 60 bash "$(dirname "$0")/sync-openclaw-memory.sh" 2>&1 | head -5 >> "$LOG_DIR/consolidate.log" || {
+        echo "$(date -Is) ERROR: sync-openclaw-memory exited $?" >> "$LOG_DIR/consolidate.log"
+    }
+fi
+
 echo "$CURRENT_MTIME" > "$STATE_FILE"
