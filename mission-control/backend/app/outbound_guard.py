@@ -58,3 +58,38 @@ def guard_reply(text: str) -> Tuple[bool, str]:
             )
             return True, SAFE_FALLBACK
     return False, text
+
+
+# ── Redaction patterns (v3) ──────────────────────────────────────────────────
+# Deterministic regex redaction for sensitive data in outbound responses.
+# Unlike guard_reply (which replaces the entire reply), redact_reply does
+# inline substitution — preserving the useful parts of the response.
+
+_REDACT_PATTERNS: List[Tuple[Pattern[str], str]] = [
+    # Private IPv4 ranges (RFC 1918)
+    (re.compile(r"\b(?:192\.168|10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"), "[REDACTED-IP]"),
+    # Tailscale CGNAT range (100.64.0.0/10)
+    (re.compile(r"\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b"), "[REDACTED-IP]"),
+    # API keys: OpenAI/Anthropic style
+    (re.compile(r"sk-[a-zA-Z0-9_-]{20,}"), "[REDACTED-KEY]"),
+    # API keys: Groq style
+    (re.compile(r"gsk_[a-zA-Z0-9_-]{20,}"), "[REDACTED-KEY]"),
+    # API keys: Google/Gemini style
+    (re.compile(r"AIza[a-zA-Z0-9_-]{30,}"), "[REDACTED-KEY]"),
+    # JWT tokens
+    (re.compile(r"eyJ[a-zA-Z0-9_-]{50,}"), "[REDACTED-TOKEN]"),
+    # Sensitive filesystem paths
+    (re.compile(r"/mnt/external/[^\s\"']+"), "[REDACTED-PATH]"),
+    (re.compile(r"/home/\w+/\.openclaw/[^\s\"']+"), "[REDACTED-PATH]"),
+]
+
+
+def redact_reply(text: str) -> str:
+    """Redact sensitive patterns from outbound responses.
+
+    Returns the text with inline substitutions. Does not replace the
+    entire reply — only the matched substrings are swapped.
+    """
+    for pattern, replacement in _REDACT_PATTERNS:
+        text = pattern.sub(replacement, text)
+    return text

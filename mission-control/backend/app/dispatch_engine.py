@@ -71,6 +71,48 @@ class RateLimiter:
 
 rate_limiter = RateLimiter()
 
+# ── Per-persona and hourly rate limiters (v3) ────────────────────────────────
+
+DISPATCH_HOURLY_LIMIT = int(os.getenv("DISPATCH_HOURLY_LIMIT", "30"))
+DISPATCH_PER_PERSONA_LIMIT = int(os.getenv("DISPATCH_PER_PERSONA_LIMIT", "5"))
+
+
+class HourlyRateLimiter:
+    """Global hourly dispatch budget."""
+
+    def __init__(self, max_per_hour: int = DISPATCH_HOURLY_LIMIT):
+        self.max_per_hour = max_per_hour
+        self._timestamps: list[float] = []
+
+    def check(self) -> bool:
+        now = time.time()
+        self._timestamps = [t for t in self._timestamps if now - t < 3600]
+        if len(self._timestamps) >= self.max_per_hour:
+            return False
+        self._timestamps.append(now)
+        return True
+
+
+class PerPersonaRateLimiter:
+    """Per-persona hourly dispatch limit."""
+
+    def __init__(self, max_per_hour: int = DISPATCH_PER_PERSONA_LIMIT):
+        self.max_per_hour = max_per_hour
+        self._counts: dict[str, list[float]] = {}
+
+    def check(self, persona: str) -> bool:
+        now = time.time()
+        window = self._counts.setdefault(persona, [])
+        window[:] = [t for t in window if now - t < 3600]
+        if len(window) >= self.max_per_hour:
+            return False
+        window.append(now)
+        return True
+
+
+hourly_limiter = HourlyRateLimiter()
+persona_limiter = PerPersonaRateLimiter()
+
 
 async def _openclaw_chat(prompt: str, system_prompt: str, timeout: int) -> str:
     """Send a prompt via OpenRouter API (HTTP) and return the response.
