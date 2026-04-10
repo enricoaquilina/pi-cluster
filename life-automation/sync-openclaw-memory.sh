@@ -21,6 +21,9 @@ LOG_FILE="${LOG_FILE:-$LIFE_DIR/logs/openclaw-sync.log}"
 HEALTHCHECK_FILE="${HEALTHCHECK_FILE:-$WORKSPACE_DIR/.nfs_healthcheck}"
 KILL_SWITCH_FILE="${KILL_SWITCH_FILE:-/var/run/maxwell-sync.disabled}"
 SYNC_SKIP_MOUNT_CHECK="${SYNC_SKIP_MOUNT_CHECK:-0}"
+HMAC_KEY_FILE="${HMAC_KEY_FILE:-$HOME/.openclaw/managed_block.key}"
+SYNC_EPOCH_FILE="${SYNC_EPOCH_FILE:-$LIFE_DIR/logs/.sync-last-success}"
+SYNC_FAIL_FILE="${SYNC_FAIL_FILE:-$LIFE_DIR/logs/.sync-fail-count}"
 TODAY="${TODAY:-$(TZ=Europe/Rome date '+%F')}"
 YESTERDAY="${YESTERDAY:-$(TZ=Europe/Rome date -d "$TODAY - 1 day" '+%F')}"
 DAY_BEFORE="${DAY_BEFORE:-$(TZ=Europe/Rome date -d "$TODAY - 2 days" '+%F')}"
@@ -42,6 +45,43 @@ log() {
     local msg
     msg="$(date -Is) $1"
     echo "$msg" >> "$LOG_FILE" 2>/dev/null || true
+}
+
+# --- HMAC key management ---
+generate_hmac_key() {
+    if [ ! -f "$HMAC_KEY_FILE" ]; then
+        mkdir -p "$(dirname "$HMAC_KEY_FILE")"
+        python3 -c "import secrets; print(secrets.token_hex(32))" > "$HMAC_KEY_FILE"
+        chmod 600 "$HMAC_KEY_FILE"
+    fi
+}
+
+compute_hmac() {
+    printf '%s' "$1" | python3 -c "
+import hmac, hashlib, sys
+key = open('$HMAC_KEY_FILE').read().strip().encode()
+msg = sys.stdin.buffer.read()
+print(hmac.new(key, msg, hashlib.sha256).hexdigest())
+"
+}
+
+verify_block_hmac() {
+    local current_block="$1"
+    local stored_sig
+    stored_sig=$(echo "$current_block" | grep -oP '<!-- hmac:v1:\K[a-f0-9]+' || true)
+    [ -z "$stored_sig" ] && return 0  # no sig = first run, OK
+    local content_without_hmac
+    content_without_hmac=$(echo "$current_block" | grep -v '<!-- hmac:')
+    local expected_sig
+    expected_sig=$(compute_hmac "$content_without_hmac")
+    if [ "$stored_sig" != "$expected_sig" ]; then
+        log "ERROR: managed block HMAC mismatch (tampered?)"
+        mkdir -p "$WORKSPACE_DIR/.tampered"
+        cp "$MEMORY_MD" "$WORKSPACE_DIR/.tampered/MEMORY.md.$(date +%s)"
+        [ -x /usr/local/bin/cluster-alert.sh ] && \
+            /usr/local/bin/cluster-alert.sh "🚨 Maxwell managed block tampered — self-healing" 2>/dev/null || true
+        return 1
+    fi
 }
 
 # --- Section filter (awk) ---
@@ -77,6 +117,9 @@ filter_daily_note() {
         keep { print }
     '
 }
+
+# --- Ensure HMAC key exists ---
+generate_hmac_key
 
 # --- Filter-only mode (for testing) ---
 if [ "$FILTER_ONLY" -eq 1 ]; then
@@ -195,6 +238,11 @@ Task management: \`mc tasks\` / \`mc task <id>\` / \`mc create\` / \`mc update\`
 
 <!-- canary:${canary_hash} -->"
 
+# --- HMAC sign the managed block (sign content WITHOUT hmac line, then append) ---
+hmac_sig=$(compute_hmac "$managed_block_content")
+managed_block_content="${managed_block_content}
+<!-- hmac:v1:${hmac_sig} -->"
+
 intended_memory_block="${BEGIN_MARKER}
 ${managed_block_content}
 ${END_MARKER}"
@@ -229,6 +277,14 @@ compute_memory_needs_update() {
     if [ "$begin_count" -ne "$end_count" ]; then
         log "ERROR: marker count mismatch (BEGIN=$begin_count, END=$end_count)"
         exit 1
+    fi
+
+    # Verify HMAC of existing managed block (tamper detection)
+    if [ "$begin_count" -eq 1 ]; then
+        local existing_block
+        existing_block=$(printf '%s\n' "$current" | awk -v b="$BEGIN_MARKER" -v e="$END_MARKER" \
+            'found && $0==e{print;found=0;next} $0==b{found=1} found{print}')
+        verify_block_hmac "$existing_block" || true  # tamper logged, continue to self-heal
     fi
     if [ "$begin_count" -gt 1 ]; then
         log "ERROR: duplicate markers (BEGIN=$begin_count, END=$end_count)"
@@ -371,6 +427,8 @@ sync_previous_day "$DAY_BEFORE"
 # --- Cleanup: remove daily note files older than 14 days ---
 find "$MEMORY_DIR" -name '*.md' -mtime +14 -not -name '.tmp.*' -delete 2>/dev/null || true
 
-# --- Log success ---
+# --- Log success + update health state ---
 log "SYNCED daily=$daily_needs_update memory=$memory_needs_update canary=$canary_hash"
+date +%s > "$SYNC_EPOCH_FILE" 2>/dev/null || true
+echo 0 > "$SYNC_FAIL_FILE" 2>/dev/null || true
 exit 0

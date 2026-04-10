@@ -673,3 +673,80 @@ EOF
     bash "$SYNC_SCRIPT"
     grep -q "MUST create plan/PRD first" "$MEMORY_MD"
 }
+
+# ===================================================================
+# V3: HMAC SIGNING TESTS
+# ===================================================================
+
+@test "HMAC: key auto-generated on first run" {
+    export HMAC_KEY_FILE="$TMPDIR_TEST/managed_block.key"
+    [ ! -f "$HMAC_KEY_FILE" ]
+    bash "$SYNC_SCRIPT"
+    [ -f "$HMAC_KEY_FILE" ]
+    # Key should be 64 hex chars (32 bytes)
+    local key_len
+    key_len=$(wc -c < "$HMAC_KEY_FILE" | tr -d ' ')
+    [ "$key_len" -ge 64 ]
+}
+
+@test "HMAC: signature present in managed block" {
+    export HMAC_KEY_FILE="$TMPDIR_TEST/managed_block.key"
+    bash "$SYNC_SCRIPT"
+    grep -q '<!-- hmac:v1:' "$MEMORY_MD"
+}
+
+@test "HMAC: tampered block detected and self-healed" {
+    export HMAC_KEY_FILE="$TMPDIR_TEST/managed_block.key"
+    bash "$SYNC_SCRIPT"
+    # Tamper with the managed block
+    sed -i 's/factual information/HACKED INSTRUCTIONS/' "$MEMORY_MD"
+    # Run again — should detect tamper and fix
+    bash "$SYNC_SCRIPT"
+    # Should be healed — original content restored
+    grep -q "factual information" "$MEMORY_MD"
+    ! grep -q "HACKED INSTRUCTIONS" "$MEMORY_MD"
+    # Tamper should be logged
+    grep -qi "tamper\|HMAC mismatch" "$LOG_FILE"
+}
+
+@test "HMAC: tampered copy preserved for forensics" {
+    export HMAC_KEY_FILE="$TMPDIR_TEST/managed_block.key"
+    bash "$SYNC_SCRIPT"
+    sed -i 's/factual information/HACKED/' "$MEMORY_MD"
+    bash "$SYNC_SCRIPT"
+    # Tampered copy should be saved
+    ls "$WORKSPACE_DIR/.tampered/" | grep -q "MEMORY.md"
+}
+
+@test "HMAC: idempotent — same content same signature" {
+    export HMAC_KEY_FILE="$TMPDIR_TEST/managed_block.key"
+    bash "$SYNC_SCRIPT"
+    local sig1
+    sig1=$(grep -oP 'hmac:v1:\K[a-f0-9]+' "$MEMORY_MD")
+    bash "$SYNC_SCRIPT"
+    local sig2
+    sig2=$(grep -oP 'hmac:v1:\K[a-f0-9]+' "$MEMORY_MD")
+    [ "$sig1" = "$sig2" ]
+}
+
+# ===================================================================
+# V3: SYNC SUCCESS EPOCH TESTS
+# ===================================================================
+
+@test "sync success: writes epoch file on success" {
+    export SYNC_EPOCH_FILE="$TMPDIR_TEST/sync-last-success"
+    bash "$SYNC_SCRIPT"
+    [ -f "$SYNC_EPOCH_FILE" ]
+    local epoch
+    epoch=$(cat "$SYNC_EPOCH_FILE")
+    [ "$epoch" -gt 0 ]
+}
+
+@test "sync success: resets fail count on success" {
+    export SYNC_FAIL_FILE="$TMPDIR_TEST/sync-fail-count"
+    echo "5" > "$SYNC_FAIL_FILE"
+    bash "$SYNC_SCRIPT"
+    local count
+    count=$(cat "$SYNC_FAIL_FILE")
+    [ "$count" = "0" ]
+}
