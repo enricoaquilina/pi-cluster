@@ -92,8 +92,10 @@ fi
 
 # --- NFS pre-flight ---
 if [ "$SYNC_SKIP_MOUNT_CHECK" != "1" ]; then
-    if ! mountpoint -q "$WORKSPACE_DIR" 2>/dev/null; then
-        log "ERROR: $WORKSPACE_DIR not mounted"
+    # Check the NFS mount point (parent), not the subdirectory
+    NFS_MOUNT="${NFS_MOUNT_POINT:-/mnt/external}"
+    if ! mountpoint -q "$NFS_MOUNT" 2>/dev/null; then
+        log "ERROR: $NFS_MOUNT not mounted"
         exit 1
     fi
     if ! timeout 5 stat "$HEALTHCHECK_FILE" >/dev/null 2>&1; then
