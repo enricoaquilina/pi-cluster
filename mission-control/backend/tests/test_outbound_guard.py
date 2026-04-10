@@ -144,9 +144,10 @@ def test_redact_gemini_key():
 def test_redact_jwt_token():
     from app.outbound_guard import redact_reply
 
-    jwt = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIyMWQ1NmYzMS0xNjczLTQzMGMtYWQwYy05NTUxOTg0ZWZmMDAi"
+    # eyJ prefix + 50 chars minimum to trigger the pattern
+    jwt = "eyJ" + "A" * 60  # eyJAAAA... (63 chars total, clearly fake)
     result = redact_reply(f"Token: {jwt}")
-    assert "eyJhbGci" not in result
+    assert jwt not in result
     assert "[REDACTED-TOKEN]" in result
 
 
