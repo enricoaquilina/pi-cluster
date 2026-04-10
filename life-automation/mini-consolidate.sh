@@ -15,6 +15,16 @@ DAILY_NOTE="$LIFE_DIR/Daily/$YEAR/$MONTH/$TODAY.md"
 
 mkdir -p "$LOG_DIR"
 
+# 0. Auto-create daily note from template if missing
+if [ ! -f "$DAILY_NOTE" ]; then
+    mkdir -p "$(dirname "$DAILY_NOTE")"
+    TEMPLATE="$LIFE_DIR/Daily/_template.md"
+    if [ -f "$TEMPLATE" ]; then
+        sed "s/{{date}}/$TODAY/g" "$TEMPLATE" > "$DAILY_NOTE"
+        echo "$(date -Is) Created daily note from template: $DAILY_NOTE" >> "$LOG_DIR/consolidate.log"
+    fi
+fi
+
 # Shared lock with nightly consolidation — skip if already running
 exec 9>"$LOCK_FILE"
 flock -n 9 || exit 0
@@ -53,6 +63,38 @@ if [[ "${LIFE_SYNC_ENABLED:-1}" != "0" ]]; then
     timeout 60 bash "$(dirname "$0")/sync-openclaw-memory.sh" 2>&1 | head -5 >> "$LOG_DIR/consolidate.log" || {
         echo "$(date -Is) ERROR: sync-openclaw-memory exited $?" >> "$LOG_DIR/consolidate.log"
     }
+fi
+
+# 6. Memory bridge health check (alert deduplication)
+SYNC_EPOCH_FILE="$LOG_DIR/.sync-last-success"
+SYNC_FAIL_FILE="$LOG_DIR/.sync-fail-count"
+SYNC_ALERT_COOLDOWN="$LOG_DIR/.sync-alert-cooldown"
+if [ -f "$SYNC_EPOCH_FILE" ]; then
+    last_sync=$(cat "$SYNC_EPOCH_FILE")
+    age=$(( $(date +%s) - last_sync ))
+    if [ "$age" -gt 7200 ]; then
+        fail_count=$(cat "$SYNC_FAIL_FILE" 2>/dev/null || echo 0)
+        fail_count=$((fail_count + 1))
+        echo "$fail_count" > "$SYNC_FAIL_FILE"
+        cooldown_ts=$(cat "$SYNC_ALERT_COOLDOWN" 2>/dev/null || echo 0)
+        if [ "$fail_count" -ge 4 ] && [ $(( $(date +%s) - cooldown_ts )) -gt 3600 ]; then
+            [ -x /usr/local/bin/cluster-alert.sh ] && \
+                /usr/local/bin/cluster-alert.sh "⚠️ Maxwell sync stale: ${age}s since last success (${fail_count} failures)" 2>/dev/null || true
+            date +%s > "$SYNC_ALERT_COOLDOWN"
+        fi
+    fi
+fi
+
+# 7. Log memory read patterns from gateway
+MEMLOG_STATE="$LOG_DIR/.memory-reads-since"
+MEMLOG_FILE="$LOG_DIR/memory-reads.log"
+LAST_PARSE=$(cat "$MEMLOG_STATE" 2>/dev/null || echo "1h")
+if command -v docker &>/dev/null; then
+    docker logs openclaw-openclaw-gateway-1 --since "$LAST_PARSE" 2>&1 \
+        | grep -o 'read.*memory/[^ "]*' \
+        | sort | uniq -c | sort -rn \
+        >> "$MEMLOG_FILE" 2>/dev/null || true
+    date -Is > "$MEMLOG_STATE"
 fi
 
 echo "$CURRENT_MTIME" > "$STATE_FILE"
