@@ -12,6 +12,7 @@ from .team import router as team_router
 from .memories import router as memories_router
 from .budget import router as budget_router
 from .trading import router as trading_router
+from .openai_compat import router as openai_compat_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -24,3 +25,4 @@ api_router.include_router(team_router)
 api_router.include_router(memories_router)
 api_router.include_router(budget_router)
 api_router.include_router(trading_router)
+api_router.include_router(openai_compat_router)
