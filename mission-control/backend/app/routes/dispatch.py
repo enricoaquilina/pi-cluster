@@ -28,9 +28,10 @@ from ..maxwell_prompt import build_system_prompt, prompt_to_string
 from ..models.dispatch import DispatchRequest, DispatchResponse, DispatchLogEntry
 from ..dispatch_engine import (
     PERSONA_ROUTING,
-    rate_limiter, _openclaw_chat, _is_gateway_reachable, _log_dispatch,
+    rate_limiter, hourly_limiter, persona_limiter,
+    _openclaw_chat, _is_gateway_reachable, _log_dispatch,
 )
-from ..outbound_guard import guard_reply
+from ..outbound_guard import guard_reply, redact_reply
 from ..trading_helpers import TEAM_ROSTER
 
 logger = logging.getLogger("mission-control")
@@ -190,6 +191,28 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             )
             return _degraded_response(req, level, delegate)
 
+        # Step 2b: hourly + per-persona rate limiters (budget controls, soft response)
+        if not hourly_limiter.check():
+            _log_dispatch(req.persona, "gateway", delegate, False, req.prompt[:200], "", 0)
+            return DispatchResponse(
+                response="Dispatch deferred — global hourly budget reached. Try again later.",
+                persona=req.persona,
+                node=route[0] if route else "unknown",
+                delegate=delegate,
+                elapsed_ms=0,
+                fallback=True,
+            )
+        if not persona_limiter.check(req.persona):
+            _log_dispatch(req.persona, "gateway", delegate, False, req.prompt[:200], "", 0)
+            return DispatchResponse(
+                response=f"Dispatch deferred — hourly limit reached for {req.persona}. Try again later.",
+                persona=req.persona,
+                node=route[0] if route else "unknown",
+                delegate=delegate,
+                elapsed_ms=0,
+                fallback=True,
+            )
+
         # Step 3: build system prompt + wrap user prompt
         if req.persona in DYNAMIC_SYSTEM_PROMPT_PERSONAS:
             system_prompt = prompt_to_string(build_system_prompt(persona=req.persona))
@@ -260,8 +283,10 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             )
             raise
 
-        # Step 6: outbound guard
+        # Step 6: outbound guard + redaction
+        response = response or ""
         guard_hit, response = guard_reply(response)
+        response = redact_reply(response)
         if guard_hit:
             logger.warning(
                 "dispatch: outbound_guard replaced hallucinated-path reply for persona=%s",
@@ -269,7 +294,9 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             )
 
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
-        _log_dispatch(req.persona, "gateway", delegate, False, req.prompt, response, elapsed_ms)
+        # Redact prompt before logging to prevent leaked keys in dispatch_log DB
+        redacted_prompt = redact_reply(req.prompt[:500]) if req.prompt else ""
+        _log_dispatch(req.persona, "gateway", delegate, False, redacted_prompt, response, elapsed_ms)
 
         # Step 7: success event
         _emit_event(
