@@ -361,8 +361,8 @@ EOF
     bash "$SYNC_SCRIPT"
     local canary1
     canary1=$(grep -o 'canary:[a-f0-9]*' "$MEMORY_MD" | head -1)
-    # Change the daily note
-    echo "- new project added" >> "$LIFE_DIR/Daily/2026/04/$TODAY.md"
+    # Change the daily note (insert into a kept section, not at end which may be in a stripped subsection)
+    sed -i '/## Active Projects/a\- new project added to active' "$LIFE_DIR/Daily/2026/04/$TODAY.md"
     bash "$SYNC_SCRIPT"
     local canary2
     canary2=$(grep -o 'canary:[a-f0-9]*' "$MEMORY_MD" | head -1)
@@ -749,4 +749,97 @@ EOF
     local count
     count=$(cat "$SYNC_FAIL_FILE")
     [ "$count" = "0" ]
+}
+
+# ===================================================================
+# V4: SUBSECTION STRIPPING TESTS
+# ===================================================================
+
+@test "filter: ### Handoff subsection stripped from output" {
+    cat > "$LIFE_DIR/Daily/2026/04/$TODAY.md" <<'EOF'
+---
+date: 2026-04-10
+---
+
+## New Facts
+- fact one
+- fact two
+
+### Handoff — 2026-04-10T15:00
+- **Task**: implementing something
+- **Modified files**: sync-openclaw-memory.sh
+EOF
+    local output
+    output=$(bash "$SYNC_SCRIPT" --filter-only < "$LIFE_DIR/Daily/2026/04/$TODAY.md")
+    echo "$output" | grep -q "fact one"
+    echo "$output" | grep -q "fact two"
+    ! echo "$output" | grep -q "Handoff"
+    ! echo "$output" | grep -q "Modified files"
+}
+
+@test "filter: ### Session Summary subsection stripped" {
+    cat > "$LIFE_DIR/Daily/2026/04/$TODAY.md" <<'EOF'
+---
+date: 2026-04-10
+---
+
+## New Facts
+- important fact
+
+### Session Summary
+- session detail that should be stripped
+EOF
+    local output
+    output=$(bash "$SYNC_SCRIPT" --filter-only < "$LIFE_DIR/Daily/2026/04/$TODAY.md")
+    echo "$output" | grep -q "important fact"
+    ! echo "$output" | grep -q "Session Summary"
+    ! echo "$output" | grep -q "session detail"
+}
+
+@test "filter: #### deep subsection stripped" {
+    cat > "$LIFE_DIR/Daily/2026/04/$TODAY.md" <<'EOF'
+---
+date: 2026-04-10
+---
+
+## Active Projects
+- project A
+
+#### Deep Detail
+- should not appear
+EOF
+    local output
+    output=$(bash "$SYNC_SCRIPT" --filter-only < "$LIFE_DIR/Daily/2026/04/$TODAY.md")
+    echo "$output" | grep -q "project A"
+    ! echo "$output" | grep -q "Deep Detail"
+}
+
+# ===================================================================
+# V4: MANAGED BLOCK REFERENCES MAXWELL-SAFE
+# ===================================================================
+
+@test "managed block: references maxwell-safe collection" {
+    bash "$SYNC_SCRIPT"
+    grep -q "maxwell-safe" "$MEMORY_MD"
+}
+
+# ===================================================================
+# V4: HMAC GREP ANCHORING (C3 fix)
+# ===================================================================
+
+@test "HMAC: grep uses anchored pattern for hmac line" {
+    export HMAC_KEY_FILE="$TMPDIR_TEST/managed_block.key"
+    # Create a daily note that mentions hmac in content
+    cat > "$LIFE_DIR/Daily/2026/04/$TODAY.md" <<'EOF'
+---
+date: 2026-04-10
+---
+
+## New Facts
+- discussed <!-- hmac: what should signature be? --> in meeting
+EOF
+    bash "$SYNC_SCRIPT"
+    # The hmac mention in content should still be present (stripped by HTML comment filter now)
+    # But the HMAC signature line should be present
+    grep -q '<!-- hmac:v1:' "$MEMORY_MD"
 }

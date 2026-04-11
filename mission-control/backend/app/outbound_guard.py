@@ -76,8 +76,8 @@ _REDACT_PATTERNS: List[Tuple[Pattern[str], str]] = [
     (re.compile(r"gsk_[a-zA-Z0-9_-]{20,}"), "[REDACTED-KEY]"),
     # API keys: Google/Gemini style
     (re.compile(r"AIza[a-zA-Z0-9_-]{30,}"), "[REDACTED-KEY]"),
-    # JWT tokens
-    (re.compile(r"eyJ[a-zA-Z0-9_-]{50,}"), "[REDACTED-TOKEN]"),
+    # JWT tokens (min 10 chars: real JWT headers are ~33 chars after eyJ)
+    (re.compile(r"eyJ[a-zA-Z0-9_-]{10,}"), "[REDACTED-TOKEN]"),
     # Sensitive filesystem paths
     (re.compile(r"/mnt/external/[^\s\"']+"), "[REDACTED-PATH]"),
     (re.compile(r"/home/\w+/\.openclaw/[^\s\"']+"), "[REDACTED-PATH]"),
