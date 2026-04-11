@@ -32,6 +32,7 @@ from ..dispatch_engine import (
     _openclaw_chat, _is_gateway_reachable, _log_dispatch,
 )
 from ..outbound_guard import guard_reply, redact_reply
+from ..prompt_guard import check_injection
 from ..trading_helpers import TEAM_ROSTER
 
 logger = logging.getLogger("mission-control")
@@ -191,7 +192,21 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             )
             return _degraded_response(req, level, delegate)
 
-        # Step 2b: hourly + per-persona rate limiters (budget controls, soft response)
+        # Step 2b: prompt injection check
+        is_injection, injection_score = check_injection(req.prompt)
+        if is_injection:
+            logger.warning("dispatch: prompt injection detected (score=%.3f) for persona=%s", injection_score, req.persona)
+            _log_dispatch(req.persona, "gateway", delegate, False, req.prompt[:200], "", 0)
+            return DispatchResponse(
+                response="I detected a potential prompt injection in your message. Please rephrase your request.",
+                persona=req.persona,
+                node=route[0] if route else "unknown",
+                delegate=delegate,
+                elapsed_ms=0,
+                fallback=True,
+            )
+
+        # Step 2c: hourly + per-persona rate limiters (budget controls, soft response)
         if not hourly_limiter.check():
             _log_dispatch(req.persona, "gateway", delegate, False, req.prompt[:200], "", 0)
             return DispatchResponse(
@@ -413,3 +428,15 @@ def get_dispatch_log(
                 "error_detail", "created_at"]
         rows = [dict(zip(cols, r)) for r in cur.fetchall()]
     return {"items": rows, "total": total, "limit": limit, "offset": offset}
+
+
+# ── Internal dispatch helper (for openai_compat) ───────────────────────────
+
+
+async def _dispatch_internal(persona: str, prompt: str, timeout: int = 60) -> DispatchResponse:
+    """Programmatic dispatch — used by openai_compat endpoint.
+
+    Calls the same dispatch_task logic but without HTTP request overhead.
+    """
+    req = DispatchRequest(persona=persona, prompt=prompt, timeout=timeout)
+    return await dispatch_task(req)
