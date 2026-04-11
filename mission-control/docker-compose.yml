@@ -26,7 +26,7 @@ services:
   api:
     build: ./backend
     container_name: mission-control-api
-    mem_limit: 256m
+    mem_limit: 768m  # raised from 256m for ONNX prompt injection model (~300MB runtime)
     dns:
       - 8.8.8.8
       - 1.1.1.1
@@ -46,6 +46,7 @@ services:
       - /mnt/external/polymarket-bot/data:/polybot-data:ro
       - /home/enrico/life:/life:ro
       - /home/enrico/.cache/qmd:/qmd-cache:ro
+      - huggingface-cache:/root/.cache/huggingface
     ports:
       - "8000:8000"
     depends_on:
@@ -97,3 +98,4 @@ services:
 volumes:
   mission-control_postgres_data:
     external: true
+  huggingface-cache:

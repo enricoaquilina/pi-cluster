@@ -1,13 +1,14 @@
-"""Lightweight prompt injection classifier using Meta's Prompt Guard.
+"""Prompt injection classifier using ONNX runtime (no PyTorch needed).
 
-Runs Meta's Prompt-Guard-86M model (86M params, CPU-only) to classify
-incoming prompts as BENIGN or INJECTION before they reach the LLM.
+Runs ProtectAI's DeBERTa v3 model via ONNX runtime to classify incoming
+prompts as SAFE or INJECTION before they reach the LLM.
 
 Configuration:
     PROMPT_GUARD_ENABLED: "1" (default) to enable, "0" to disable
     PROMPT_GUARD_THRESHOLD: confidence threshold (default 0.8)
+    PROMPT_GUARD_MODEL: HuggingFace model ID (default: protectai/deberta-v3-base-prompt-injection-v2)
 
-The model is lazy-loaded on first use (~2s cold start, then ~50ms/check).
+The model is lazy-loaded on first use (~3s cold start, then ~50ms/check).
 Fails open on any error — never blocks legitimate requests.
 """
 
@@ -29,19 +30,32 @@ PROMPT_GUARD_MODEL = os.getenv(
 
 @lru_cache(maxsize=1)
 def _load_model():
-    """Lazy-load the prompt injection classifier on first use.
+    """Lazy-load the ONNX prompt injection classifier.
 
-    Default: ProtectAI deberta-v3-base (no auth required, labels: SAFE/INJECTION).
-    Alternative: meta-llama/Prompt-Guard-86M (requires HF login, labels: BENIGN/INJECTION).
+    Uses optimum's ORTModelForSequenceClassification for ONNX inference
+    (no PyTorch dependency). Falls back to transformers pipeline() if
+    optimum is not available.
     """
-    from transformers import pipeline  # type: ignore[import-untyped]
-
     logger.info("prompt_guard: loading model %s", PROMPT_GUARD_MODEL)
-    return pipeline(
-        "text-classification",
-        model=PROMPT_GUARD_MODEL,
-        device="cpu",
-    )
+    try:
+        from optimum.onnxruntime import ORTModelForSequenceClassification  # type: ignore[import-untyped]
+        from transformers import AutoTokenizer, pipeline  # type: ignore[import-untyped]
+
+        model = ORTModelForSequenceClassification.from_pretrained(
+            PROMPT_GUARD_MODEL,
+            provider="CPUExecutionProvider",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(PROMPT_GUARD_MODEL)
+        return pipeline("text-classification", model=model, tokenizer=tokenizer)
+    except ImportError:
+        # Fallback: try plain transformers (needs torch)
+        from transformers import pipeline  # type: ignore[import-untyped]
+
+        return pipeline(
+            "text-classification",
+            model=PROMPT_GUARD_MODEL,
+            device="cpu",
+        )
 
 
 def check_injection(text: str) -> tuple[bool, float]:
