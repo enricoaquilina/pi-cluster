@@ -21,16 +21,25 @@ logger = logging.getLogger("mission-control.prompt_guard")
 
 PROMPT_GUARD_ENABLED = os.getenv("PROMPT_GUARD_ENABLED", "1") == "1"
 PROMPT_GUARD_THRESHOLD = float(os.getenv("PROMPT_GUARD_THRESHOLD", "0.8"))
+PROMPT_GUARD_MODEL = os.getenv(
+    "PROMPT_GUARD_MODEL",
+    "protectai/deberta-v3-base-prompt-injection-v2",
+)
 
 
 @lru_cache(maxsize=1)
 def _load_model():
-    """Lazy-load the Prompt Guard model on first use."""
+    """Lazy-load the prompt injection classifier on first use.
+
+    Default: ProtectAI deberta-v3-base (no auth required, labels: SAFE/INJECTION).
+    Alternative: meta-llama/Prompt-Guard-86M (requires HF login, labels: BENIGN/INJECTION).
+    """
     from transformers import pipeline  # type: ignore[import-untyped]
 
+    logger.info("prompt_guard: loading model %s", PROMPT_GUARD_MODEL)
     return pipeline(
         "text-classification",
-        model="meta-llama/Prompt-Guard-86M",
+        model=PROMPT_GUARD_MODEL,
         device="cpu",
     )
 
@@ -51,6 +60,7 @@ def check_injection(text: str) -> tuple[bool, float]:
         result = classifier(text[:512])
         label = result[0]["label"]
         score = result[0]["score"]
+        # ProtectAI uses SAFE/INJECTION, Meta uses BENIGN/INJECTION
         is_injection = label == "INJECTION" and score >= PROMPT_GUARD_THRESHOLD
         if is_injection:
             logger.warning(
