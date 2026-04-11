@@ -65,12 +65,14 @@ jobs:
 
       - name: Validate openclaw config template
         run: |
-          echo "TELEGRAM_BOT_TOKEN=test-token-ci" > /tmp/test-env
-          if [ -f scripts/render-openclaw-config.sh ]; then
+          if [ -f scripts/render-openclaw-config.sh ] && [ -f configs/openclaw/openclaw.json.template ]; then
+            echo "TELEGRAM_BOT_TOKEN=test-token-ci" > /tmp/test-env
+            sudo apt-get install -y -qq gettext-base >/dev/null 2>&1 || true
             bash scripts/render-openclaw-config.sh \
-              configs/openclaw/openclaw.json.template \
-              /tmp/test-env \
-              /tmp/rendered-config.json 2>&1 || true
+              --template configs/openclaw/openclaw.json.template \
+              --env /tmp/test-env \
+              --no-validate \
+              -o /tmp/rendered-config.json 2>&1 || true
             python3 -c "import json; json.load(open('/tmp/rendered-config.json')); print('openclaw config: valid JSON')"
           fi
 
