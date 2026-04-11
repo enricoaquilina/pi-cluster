@@ -92,6 +92,10 @@ class HourlyRateLimiter:
         self._timestamps.append(now)
         return True
 
+    def reset(self) -> None:
+        """Clear all tracked timestamps (for testing)."""
+        self._timestamps.clear()
+
 
 class PerPersonaRateLimiter:
     """Per-persona hourly dispatch limit."""
@@ -108,6 +112,10 @@ class PerPersonaRateLimiter:
             return False
         window.append(now)
         return True
+
+    def reset(self) -> None:
+        """Clear all tracked timestamps (for testing)."""
+        self._counts.clear()
 
 
 hourly_limiter = HourlyRateLimiter()

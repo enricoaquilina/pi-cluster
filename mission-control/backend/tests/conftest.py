@@ -1,6 +1,5 @@
 """Shared fixtures for Mission Control tests."""
 
-import asyncio
 import os
 import sys
 
@@ -59,6 +58,22 @@ def auth_headers(api_key):
     return {"X-Api-Key": api_key}
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiters():
+    """Reset per-persona and hourly rate limiters between tests.
+
+    Without this, module-level singleton limiters accumulate state across
+    the entire pytest session, causing tests to fail with spurious
+    "deferred" responses after the 5th or 30th dispatch.
+    """
+    from app.dispatch_engine import hourly_limiter, persona_limiter
+    hourly_limiter.reset()
+    persona_limiter.reset()
+    yield
+    hourly_limiter.reset()
+    persona_limiter.reset()
+
+
 @pytest.fixture
 def event_bus_instance():
     from main import event_bus
@@ -99,7 +114,8 @@ def cleanup_test_data():
 
 async def _drain_queue(q, timeout: float = 0.5) -> list:
     """Drain all events from queue within timeout."""
-    import asyncio, json
+    import asyncio
+    import json
     events = []
     try:
         while True:
