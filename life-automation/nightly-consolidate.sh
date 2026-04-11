@@ -249,6 +249,13 @@ if [ "$(date +%u)" -eq 7 ]; then
     log "Generating weekly summary..."
     python3 "$LIFE_DIR/scripts/weekly_summary.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
+    # Sync latest week summary to Maxwell's memory directory
+    LATEST_WEEK_SUMMARY=$(ls -t "$LIFE_DIR/Daily/"*/W*-summary.md 2>/dev/null | head -1)
+    if [ -n "$LATEST_WEEK_SUMMARY" ]; then
+        cp "$LATEST_WEEK_SUMMARY" "/mnt/external/openclaw/workspace/memory/week-summary.md" 2>/dev/null || true
+        log "Synced week summary to Maxwell memory: $LATEST_WEEK_SUMMARY"
+    fi
+
     log "Running entity enrichment (weekly)..."
     python3 "$LIFE_DIR/scripts/enrich_entities.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
@@ -303,6 +310,12 @@ if [ -x "$QMD_BIN" ]; then
     if timeout 120 "$QMD_BIN" update -c life 2>/dev/null; then
         timeout 300 "$QMD_BIN" embed 2>/dev/null || log "WARNING: QMD embed failed"
         log "QMD re-index complete"
+        # Rebuild maxwell-safe QMD collection (restricted to safe content only)
+        log "Rebuilding maxwell-safe QMD collection..."
+        "$QMD_BIN" collection rm maxwell-safe 2>/dev/null || true
+        "$QMD_BIN" collection add "$LIFE_DIR/Daily" --name maxwell-safe 2>/dev/null || true
+        "$QMD_BIN" collection add "$LIFE_DIR/Projects" --name maxwell-safe 2>/dev/null || true
+        timeout 300 "$QMD_BIN" embed -c maxwell-safe 2>/dev/null || log "WARNING: maxwell-safe embed failed"
     else
         log "WARNING: QMD update failed — search may be stale"
     fi

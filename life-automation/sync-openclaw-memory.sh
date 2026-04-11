@@ -230,6 +230,7 @@ Today's daily note: \`memory/$TODAY.md\` (synced from ~/life/Daily/)
   Contains: Active Projects, Decisions Made, Pending Items, New Facts
 
 Previous days: \`memory/$YESTERDAY.md\`, \`memory/$DAY_BEFORE.md\` (if available)
+For multi-day context: read \`memory/week-summary.md\` (last 7 days compressed, updated weekly)
 
 Deep search: \`qmd search \"X\" -c maxwell-safe\` (BM25) / \`qmd vsearch \"X\" -c maxwell-safe\` (semantic)
 Full file: \`qmd get <path>\`

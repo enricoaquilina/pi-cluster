@@ -843,3 +843,12 @@ EOF
     # But the HMAC signature line should be present
     grep -q '<!-- hmac:v1:' "$MEMORY_MD"
 }
+
+# ===================================================================
+# V5: MANAGED BLOCK WEEK SUMMARY REFERENCE
+# ===================================================================
+
+@test "managed block: references week-summary.md" {
+    bash "$SYNC_SCRIPT"
+    grep -q "week-summary.md" "$MEMORY_MD"
+}

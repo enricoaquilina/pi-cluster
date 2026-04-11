@@ -63,6 +63,17 @@ jobs:
       - name: Render and validate templates
         run: python tests/test_templates.py
 
+      - name: Validate openclaw config template
+        run: |
+          echo "TELEGRAM_BOT_TOKEN=test-token-ci" > /tmp/test-env
+          if [ -f scripts/render-openclaw-config.sh ]; then
+            bash scripts/render-openclaw-config.sh \
+              configs/openclaw/openclaw.json.template \
+              /tmp/test-env \
+              /tmp/rendered-config.json 2>&1 || true
+            python3 -c "import json; json.load(open('/tmp/rendered-config.json')); print('openclaw config: valid JSON')"
+          fi
+
   dry-run:
     name: Ansible Dry Run
     runs-on: ubuntu-latest
