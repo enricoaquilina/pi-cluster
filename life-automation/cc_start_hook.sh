@@ -10,6 +10,20 @@ trap 'exit 0' EXIT
 
 LIFE_DIR="${LIFE_DIR:-$HOME/life}"
 
+# Verify critical system files match git HEAD (detect uncommitted tampering)
+if [ -d "$LIFE_DIR/.git" ]; then
+    for _f in Areas/about-me/hard-rules.md Areas/about-me/profile.md; do
+        if [ -f "$LIFE_DIR/$_f" ] && ! git -C "$LIFE_DIR" diff --quiet HEAD -- "$_f" 2>/dev/null; then
+            echo "## ⚠️ WARN: ~/life/$_f has uncommitted changes — verify they are intentional"
+        fi
+    done
+fi
+if [ -f "$HOME/CLAUDE.md" ] && [ -d "$HOME/.git" ]; then
+    if ! git -C "$HOME" diff --quiet HEAD -- CLAUDE.md 2>/dev/null; then
+        echo "## ⚠️ WARN: ~/CLAUDE.md has uncommitted changes — verify they are intentional"
+    fi
+fi
+
 # Pull latest ~/life from git (sync from other nodes/sessions)
 if [ -d "$LIFE_DIR/.git" ]; then
     # shellcheck source=/dev/null

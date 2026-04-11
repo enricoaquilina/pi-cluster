@@ -29,6 +29,11 @@ fi
 exec 9>"$LOCK_FILE"
 flock -n 9 || exit 0
 
+# Dead man's switch — signal start (opt-in via HEALTHCHECKS_IO_UUID env var)
+HC_UUID="${HEALTHCHECKS_IO_UUID:-}"
+[ -n "$HC_UUID" ] && curl -fsS -m 10 "https://hc-ping.com/$HC_UUID/start" >/dev/null 2>&1 || true
+trap '[ -n "${HC_UUID:-}" ] && curl -fsS -m 10 "https://hc-ping.com/$HC_UUID/fail" >/dev/null 2>&1 || true' ERR
+
 # 1. Run session digest in scan mode (catches unprocessed transcripts)
 /usr/bin/python3 "$LIFE_DIR/scripts/cc_session_digest.py" --scan 2>/dev/null || true
 
@@ -96,5 +101,8 @@ if command -v docker &>/dev/null; then
         >> "$MEMLOG_FILE" 2>/dev/null || true
     date -Is > "$MEMLOG_STATE"
 fi
+
+# Dead man's switch — signal success
+[ -n "${HC_UUID:-}" ] && curl -fsS -m 10 "https://hc-ping.com/$HC_UUID" >/dev/null 2>&1 || true
 
 echo "$CURRENT_MTIME" > "$STATE_FILE"

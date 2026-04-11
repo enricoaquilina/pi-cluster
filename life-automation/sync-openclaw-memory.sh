@@ -71,7 +71,7 @@ verify_block_hmac() {
     stored_sig=$(echo "$current_block" | grep -oP '<!-- hmac:v1:\K[a-f0-9]+' || true)
     [ -z "$stored_sig" ] && return 0  # no sig = first run, OK
     local content_without_hmac
-    content_without_hmac=$(echo "$current_block" | grep -v '<!-- hmac:')
+    content_without_hmac=$(echo "$current_block" | grep -v '^<!-- hmac:v1:')
     local expected_sig
     expected_sig=$(compute_hmac "$content_without_hmac")
     if [ "$stored_sig" != "$expected_sig" ]; then
@@ -94,9 +94,9 @@ filter_daily_note() {
     if ! head -1 "$input" | grep -q '^---'; then
         echo "WARN: no frontmatter in $input" >&2
     fi
-    # Strip CRLF, dangerous Unicode (zero-width chars), then filter sections + sanitize
+    # Strip CRLF, dangerous Unicode (zero-width chars via portable Python), then filter + sanitize
     tr -d '\r' < "$input" \
-        | sed 's/\xE2\x80\x8B//g; s/\xE2\x80\x8C//g; s/\xE2\x80\x8D//g; s/\xEF\xBB\xBF//g; s/\xE2\x81\xA0//g' \
+        | python3 -c "import sys; sys.stdout.write(sys.stdin.read().translate({0x200B:None,0x200C:None,0x200D:None,0xFEFF:None,0x2060:None}))" \
         | awk '
         # Strip multi-line HTML comments
         /^<!--/ { in_comment=1 }
@@ -109,11 +109,12 @@ filter_daily_note() {
         # YAML frontmatter handling
         /^---/ { if (++fm == 2) next; next }
         fm < 2 { next }
-        # Section filter
+        # Section filter: keep only safe top-level sections
         /^## (Active Projects|Decisions Made|Pending Items|New Facts( Learned)?)[[:space:]]*$/ {
             print; keep = 1; next
         }
-        /^## / { keep = 0; next }
+        # Stop on ANY header: ## (other top-level) or ### (subsection) or deeper
+        /^##[#]* / { keep = 0; next }
         keep { print }
     '
 }
@@ -230,7 +231,7 @@ Today's daily note: \`memory/$TODAY.md\` (synced from ~/life/Daily/)
 
 Previous days: \`memory/$YESTERDAY.md\`, \`memory/$DAY_BEFORE.md\` (if available)
 
-Deep search: \`qmd search \"X\"\` (BM25) / \`qmd vsearch \"X\"\` (semantic)
+Deep search: \`qmd search \"X\" -c maxwell-safe\` (BM25) / \`qmd vsearch \"X\" -c maxwell-safe\` (semantic)
 Full file: \`qmd get <path>\`
 
 Dispatch work: \`mc dispatch <persona> \"prompt\"\` (MUST create plan/PRD first)
