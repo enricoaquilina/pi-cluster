@@ -4,7 +4,5 @@ psycopg2-binary==2.9.10
 pydantic==2.10.4
 websockets>=13.0
 # Prompt Guard: ONNX-based prompt injection detection (CPU-only, no PyTorch)
-# Upper bounds prevent transitive dep explosions (torch, nvidia-cuda, etc.)
 onnxruntime>=1.17,<2.0
-optimum[onnxruntime]>=1.17,<2.0
 transformers>=4.36,<5.0
