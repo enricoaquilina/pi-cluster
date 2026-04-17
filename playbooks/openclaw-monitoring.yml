@@ -247,6 +247,243 @@
         job: "/usr/local/bin/resource-monitor.sh"
         cron_file: openclaw-resource-monitor
 
+# ── Heavy Node: Storage Hardening ─────��──────────────────────────────────────
+# Protects NVMe from write exhaustion (recurring failure pattern).
+- name: Harden heavy node storage
+  hosts: heavy
+  become: true
+  vars_files:
+    - ../secrets/monitoring.yml
+  vars:
+    heavy_repo_dir: /home/enrico/pi-cluster
+  tasks:
+    # ── SSH Watchdog ──────────────────────────────────────────────────────────
+    - name: Deploy SSH watchdog script
+      ansible.builtin.copy:
+        src: ../scripts/ssh-watchdog.sh
+        dest: "{{ heavy_repo_dir }}/scripts/ssh-watchdog.sh"
+        mode: "0755"
+        owner: enrico
+        group: enrico
+
+    - name: Deploy SSH watchdog service
+      ansible.builtin.template:
+        src: ../templates/ssh-watchdog.service.j2
+        dest: /etc/systemd/system/ssh-watchdog.service
+        mode: "0644"
+
+    - name: Deploy SSH watchdog timer
+      ansible.builtin.template:
+        src: ../templates/ssh-watchdog.timer.j2
+        dest: /etc/systemd/system/ssh-watchdog.timer
+        mode: "0644"
+
+    - name: Enable SSH watchdog timer
+      ansible.builtin.systemd:
+        name: ssh-watchdog.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # ── Reverse SSH Tunnel ────────────────────────────────────────────────────
+    - name: Install autossh
+      ansible.builtin.apt:
+        name: autossh
+        state: present
+
+    - name: Deploy reverse SSH tunnel service
+      ansible.builtin.template:
+        src: ../templates/autossh-reverse-tunnel.service.j2
+        dest: /etc/systemd/system/autossh-reverse-tunnel.service
+        mode: "0644"
+
+    - name: Enable reverse SSH tunnel
+      ansible.builtin.systemd:
+        name: autossh-reverse-tunnel
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    # ── Disk Health Monitor ──────────��────────────────────────────────────────
+    - name: Deploy disk health monitor script
+      ansible.builtin.copy:
+        src: ../scripts/disk-health-monitor.sh
+        dest: "{{ heavy_repo_dir }}/scripts/disk-health-monitor.sh"
+        mode: "0755"
+        owner: enrico
+        group: enrico
+
+    - name: Install smartmontools
+      ansible.builtin.apt:
+        name: smartmontools
+        state: present
+
+    - name: Allow enrico to run smartctl without password
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/smartctl
+        content: "enrico ALL=(ALL) NOPASSWD: /usr/sbin/smartctl\n"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Deploy disk health monitor cron (every 5 min)
+      ansible.builtin.cron:
+        name: "disk health monitor"
+        minute: "*/5"
+        user: enrico
+        job: "{{ heavy_repo_dir }}/scripts/disk-health-monitor.sh"
+        cron_file: openclaw-disk-health
+
+    # ── noatime (biggest free write reduction) ─────��──────────────────────────
+    - name: Set noatime on root filesystem
+      ansible.posix.mount:
+        path: /
+        src: "{{ ansible_mounts | selectattr('mount', 'equalto', '/') | map(attribute='device') | first }}"
+        fstype: ext4
+        opts: defaults,noatime
+        state: mounted
+
+    # ── zram swap (replace SSD swap file) ─────────��───────────────────────���───
+    - name: Install zram-tools
+      ansible.builtin.apt:
+        name: zram-tools
+        state: present
+
+    - name: Configure zram (25% of RAM)
+      ansible.builtin.copy:
+        dest: /etc/default/zramswap
+        content: |
+          ALGO=zstd
+          PERCENT=25
+        mode: "0644"
+
+    - name: Disable swap file
+      ansible.builtin.command: swapoff /swap.img
+      register: swapoff_result
+      failed_when: false
+      changed_when: swapoff_result.rc == 0
+
+    - name: Remove swap file from fstab
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: 'swap\.img'
+        state: absent
+
+    - name: Restart zramswap
+      ansible.builtin.systemd:
+        name: zramswap
+        state: restarted
+        enabled: true
+
+    - name: Set swappiness to 10
+      ansible.posix.sysctl:
+        name: vm.swappiness
+        value: "10"
+        state: present
+        reload: true
+
+    # ── Journald storage limits ─────────────────────────────────────────────
+    - name: Create journald.conf.d directory
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
+    - name: Configure journald storage limits
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/storage-limits.conf
+        content: |
+          [Journal]
+          SystemMaxUse=50M
+          RuntimeMaxUse=50M
+          MaxFileSec=1day
+        mode: "0644"
+      register: journald_conf
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+      when: journald_conf.changed
+
+    # ── Logrotate daily ────────────��─────────────────────────��────────────────
+    - name: Configure daily logrotate for rsyslog
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/rsyslog-daily
+        content: |
+          /var/log/syslog
+          /var/log/mail.log
+          /var/log/kern.log
+          /var/log/auth.log
+          {
+              daily
+              rotate 7
+              compress
+              delaycompress
+              missingok
+              notifempty
+              postrotate
+                  /usr/lib/rsyslog/rsyslog-rotate
+              endscript
+          }
+        mode: "0644"
+
+    # ── Docker daemon config (local log driver) ──────────────────────────────
+    - name: Deploy Docker daemon configuration
+      ansible.builtin.template:
+        src: ../templates/docker-daemon.json.j2
+        dest: /etc/docker/daemon.json
+        mode: "0644"
+      register: docker_daemon_conf
+
+    - name: Restart Docker daemon
+      ansible.builtin.systemd:
+        name: docker
+        state: restarted
+      when: docker_daemon_conf.changed
+
+    # ── fstrim timer ──────────────────────────────────────────────────────────
+    - name: Enable fstrim timer
+      ansible.builtin.systemd:
+        name: fstrim.timer
+        enabled: true
+        state: started
+
+    # ── MongoDB journal to tmpfs ──────────��──────────────────────────��────────
+    - name: Mount MongoDB journal as tmpfs
+      ansible.posix.mount:
+        path: /home/enrico/mongodb-data/journal
+        src: tmpfs
+        fstype: tmpfs
+        opts: "size=512M,mode=0755,uid=999,gid=999"
+        state: mounted
+
+    # ── MongoDB checkpoint interval ────��───────────────────────────────��──────
+    - name: Create MongoDB custom config directory
+      ansible.builtin.file:
+        path: /home/enrico/mongodb-data/configdb
+        state: directory
+        mode: "0755"
+
+    - name: Deploy MongoDB config for extended checkpoint interval
+      ansible.builtin.copy:
+        dest: /home/enrico/mongodb-data/configdb/mongod.conf
+        content: |
+          storage:
+            wiredTiger:
+              engineConfig:
+                checkpointSizeMB: 0
+          setParameter:
+            wiredTigerCheckpointDelaySecs: 300
+        mode: "0644"
+
+    # ── SQLite WAL mode for OpenClaw databases ────────────────────────────────
+    - name: Set WAL mode on OpenClaw SQLite databases
+      ansible.builtin.shell: |
+        for db in /home/enrico/.openclaw/memory/main.sqlite /home/enrico/data/openclaw-dispatch-log.db; do
+          [ -f "$db" ] && sqlite3 "$db" "PRAGMA journal_mode=WAL;" 2>/dev/null || true
+        done
+      changed_when: false
+
 - name: Ensure critical services on master
   hosts: masters
   become: true

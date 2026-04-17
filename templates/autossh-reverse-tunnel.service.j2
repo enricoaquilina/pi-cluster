@@ -1,0 +1,26 @@
+[Unit]
+Description=Persistent reverse SSH tunnel from heavy to master
+After=network-online.target ssh.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=enrico
+# -M 0: disable autossh monitoring port (rely on ServerAliveInterval)
+# -N: no remote command
+# -R 2222:localhost:22: expose heavy's SSH on master:2222
+# ServerAliveInterval/CountMax: detect dead connections within 45s
+ExecStart=/usr/bin/autossh -M 0 -N \
+    -o "ServerAliveInterval=15" \
+    -o "ServerAliveCountMax=3" \
+    -o "ExitOnForwardFailure=yes" \
+    -o "StrictHostKeyChecking=no" \
+    -R 2222:localhost:22 \
+    enrico@192.168.0.22
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

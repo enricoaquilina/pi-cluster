@@ -1,0 +1,18 @@
+# Block PyTorch and NVIDIA CUDA transitive dependencies
+# These get pulled in by optimum/transformers but are not needed for CPU-only ONNX inference.
+# The "impossible version" trick causes pip to skip them without failing.
+torch==99999.0.0
+torchvision==99999.0.0
+torchaudio==99999.0.0
+nvidia-cublas-cu12==99999.0.0
+nvidia-cuda-cupti-cu12==99999.0.0
+nvidia-cuda-nvrtc-cu12==99999.0.0
+nvidia-cuda-runtime-cu12==99999.0.0
+nvidia-cudnn-cu12==99999.0.0
+nvidia-cufft-cu12==99999.0.0
+nvidia-curand-cu12==99999.0.0
+nvidia-cusolver-cu12==99999.0.0
+nvidia-cusparse-cu12==99999.0.0
+nvidia-nccl-cu12==99999.0.0
+nvidia-nvjitlink-cu12==99999.0.0
+nvidia-nvtx-cu12==99999.0.0

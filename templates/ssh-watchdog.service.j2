@@ -1,0 +1,8 @@
+[Unit]
+Description=SSH Watchdog - restart sshd if it dies
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={{ heavy_repo_dir }}/scripts/ssh-watchdog.sh
+User=root

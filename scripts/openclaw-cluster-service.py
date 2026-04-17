@@ -124,11 +124,13 @@ class _JsonFormatter(logging.Formatter):
         })
 
 
-# Structured JSON logging: stdout + file
+# Structured JSON logging: stdout (INFO for debugging) + file (WARNING to reduce writes)
 _handler_stdout = logging.StreamHandler()
 _handler_stdout.setFormatter(_JsonFormatter())
+_handler_stdout.setLevel(logging.INFO)
 _handler_file = logging.FileHandler(LOG_FILE, mode="a")
 _handler_file.setFormatter(_JsonFormatter())
+_handler_file.setLevel(logging.WARNING)
 logging.basicConfig(
     level=logging.INFO,
     handlers=[_handler_stdout, _handler_file],
@@ -215,6 +217,8 @@ active_lock = asyncio.Lock()
 
 async def init_db():
     async with aiosqlite.connect(LOG_DB) as db:
+        # WAL mode: fewer filesystem ops, less write amplification
+        await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS dispatch_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -481,6 +485,17 @@ if limiter is not None:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Skip logging for high-frequency health/stats endpoints (reduces syslog ~95%)
+_QUIET_PATHS = {"/health", "/nodes", "/node-stats"}
+
+
+@app.middleware("http")
+async def skip_health_logging(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path not in _QUIET_PATHS:
+        log.info("%s %s %d", request.method, request.url.path, response.status_code)
+    return response
+
 
 @app.get("/health")
 @app.get("/nodes")
@@ -727,4 +742,4 @@ async def get_daily_digest():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8520, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8520, log_level="info", access_log=False)

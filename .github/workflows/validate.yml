@@ -116,6 +116,26 @@ jobs:
           --connection local
         continue-on-error: true
 
+  docker-image-size:
+    name: MC Docker Image Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build MC Docker image
+        run: docker build -t mc-backend-check mission-control/backend/
+
+      - name: Check image size under 500MB
+        run: |
+          SIZE=$(docker image inspect mc-backend-check --format='{{.Size}}')
+          SIZE_MB=$((SIZE / 1048576))
+          echo "Image size: ${SIZE_MB}MB"
+          if [ "$SIZE_MB" -gt 500 ]; then
+            echo "::error::MC Docker image is ${SIZE_MB}MB (limit: 500MB). Check for bloated dependencies (torch, nvidia-cuda, etc.)"
+            exit 1
+          fi
+          echo "Image size OK: ${SIZE_MB}MB (limit: 500MB)"
+
   python-tests:
     name: Mission Control Tests
     runs-on: ubuntu-latest

@@ -42,22 +42,72 @@ log "Running openclaw-monitoring playbook..."
 ansible-playbook "$REPO_DIR/playbooks/openclaw-monitoring.yml" --quiet 2>&1 | while read -r line; do log "monitoring: $line"; done
 
 # Sync heavy's clone and rebuild MC if needed (single SSH call)
+# Smart rebuild: only docker build when Dockerfile/requirements change,
+# skip pip when only app code changes (layer cache handles it),
+# proxy-only restart for frontend/Caddyfile changes (bind-mounted).
+# 10-min cooldown prevents rebuild storms (the incident that killed the SSD).
 log "Syncing heavy clone..."
 mc_result=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy bash -s "$LOCAL" "$REMOTE" <<'HEAVY_SYNC' 2>&1) || true
   cd /home/enrico/pi-cluster || exit 0
   git pull --ff-only origin master --quiet 2>/dev/null || exit 0
-  if git diff --name-only "$1..$2" 2>/dev/null | grep -q '^mission-control/'; then
-    cd /home/enrico/mission-control && docker compose up -d --no-deps --build api 2>&1 && docker compose restart proxy 2>&1
-    echo "MC_REBUILT"
+
+  CHANGED=$(git diff --name-only "$1..$2" 2>/dev/null)
+  [ -z "$CHANGED" ] && exit 0
+
+  MC_DIR="/home/enrico/mission-control"
+  COOLDOWN_FILE="/tmp/mc-last-build-ts"
+  COOLDOWN_SECS=600  # 10 minutes
+
+  # Check build cooldown
+  build_allowed=true
+  if [ -f "$COOLDOWN_FILE" ]; then
+    last_build=$(cat "$COOLDOWN_FILE" 2>/dev/null || echo 0)
+    now=$(date +%s)
+    elapsed=$(( now - last_build ))
+    if [ "$elapsed" -lt "$COOLDOWN_SECS" ]; then
+      build_allowed=false
+      echo "BUILD_COOLDOWN (${elapsed}s/${COOLDOWN_SECS}s)"
+    fi
   fi
+
+  if echo "$CHANGED" | grep -q '^mission-control/'; then
+    # Check if Dockerfile or dependency files changed (needs full rebuild)
+    if echo "$CHANGED" | grep -qE '^mission-control/backend/(Dockerfile|requirements\.txt|constraints\.txt)'; then
+      if [ "$build_allowed" = true ]; then
+        cd "$MC_DIR" && docker compose up -d --no-deps --build api 2>&1
+        date +%s > "$COOLDOWN_FILE"
+        echo "MC_REBUILT"
+      fi
+    # Backend code-only changes still need --build (code is COPYed, not bind-mounted)
+    # but pip layer is cached so this is fast and low-write
+    elif echo "$CHANGED" | grep -q '^mission-control/backend/'; then
+      if [ "$build_allowed" = true ]; then
+        cd "$MC_DIR" && docker compose up -d --no-deps --build api 2>&1
+        date +%s > "$COOLDOWN_FILE"
+        echo "MC_REBUILT"
+      fi
+    fi
+    # Frontend/Caddyfile changes: bind-mounted, just restart proxy (no build)
+    if echo "$CHANGED" | grep -qE '^mission-control/(frontend/|Caddyfile)'; then
+      cd "$MC_DIR" && docker compose restart proxy 2>&1
+      echo "PROXY_RESTARTED"
+    fi
+  fi
+
   # Re-pair nodes if openclaw config changed (gateway recreate invalidates sessions)
-  if git diff --name-only "$1..$2" 2>/dev/null | grep -qE 'scripts/openclaw|templates/openclaw'; then
+  if echo "$CHANGED" | grep -qE 'scripts/openclaw|templates/openclaw'; then
     timeout 90 bash /home/enrico/pi-cluster/scripts/openclaw-pair-nodes.sh 2>&1
     echo "NODES_REPAIRED"
   fi
 HEAVY_SYNC
 if echo "$mc_result" | grep -q "MC_REBUILT"; then
     log "Mission Control rebuilt on heavy"
+fi
+if echo "$mc_result" | grep -q "PROXY_RESTARTED"; then
+    log "MC proxy restarted on heavy (frontend/config change)"
+fi
+if echo "$mc_result" | grep -q "BUILD_COOLDOWN"; then
+    log "MC build skipped on heavy (cooldown active)"
 fi
 if echo "$mc_result" | grep -q "NODES_REPAIRED"; then
     log "OpenClaw nodes re-paired on heavy"

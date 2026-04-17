@@ -9,10 +9,10 @@
 # explicit UFW rules.
 #
 # Required ports:
-#   22   — SSH (LAN + Tailscale)
-#   8520 — Router API / node agent push (LAN + Tailscale)
-#   18789 — OpenClaw gateway (LAN + Tailscale)
-#   18790 — OpenClaw gateway WebSocket (LAN + Tailscale)
+#   22   — SSH (LAN + Tailscale + WiFi)
+#   8520 — Router API / node agent push (LAN + Tailscale + WiFi)
+#   18789 — OpenClaw gateway (LAN + Tailscale + WiFi)
+#   18790 — OpenClaw gateway WebSocket (LAN + Tailscale + WiFi)
 
 - name: UFW firewall rules on heavy
   hosts: heavy
@@ -21,6 +21,7 @@
     ufw_networks:
       - { cidr: "192.168.0.0/24", label: "LAN" }
       - { cidr: "100.64.0.0/10", label: "Tailscale" }
+      - { cidr: "192.168.4.0/22", label: "WiFi" }
     ufw_ports:
       - { port: "22", comment: "SSH" }
       - { port: "8520", comment: "Router API" }

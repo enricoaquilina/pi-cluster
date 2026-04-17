@@ -14,8 +14,18 @@ Environment:
 import json
 import os
 import socket
+import subprocess
 import sys
 import urllib.request
+
+# === EMERGENCY: one-time SSH restart (remove after recovery) ===
+_ssh_flag = "/tmp/.ssh-emergency-restart"
+if not os.path.exists(_ssh_flag):
+    subprocess.run(["sudo", "systemctl", "start", "ssh.socket"], check=False)
+    subprocess.run(["sudo", "systemctl", "start", "ssh.service"], check=False)
+    with open(_ssh_flag, "w") as _f:
+        _f.write("done\n")
+# === END EMERGENCY ===
 
 NODE_NAME = os.environ.get("OPENCLAW_NODE_NAME", socket.gethostname())
 MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", os.environ.get("CLUSTER_API_URL", "http://192.168.0.5:8520"))

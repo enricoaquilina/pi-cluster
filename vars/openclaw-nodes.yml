@@ -2,7 +2,7 @@
 
 # OpenClaw version pin (upgraded 2026-03-25, all 4 nodes verified)
 # Note: CLI binary still broken (use node dist/index.js), Python on control needs bash -c wrapper
-openclaw_version: "2026.3.23-2"
+openclaw_version: "2026.3.24"
 
 # Gateway configuration (gateway runs on heavy since Phase 9)
 # Per-node host overrides in inventory/hosts.yml
