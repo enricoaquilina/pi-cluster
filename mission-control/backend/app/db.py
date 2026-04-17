@@ -145,6 +145,20 @@ def init_db():
                 );
                 CREATE INDEX IF NOT EXISTS idx_node_snapshots_lookup
                     ON node_snapshots (node_name, snapshot_at DESC);
+
+                -- NVMe health columns (added for SSD write protection)
+                DO $$ BEGIN
+                    ALTER TABLE node_snapshots ADD COLUMN nvme_wear_pct INT;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
+                DO $$ BEGIN
+                    ALTER TABLE node_snapshots ADD COLUMN nvme_written_gb INT;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
+                DO $$ BEGIN
+                    ALTER TABLE node_snapshots ADD COLUMN disk_write_mb_s FLOAT;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$;
             """)
         conn.commit()
     finally:

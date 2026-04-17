@@ -201,6 +201,15 @@ class NodeStats(BaseModel):
     disk_pct: int = 0
     temp_c: int = 0
     uptime_s: int = 0
+    # NVMe SMART metrics (optional, only present on NVMe nodes)
+    nvme_wear_pct: Optional[int] = None
+    nvme_spare_pct: Optional[int] = None
+    nvme_temp_c: Optional[int] = None
+    nvme_written_gb: Optional[int] = None
+    nvme_media_errors: Optional[int] = None
+    nvme_power_on_hours: Optional[int] = None
+    nvme_unsafe_shutdowns: Optional[int] = None
+    disk_write_mb_s: Optional[float] = None
 
 
 class TaskNode(BaseModel):
@@ -341,11 +350,18 @@ def push_to_mc(stats: dict):
         "ram_total_mb": stats.get("ram_total_mb", 0),
         "ram_used_mb": stats.get("ram_used_mb", 0),
         "cpu_percent": stats.get("load", 0),
-        "metadata": {k: stats.get(k, 0) for k in [
-            "arch", "cpus", "ram_pct", "disk_total_mb", "disk_used_mb",
-            "disk_avail_mb", "disk_pct", "temp_c", "uptime_s",
-            "swap_total_mb", "swap_used_mb", "connected",
-        ]},
+        "metadata": {k: v for k, v in {
+            **{k: stats.get(k, 0) for k in [
+                "arch", "cpus", "ram_pct", "disk_total_mb", "disk_used_mb",
+                "disk_avail_mb", "disk_pct", "temp_c", "uptime_s",
+                "swap_total_mb", "swap_used_mb", "connected",
+            ]},
+            **{k: stats.get(k) for k in [
+                "nvme_wear_pct", "nvme_spare_pct", "nvme_temp_c",
+                "nvme_written_gb", "nvme_media_errors", "nvme_power_on_hours",
+                "nvme_unsafe_shutdowns", "disk_write_mb_s",
+            ]},
+        }.items() if v is not None},
     }).encode()
     for method in ["PATCH", "POST"]:
         path = f"/nodes/{mc_name}" if method == "PATCH" else "/nodes"

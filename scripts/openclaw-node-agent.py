@@ -16,16 +16,8 @@ import os
 import socket
 import subprocess
 import sys
+import time
 import urllib.request
-
-# === EMERGENCY: one-time SSH restart (remove after recovery) ===
-_ssh_flag = "/tmp/.ssh-emergency-restart"
-if not os.path.exists(_ssh_flag):
-    subprocess.run(["sudo", "systemctl", "start", "ssh.socket"], check=False)
-    subprocess.run(["sudo", "systemctl", "start", "ssh.service"], check=False)
-    with open(_ssh_flag, "w") as _f:
-        _f.write("done\n")
-# === END EMERGENCY ===
 
 NODE_NAME = os.environ.get("OPENCLAW_NODE_NAME", socket.gethostname())
 MASTER_URL = os.environ.get("OPENCLAW_MASTER_URL", os.environ.get("CLUSTER_API_URL", "http://192.168.0.5:8520"))
@@ -101,7 +93,109 @@ def collect_stats():
     with open("/proc/uptime") as f:
         stats["uptime_s"] = int(float(f.read().split()[0]))
 
+    # NVMe SMART health (only on nodes with NVMe)
+    nvme = _collect_nvme_smart()
+    if nvme:
+        stats.update(nvme)
+
+    # Disk write rate (MB/s over 3s sample)
+    write_rate = _collect_write_rate()
+    if write_rate is not None:
+        stats["disk_write_mb_s"] = write_rate
+
     return stats
+
+
+def _collect_nvme_smart():
+    """Collect NVMe SMART metrics via smartctl. Returns dict or None."""
+    import re
+    # Find NVMe device
+    nvme_dev = None
+    try:
+        out = subprocess.run(["lsblk", "-dpno", "NAME,TYPE"],
+                             capture_output=True, text=True, timeout=5)
+        for line in out.stdout.strip().splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[1] == "disk" and "nvme" in parts[0]:
+                nvme_dev = parts[0]
+                break
+    except Exception:
+        pass
+    if not nvme_dev:
+        return None
+
+    try:
+        result = subprocess.run(
+            ["sudo", "smartctl", "-A", nvme_dev],
+            capture_output=True, text=True, timeout=10)
+        text = result.stdout
+    except Exception:
+        return None
+
+    smart = {}
+
+    m = re.search(r"Percentage Used:\s+(\d+)%", text)
+    if m:
+        smart["nvme_wear_pct"] = int(m.group(1))
+
+    m = re.search(r"Available Spare:\s+(\d+)%", text)
+    if m:
+        smart["nvme_spare_pct"] = int(m.group(1))
+
+    m = re.search(r"Temperature:\s+(\d+)\s+Celsius", text)
+    if m:
+        smart["nvme_temp_c"] = int(m.group(1))
+
+    m = re.search(r"Data Units Written:\s+([\d,]+)", text)
+    if m:
+        # Each data unit = 512KB = 0.5MB. Convert to GB.
+        units = int(m.group(1).replace(",", ""))
+        smart["nvme_written_gb"] = round(units * 512 / 1024 / 1024)
+
+    m = re.search(r"Media and Data Integrity Errors:\s+(\d+)", text)
+    if m:
+        smart["nvme_media_errors"] = int(m.group(1))
+
+    m = re.search(r"Power On Hours:\s+(\d+)", text)
+    if m:
+        smart["nvme_power_on_hours"] = int(m.group(1))
+
+    m = re.search(r"Unsafe Shutdowns:\s+(\d+)", text)
+    if m:
+        smart["nvme_unsafe_shutdowns"] = int(m.group(1))
+
+    return smart if smart else None
+
+
+def _collect_write_rate():
+    """Measure disk write rate over a brief sample. Returns MB/s or None."""
+    # Find the NVMe disk name for /proc/diskstats
+    disk_name = None
+    try:
+        with open("/proc/diskstats") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 14 and "nvme" in parts[2] and "p" not in parts[2]:
+                    disk_name = parts[2]
+                    break
+    except Exception:
+        return None
+    if not disk_name:
+        return None
+
+    def read_write_sectors():
+        with open("/proc/diskstats") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 14 and parts[2] == disk_name:
+                    return int(parts[9])  # write sectors field
+        return 0
+
+    s1 = read_write_sectors()
+    time.sleep(3)
+    s2 = read_write_sectors()
+    # 512 bytes per sector
+    return round((s2 - s1) * 512 / 3 / 1048576, 1)
 
 
 def push_stats(stats):

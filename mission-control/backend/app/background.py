@@ -111,12 +111,15 @@ async def _node_snapshot():
                 cur.execute("SELECT name, ram_used_mb, ram_total_mb, cpu_percent, metadata FROM nodes")
                 rows = cur.fetchall()
                 data = [(name, ram_used, ram_total, cpu,
-                         (meta or {}).get("disk_pct", 0), (meta or {}).get("temp_c", 0))
+                         (meta or {}).get("disk_pct", 0), (meta or {}).get("temp_c", 0),
+                         (meta or {}).get("nvme_wear_pct"), (meta or {}).get("nvme_written_gb"),
+                         (meta or {}).get("disk_write_mb_s"))
                         for name, ram_used, ram_total, cpu, meta in rows]
                 cur.executemany(
                     """INSERT INTO node_snapshots
-                       (node_name, ram_used_mb, ram_total_mb, cpu_percent, disk_pct, temp_c)
-                       VALUES (%s, %s, %s, %s, %s, %s)""", data)
+                       (node_name, ram_used_mb, ram_total_mb, cpu_percent, disk_pct, temp_c,
+                        nvme_wear_pct, nvme_written_gb, disk_write_mb_s)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""", data)
                 cur.execute(
                     "DELETE FROM node_snapshots WHERE snapshot_at < now() - interval '90 days'"
                 )

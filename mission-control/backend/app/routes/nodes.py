@@ -90,13 +90,15 @@ def node_metrics(name: str, days: int = Query(7, ge=1, le=90), conn=Depends(get_
     with conn.cursor() as cur:
         cur.execute("""
             SELECT node_name, ram_used_mb, ram_total_mb, cpu_percent,
-                   disk_pct, temp_c, snapshot_at
+                   disk_pct, temp_c, nvme_wear_pct, nvme_written_gb,
+                   disk_write_mb_s, snapshot_at
             FROM node_snapshots
             WHERE node_name = %s AND snapshot_at > now() - interval '1 day' * %s
             ORDER BY snapshot_at ASC
             LIMIT 500
         """, (name, days))
         cols = ["node_name", "ram_used_mb", "ram_total_mb", "cpu_percent",
-                "disk_pct", "temp_c", "snapshot_at"]
+                "disk_pct", "temp_c", "nvme_wear_pct", "nvme_written_gb",
+                "disk_write_mb_s", "snapshot_at"]
         rows = cur.fetchall()
-    return [{**dict(zip(cols, r)), "snapshot_at": r[6].isoformat()} for r in rows]
+    return [{**dict(zip(cols, r)), "snapshot_at": r[-1].isoformat()} for r in rows]
