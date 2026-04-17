@@ -484,6 +484,50 @@
         done
       changed_when: false
 
+    # ── Kernel writeback tuning (reduce burst writes to NVMe) ─────────────────
+    - name: Reduce dirty_ratio (default 20 → 5)
+      ansible.posix.sysctl:
+        name: vm.dirty_ratio
+        value: "5"
+        state: present
+        reload: true
+
+    - name: Reduce dirty_background_ratio (default 10 → 2)
+      ansible.posix.sysctl:
+        name: vm.dirty_background_ratio
+        value: "2"
+        state: present
+        reload: true
+
+    - name: Reduce dirty_expire (default 3000cs → 1500cs)
+      ansible.posix.sysctl:
+        name: vm.dirty_expire_centisecs
+        value: "1500"
+        state: present
+        reload: true
+
+    # ── Docker image prune cron (prevent image accumulation) ──────────────────
+    - name: Deploy Docker image prune cron (weekly)
+      ansible.builtin.cron:
+        name: "docker image prune"
+        minute: "0"
+        hour: "3"
+        weekday: "0"
+        user: root
+        job: "docker image prune -af --filter 'until=168h' >> /var/log/docker-prune.log 2>&1"
+        cron_file: openclaw-docker-prune
+
+    # ── Docker build cache prune cron ─────────────────────────────────────────
+    - name: Deploy Docker build cache prune cron (weekly)
+      ansible.builtin.cron:
+        name: "docker builder prune"
+        minute: "15"
+        hour: "3"
+        weekday: "0"
+        user: root
+        job: "docker builder prune -af --filter 'until=168h' >> /var/log/docker-prune.log 2>&1"
+        cron_file: openclaw-docker-prune
+
 - name: Ensure critical services on master
   hosts: masters
   become: true
