@@ -8,4 +8,4 @@ User=enrico
 Environment=OPENCLAW_NODE_NAME={{ openclaw_node_name }}
 Environment=OPENCLAW_MASTER_URL=http://{{ openclaw_gateway_host }}:8520
 Environment=NODE_PUSH_SECRET={{ node_push_secret }}
-ExecStart=/usr/bin/python3 /opt/workspace/scripts/openclaw-node-agent.py
+ExecStart=/usr/bin/python3 {{ openclaw_agent_script | default(openclaw_workspace + '/scripts/openclaw-node-agent.py') }}

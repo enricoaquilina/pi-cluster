@@ -125,6 +125,8 @@
   .bar-fill.warn { background: var(--yellow); }
   .bar-fill.crit { background: var(--red); }
   .node-footer { font-size: 0.7rem; color: var(--muted); display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  .nvme-health { margin-top: 0.5rem; padding: 0.6rem; background: rgba(79,143,247,0.04); border: 1px solid rgba(79,143,247,0.12); border-radius: 8px; }
+  .style-crit { color: var(--red); font-weight: 700; }
   .node-framework { font-size: 0.75rem; padding: 0.15rem 0.5rem; background: rgba(79,143,247,0.1); color: var(--accent); border-radius: 4px; font-weight: 600; }
   .cluster-empty { text-align: center; padding: 3rem 2rem; color: var(--muted); font-size: 0.95rem; }
 
@@ -813,6 +815,19 @@ function renderCluster(nodes) {
     const swapClass = swapPct > 50 ? 'warn' : 'ok';
     const connected = meta.connected === true;
     const heartbeat = n.last_heartbeat ? timeAgo(n.last_heartbeat) : 'never';
+    // NVMe SMART metrics (only present on NVMe nodes like heavy)
+    const hasNvme = meta.nvme_wear_pct !== undefined && meta.nvme_wear_pct !== null;
+    const nvmeWear = meta.nvme_wear_pct || 0;
+    const nvmeWearClass = nvmeWear > 50 ? 'crit' : nvmeWear > 20 ? 'warn' : 'ok';
+    const nvmeSpare = meta.nvme_spare_pct != null ? meta.nvme_spare_pct : null;
+    const nvmeWrittenGB = meta.nvme_written_gb || 0;
+    const nvmeWrittenTB = (nvmeWrittenGB / 1024).toFixed(2);
+    const nvmeMediaErrors = meta.nvme_media_errors || 0;
+    const nvmeErrorClass = nvmeMediaErrors > 0 ? 'crit' : 'ok';
+    const diskWriteMBs = meta.disk_write_mb_s != null ? meta.disk_write_mb_s : null;
+    const writeClass = diskWriteMBs > 50 ? 'crit' : diskWriteMBs > 25 ? 'warn' : 'ok';
+    const nvmePowerH = meta.nvme_power_on_hours || 0;
+    const nvmeUnsafe = meta.nvme_unsafe_shutdowns || 0;
     return `<div class="node-card">
       <div class="node-card-header">
         <div>
@@ -843,6 +858,32 @@ function renderCluster(nodes) {
           <div class="bar-container"><div class="bar-fill ${tempClass}" style="width:${Math.min(tempC, 100)}%"></div></div>
         </div>
       </div>
+      ${hasNvme ? `<div class="nvme-health">
+        <div class="node-meta-label" style="margin-bottom:0.4rem">NVMe Health</div>
+        <div class="node-meta" style="margin-bottom:0">
+          <div class="node-meta-item">
+            <div class="node-meta-label">Wear</div>
+            <div>${nvmeWear}%${nvmeSpare != null ? ' &middot; Spare ' + nvmeSpare + '%' : ''}</div>
+            <div class="bar-container"><div class="bar-fill ${nvmeWearClass}" style="width:${Math.max(nvmeWear, 1)}%"></div></div>
+          </div>
+          <div class="node-meta-item">
+            <div class="node-meta-label">Write Rate</div>
+            <div>${diskWriteMBs != null ? diskWriteMBs.toFixed(1) + ' MB/s' : '...'}</div>
+            <div class="bar-container"><div class="bar-fill ${writeClass}" style="width:${diskWriteMBs != null ? Math.min(diskWriteMBs / 100 * 100, 100) : 0}%"></div></div>
+          </div>
+          <div class="node-meta-item">
+            <div class="node-meta-label">Total Written</div>
+            <div>${nvmeWrittenTB} TB</div>
+          </div>
+          <div class="node-meta-item">
+            <div class="node-meta-label">Media Errors</div>
+            <div class="${nvmeErrorClass === 'crit' ? 'style-crit' : ''}">${nvmeMediaErrors}</div>
+          </div>
+        </div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:0.35rem">
+          ${nvmePowerH}h on &middot; ${nvmeUnsafe} unsafe shutdowns
+        </div>
+      </div>` : ''}
       <div class="node-metrics-spark" id="spark-${esc(n.name)}"></div>
       <div class="node-footer">
         <span>Uptime: ${uptimeD}d ${uptimeH}h</span>
@@ -855,6 +896,13 @@ function renderCluster(nodes) {
   nodes.forEach(n => loadNodeSparkline(n.name));
 }
 
+function _sparkSvg(values, max, color, w, h) {
+  if (values.length < 2) return '';
+  const step = w / Math.max(values.length - 1, 1);
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - Math.min(v, max) / max * h).toFixed(1)}`).join(' ');
+  return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" opacity="0.7"/>`;
+}
+
 async function loadNodeSparkline(name) {
   const el = document.getElementById('spark-' + name);
   if (!el) return;
@@ -862,14 +910,19 @@ async function loadNodeSparkline(name) {
     const res = await fetch(`${API}/nodes/${encodeURIComponent(name)}/metrics?days=1`);
     const data = await res.json();
     if (data.length < 2) { el.innerHTML = '<span style="font-size:0.7rem;color:var(--muted)">collecting...</span>'; return; }
-    const values = data.map(d => d.ram_total_mb > 0 ? Math.round(d.ram_used_mb / d.ram_total_mb * 100) : 0);
-    const max = 100;
     const w = 120, h = 24;
-    const step = w / Math.max(values.length - 1, 1);
-    const points = values.map((v, i) => `${(i * step).toFixed(1)},${(h - v / max * h).toFixed(1)}`).join(' ');
-    el.innerHTML = `<svg width="${w}" height="${h}" style="display:block;margin-top:0.25rem">
-      <polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="1.5" opacity="0.7"/>
+    const ramValues = data.map(d => d.ram_total_mb > 0 ? Math.round(d.ram_used_mb / d.ram_total_mb * 100) : 0);
+    const hasWrite = data.some(d => d.disk_write_mb_s != null);
+    let svgs = `<svg width="${w}" height="${h}" style="display:block;margin-top:0.25rem">
+      ${_sparkSvg(ramValues, 100, 'var(--accent)', w, h)}
     </svg><span style="font-size:0.65rem;color:var(--muted)">RAM 24h</span>`;
+    if (hasWrite) {
+      const writeValues = data.map(d => d.disk_write_mb_s || 0);
+      svgs += `<svg width="${w}" height="${h}" style="display:block;margin-top:0.25rem">
+        ${_sparkSvg(writeValues, Math.max(...writeValues, 10), 'var(--orange)', w, h)}
+      </svg><span style="font-size:0.65rem;color:var(--muted)">Write MB/s 24h</span>`;
+    }
+    el.innerHTML = svgs;
   } catch(e) { el.innerHTML = ''; }
 }
 
