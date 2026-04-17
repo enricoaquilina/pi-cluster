@@ -35,7 +35,7 @@ def main():
             "ram_total_mb": n.get("ram_total_mb", 0),
             "ram_used_mb": n.get("ram_used_mb", 0),
             "cpu_percent": n.get("load", 0),
-            "metadata": {
+            "metadata": {k: v for k, v in {
                 "arch": n.get("arch", ""),
                 "cpus": n.get("cpus", 0),
                 "ram_pct": n.get("ram_pct", 0),
@@ -48,7 +48,16 @@ def main():
                 "swap_total_mb": n.get("swap_total_mb", 0),
                 "swap_used_mb": n.get("swap_used_mb", 0),
                 "connected": n.get("connected", False),
-            },
+                # NVMe SMART metrics (only present on NVMe nodes)
+                "nvme_wear_pct": n.get("nvme_wear_pct"),
+                "nvme_spare_pct": n.get("nvme_spare_pct"),
+                "nvme_temp_c": n.get("nvme_temp_c"),
+                "nvme_written_gb": n.get("nvme_written_gb"),
+                "nvme_media_errors": n.get("nvme_media_errors"),
+                "nvme_power_on_hours": n.get("nvme_power_on_hours"),
+                "nvme_unsafe_shutdowns": n.get("nvme_unsafe_shutdowns"),
+                "disk_write_mb_s": n.get("disk_write_mb_s"),
+            }.items() if v is not None},
         }).encode()
 
         pushed = False

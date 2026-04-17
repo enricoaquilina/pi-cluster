@@ -60,15 +60,28 @@ def upsert_node(node: NodeCreate, conn=Depends(get_db), _=Depends(verify_api_key
 def update_node(name: str, node: NodeUpdate, conn=Depends(get_db), _=Depends(verify_api_key), __=Depends(rate_limit)):
     updates = {}
     data = node.model_dump(exclude_unset=True)
+    has_metadata = False
     for key, val in data.items():
         if val is not None:
-            updates[key] = json.dumps(val) if key == "metadata" else val
+            if key == "metadata":
+                has_metadata = True
+                updates[key] = json.dumps(val)
+            else:
+                updates[key] = val
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
 
     updates["updated_at"] = datetime.now(timezone.utc)
-    set_clause = ", ".join(f"{k} = %s" for k in updates)
+    # Merge metadata (||) instead of replace so partial updates don't erase
+    # fields set by other writers (e.g., NVMe metrics from node agent)
+    set_parts = []
+    for k in updates:
+        if k == "metadata" and has_metadata:
+            set_parts.append("metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb")
+        else:
+            set_parts.append(f"{k} = %s")
+    set_clause = ", ".join(set_parts)
     values = list(updates.values()) + [name]
 
     with conn.cursor() as cur:
