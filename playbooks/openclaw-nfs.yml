@@ -56,6 +56,9 @@
 - name: Disable NFS server on master (migrated to heavy)
   hosts: masters
   become: true
+  vars:
+    ansible_connection: ssh
+    ansible_host: 192.168.0.22
 
   tasks:
     - name: Stop and disable NFS server
@@ -78,21 +81,30 @@
         state: present
         update_cache: true
 
-    - name: Create mount directories
-      ansible.builtin.file:
-        path: "{{ item.mount }}"
-        state: directory
-        mode: "0755"
+    - name: Ensure mount directories exist
+      ansible.builtin.shell: "test -d {{ item.mount }} || mkdir -p {{ item.mount }}"
       loop: "{{ nfs_exports }}"
+      changed_when: false
 
     - name: Configure NFS mounts in fstab
-      ansible.posix.mount:
-        path: "{{ item.mount }}"
-        src: "{{ nfs_server }}:{{ item.path }}"
-        fstype: nfs
-        opts: "{{ nfs_options }}"
-        state: mounted
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: "^.*:{{ item.path }}\\s+{{ item.mount }}\\s"
+        line: "{{ nfs_server_override | default(nfs_server) }}:{{ item.path }} {{ item.mount }} nfs {{ nfs_options }} 0 0"
+        state: present
       loop: "{{ nfs_exports }}"
+
+    - name: Mount NFS filesystems (if not already mounted)
+      ansible.builtin.shell: "mountpoint -q {{ item.mount }} || mount {{ item.mount }}"
+      loop: "{{ nfs_exports }}"
+      changed_when: false
+
+    - name: Create /opt/workspace symlink to NFS mount
+      ansible.builtin.file:
+        src: /mnt/external
+        dest: /opt/workspace
+        state: link
+        force: true
 
     - name: Verify NFS mounts
       ansible.builtin.command: "mountpoint -q {{ item.mount }}"
