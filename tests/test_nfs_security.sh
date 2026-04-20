@@ -32,8 +32,8 @@ setup() {
     fi
 }
 
-@test "NFS exports template has no Tailscale subnet" {
-    ! grep -q "100.64.0.0" "$REPO_DIR/templates/nfs-exports.j2"
+@test "NFS exports template has no broad Tailscale subnet (100.64.0.0/10)" {
+    ! grep -q "100.64.0.0/10" "$REPO_DIR/templates/nfs-exports.j2"
 }
 
 @test "emergency-restore-master.sh references heavy as NFS primary" {

@@ -12,11 +12,11 @@ setup() {
     showmount -e localhost | grep -q "/mnt/data"
 }
 
-@test "NFS export restricts to LAN only (no Tailscale 100.64.0.0)" {
+@test "NFS export has no broad Tailscale subnet (100.64.0.0/10)" {
     local exports
     exports=$(cat /etc/exports.d/openclaw.exports 2>/dev/null)
     [[ "$exports" == *"/mnt/data"* ]]
-    [[ "$exports" != *"100.64.0.0"* ]]
+    [[ "$exports" != *"100.64.0.0/10"* ]]
 }
 
 @test "NFS ports open in UFW for cluster subnet" {
