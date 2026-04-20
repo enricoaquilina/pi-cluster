@@ -8,11 +8,15 @@ Channel split:
   Telegram: operational updates, task completions, daily digest
   WhatsApp: human decisions needed, ambiguous tasks, budget alerts
 """
+import fcntl
+import hashlib
 import json
 import os
 import re
+import sqlite3
+import stat
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
 from urllib.error import URLError
@@ -63,6 +67,90 @@ PERSONA_MAP = {
     "research": "Scout",
     "data": "Ledger",
 }
+
+
+PRIORITY_ORDER = {"urgent": 0, "high": 1, "medium": 2}
+
+
+def prioritize_items(items: list[dict], max_items: int = 5) -> list[dict]:
+    """Sort items by priority (urgent first), tiebreak by id, cap at max_items."""
+    items.sort(key=lambda i: (
+        PRIORITY_ORDER.get(i.get("priority", "medium"), 99),
+        i.get("id", 0),
+    ))
+    return items[:max_items]
+
+
+def compute_idempotency_key(task_id) -> str:
+    """SHA1 of task_id only. Stable across MC status changes."""
+    if task_id is None:
+        raise ValueError("task_id must not be None")
+    return hashlib.sha1(str(task_id).encode()).hexdigest()
+
+
+# ── SQLite State Store ────────────────────────────────────────────────────────
+
+MAXWELL_DB_PATH = LIFE_DIR / "logs" / "maxwell.db"
+
+
+def init_maxwell_db(db_path: Path | None = None) -> sqlite3.Connection:
+    """Initialize SQLite WAL-mode database for dispatch state."""
+    db_path = db_path or MAXWELL_DB_PATH
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS dispatches (
+            task_id       INTEGER,
+            idempotency_key TEXT,
+            dispatched_at TEXT,
+            status        TEXT DEFAULT 'dispatched',
+            cost_usd      REAL DEFAULT 0.0,
+            model_used    TEXT DEFAULT '',
+            retry_count   INTEGER DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS kv (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def record_dispatch(conn: sqlite3.Connection, *, task_id: int,
+                    status: str = "dispatched", cost_usd: float = 0.0,
+                    model_used: str = "") -> None:
+    """Record a dispatch event in the database."""
+    conn.execute(
+        "INSERT INTO dispatches (task_id, idempotency_key, dispatched_at, status, cost_usd, model_used) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (task_id, compute_idempotency_key(task_id),
+         datetime.now().isoformat(), status, cost_usd, model_used),
+    )
+    conn.commit()
+
+
+def is_duplicate(conn: sqlite3.Connection, *, task_id: int,
+                 window_hours: int = 24) -> bool:
+    """Check if task was dispatched within the dedup window."""
+    cutoff = (datetime.now() - timedelta(hours=window_hours)).isoformat()
+    row = conn.execute(
+        "SELECT 1 FROM dispatches WHERE task_id=? AND dispatched_at > ?",
+        (task_id, cutoff),
+    ).fetchone()
+    return row is not None
+
+
+def cleanup_dedup(conn: sqlite3.Connection, max_age_hours: int = 48) -> int:
+    """Remove dispatch records older than max_age_hours. Returns count deleted."""
+    cutoff = (datetime.now() - timedelta(hours=max_age_hours)).isoformat()
+    cur = conn.execute("DELETE FROM dispatches WHERE dispatched_at < ?", (cutoff,))
+    conn.commit()
+    return cur.rowcount
 
 
 def _get_cc_session_context() -> str:
@@ -123,28 +211,94 @@ def mc_post(endpoint: str, data: dict) -> dict | None:
         return None
 
 
-def send_telegram(message: str) -> bool:
-    """Send message via Telegram bot."""
+def mc_patch(endpoint: str, data: dict) -> dict | None:
+    """PATCH to Mission Control API with one retry on 5xx/429."""
+    if DRY_RUN:
+        return None
+    import time
+    from urllib.error import HTTPError
+
+    body = json.dumps(data).encode()
+    for attempt in range(2):
+        try:
+            req = Request(
+                f"{MC_API}{endpoint}",
+                data=body,
+                headers={
+                    "X-Api-Key": MC_API_KEY,
+                    "Content-Type": "application/json",
+                },
+                method="PATCH",
+            )
+            resp = urlopen(req, timeout=30)
+            return json.loads(resp.read().decode())
+        except HTTPError as e:
+            if e.code in (429, 500, 502, 503, 504) and attempt == 0:
+                time.sleep(2)
+                continue
+            print(f"[agent] MC PATCH error ({endpoint}): HTTP {e.code}", file=sys.stderr)
+            return None
+        except (URLError, json.JSONDecodeError, OSError) as e:
+            if attempt == 0:
+                time.sleep(2)
+                continue
+            print(f"[agent] MC PATCH error ({endpoint}): {e}", file=sys.stderr)
+            return None
+    return None
+
+
+def send_telegram(message: str, *, parse_mode: str = "HTML",
+                   reply_markup: dict | None = None) -> tuple[bool, int | None]:
+    """Send message via Telegram bot. Returns (success, message_id)."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         log(f"[agent] Telegram not configured, would send: {message[:100]}")
-        return False
+        return (False, None)
     if DRY_RUN:
         log(f"[agent] (dry) Telegram: {message[:100]}")
-        return True
+        return (True, None)
     try:
-        message = _escape_md(message)
-        data = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}).encode()
+        # Truncate to Telegram's practical limit
+        if len(message) > 4000:
+            message = message[:4000]
+        payload: dict = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message,
+            "parse_mode": parse_mode,
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        data = json.dumps(payload).encode()
         req = Request(
             f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        urlopen(req, timeout=10)
-        return True
-    except (URLError, OSError) as e:
+        resp = urlopen(req, timeout=10)
+        resp_data = json.loads(resp.read().decode())
+        msg_id = resp_data.get("result", {}).get("message_id")
+        return (True, msg_id)
+    except (URLError, OSError, json.JSONDecodeError) as e:
         print(f"[agent] Telegram send failed: {e}", file=sys.stderr)
-        return False
+        return (False, None)
+
+
+# ── Filesystem Lock ──────────────────────────────────────────────────────────
+
+
+def acquire_lock() -> tuple[bool, object | None]:
+    """Acquire an exclusive filesystem lock (non-blocking).
+    Returns (True, fd) on success or (False, None) on contention.
+    Caller must keep fd open; lock is released when fd is closed / process exits.
+    """
+    lock_path = LIFE_DIR / "logs" / "heartbeat-agent.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = open(lock_path, "w")
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return (True, fd)
+    except (BlockingIOError, OSError):
+        return (False, None)
 
 
 # ── Confidence Scoring ───────────────────────────────────────────────────────
@@ -208,6 +362,47 @@ def select_persona(title: str, description: str = "") -> str:
         return "Ledger"
     # Default to Archie (backend)
     return "Archie"
+
+
+# ── Input Validation + Credential Check ──────────────────────────────────────
+
+
+def validate_task_item(item: dict) -> bool:
+    """Return True if item has a truthy id and non-blank title."""
+    if not item.get("id"):
+        return False
+    title = item.get("title", "")
+    if not title or not title.strip():
+        return False
+    return True
+
+
+def _credential_paths() -> list[Path]:
+    """Return the list of credential file paths to check."""
+    home = Path.home()
+    return [
+        home / ".telegram-bot-token",
+        home / ".telegram-chat-id",
+        home / ".telegram-allowed-users",
+    ]
+
+
+def check_credential_permissions() -> list[str]:
+    """Check credential files for existence and safe permissions (<=600).
+    Returns list of warning strings."""
+    warnings: list[str] = []
+    for path in _credential_paths():
+        if not path.exists():
+            warnings.append(f"Missing credential file: {path}")
+            continue
+        mode = path.stat().st_mode
+        perms = stat.S_IMODE(mode)
+        if perms > 0o600:
+            warnings.append(
+                f"Credential file {path} has permissions {oct(perms)} "
+                f"(expected 0o600 or stricter)"
+            )
+    return warnings
 
 
 # ── Resource Checking ────────────────────────────────────────────────────────
@@ -284,6 +479,66 @@ def budget_ok(estimated_cost: float = 0.05) -> bool:
     """Check if we're within daily budget."""
     spent = get_today_spend()
     return (spent + estimated_cost) <= DAILY_BUDGET_USD
+
+
+# ── Stale-Task Reaper ─────────────────────────────────────────────────────────
+
+_DISPATCH_MARKER_RE = re.compile(r"<!-- dispatch_started_at:\s*(.+?)\s*-->")
+STALE_THRESHOLD_MIN = 15
+
+
+def reap_stale_tasks(locally_dispatching: set[int] | None = None) -> list[int]:
+    """Reset in_progress tasks that have been stuck longer than STALE_THRESHOLD_MIN.
+
+    Looks for a ``<!-- dispatch_started_at: {iso} -->`` marker in the description.
+    Falls back to the task's ``updated_at`` field when the marker is absent.
+    Tasks whose IDs appear in *locally_dispatching* are skipped.
+
+    Returns list of reaped (reset-to-todo) task IDs.
+    """
+    if locally_dispatching is None:
+        locally_dispatching = set()
+
+    tasks = mc_get("/tasks?status=in_progress&limit=100")
+    if not tasks:
+        return []
+
+    task_list = tasks if isinstance(tasks, list) else tasks.get("items", tasks.get("tasks", []))
+    reaped: list[int] = []
+    now = datetime.now(timezone.utc)
+
+    for task in task_list:
+        task_id = task.get("id")
+        if task_id in locally_dispatching:
+            continue
+
+        desc = task.get("description", "") or ""
+        marker_match = _DISPATCH_MARKER_RE.search(desc)
+
+        if marker_match:
+            try:
+                started = datetime.fromisoformat(marker_match.group(1))
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                continue
+        else:
+            updated_raw = task.get("updated_at", "")
+            if not updated_raw:
+                continue
+            try:
+                started = datetime.fromisoformat(updated_raw)
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
+            except (ValueError, TypeError):
+                continue
+
+        age_min = (now - started).total_seconds() / 60
+        if age_min > STALE_THRESHOLD_MIN:
+            mc_patch(f"/tasks/{task_id}", {"status": "todo"})
+            reaped.append(task_id)
+
+    return reaped
 
 
 # ── Planning Gate (Ralph PRD) ─────────────────────────────────────────────────
@@ -418,6 +673,19 @@ def _generate_prd(title: str, description: str) -> str:
     )
     send_telegram(msg)
     return "prd_generated"
+
+
+# ── Run Log ──────────────────────────────────────────────────────────────────
+
+
+def append_run_log(run_data: dict) -> None:
+    """Append one JSON line to LIFE_DIR/logs/heartbeat-runs.jsonl.
+    Creates parent dirs if needed. Atomic append via open(..., 'a').
+    """
+    log_file = LIFE_DIR / "logs" / "heartbeat-runs.jsonl"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(json.dumps(run_data) + "\n")
 
 
 # ── Main Agent Loop ──────────────────────────────────────────────────────────
