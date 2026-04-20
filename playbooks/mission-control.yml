@@ -7,7 +7,7 @@
   tasks:
     - name: Ensure MC directory exists
       file:
-        path: /mnt/external/mission-control
+        path: /mnt/data/mission-control
         state: directory
         owner: enrico
         group: enrico
@@ -16,7 +16,7 @@
     - name: Sync MC source from repo
       synchronize:
         src: "{{ playbook_dir }}/../mission-control/"
-        dest: /mnt/external/mission-control/
+        dest: /mnt/data/mission-control/
         delete: false
         rsync_opts:
           - "--exclude=.env"
@@ -29,7 +29,7 @@
     - name: Deploy MC .env from vault
       ansible.builtin.template:
         src: ../templates/mission-control.env.j2
-        dest: /mnt/external/mission-control/.env
+        dest: /mnt/data/mission-control/.env
         mode: "0600"
         owner: enrico
       no_log: true
@@ -37,7 +37,7 @@
 
     - name: Set ownership on synced files
       file:
-        path: /mnt/external/mission-control
+        path: /mnt/data/mission-control
         owner: enrico
         group: enrico
         recurse: true
@@ -48,7 +48,7 @@
       become_user: enrico
       command: docker compose up -d --build
       args:
-        chdir: /mnt/external/mission-control
+        chdir: /mnt/data/mission-control
       when: sync_result.changed or env_result.changed
       register: rebuild_result
 

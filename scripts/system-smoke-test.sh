@@ -350,22 +350,28 @@ check_tailscale_dns() {
     fi
 }
 
-# 16. NFS Workspace Health — check NFS mount is writable and not stale
+# 16. NFS Workspace Health — check workspace is accessible and correctly owned
 check_nfs_workspace() {
-    local ws="/mnt/external/openclaw/workspace"
-    # Check mount exists and is responsive
-    if timeout 5 stat "$ws" >/dev/null 2>&1; then
-        check_service "nfs-workspace" "up"
+    local ws
+    if [ "$(hostname)" = "heavy" ]; then
+        ws="/mnt/data/openclaw/workspace"
     else
-        check_service "nfs-workspace" "down" "NFS mount unresponsive or missing"
+        ws="/mnt/external/openclaw/workspace"
     fi
 
-    # Check for stale root-owned files (NFS all_squash issue)
-    local stale_count
-    stale_count=$(find "$ws" -maxdepth 2 -user root 2>/dev/null | wc -l)
-    if [ "${stale_count:-0}" -gt 0 ]; then
-        check_service "nfs-workspace" "degraded" "${stale_count} root-owned files (NFS squash issue)"
+    if ! timeout 5 stat "$ws" >/dev/null 2>&1; then
+        check_service "nfs-workspace" "down" "workspace unresponsive or missing ($ws)"
+        return
     fi
+
+    local root_count
+    root_count=$(find "$ws" -maxdepth 2 -user root 2>/dev/null | wc -l)
+    if [ "${root_count:-0}" -gt 0 ]; then
+        check_service "nfs-workspace" "degraded" "${root_count} root-owned files in workspace"
+        return
+    fi
+
+    check_service "nfs-workspace" "up"
 }
 
 check_life_sync() {
