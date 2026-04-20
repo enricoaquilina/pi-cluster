@@ -43,7 +43,7 @@ services:
       QMD_INDEX: "/qmd-cache/index.sqlite"
     volumes:
       - /home/enrico/.openclaw:/openclaw:ro
-      - /mnt/external/polymarket-bot/data:/polybot-data:ro
+      - /mnt/data/polymarket-bot/data:/polybot-data:ro
       - /home/enrico/life:/life:ro
       - /home/enrico/.cache/qmd:/qmd-cache:ro
       - huggingface-cache:/root/.cache/huggingface

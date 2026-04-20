@@ -3,14 +3,19 @@ set -uo pipefail
 # Emergency: restore critical services to master if heavy is down.
 # Designed to run on master when heavy (192.168.0.5) is unreachable.
 #
-# What gets restored (with stale data):
+# Phase 12 topology: heavy is primary NFS server + all Docker services.
+# Master has async backup at /mnt/external (synced every 6h from heavy).
+#
+# What gets restored (from backup data, up to 6h stale):
+#   - NFS server (re-enabled on master, exports /mnt/external to cluster)
 #   - Gateway (from /mnt/external/openclaw)
-#   - MongoDB (from /mnt/external/mongodb)
+#   - MongoDB (from local data at ~/mongodb-data if available)
 #   - Mission Control (from /mnt/external/mission-control)
 #   - Monitoring services (router-api, stats-collector, watchdog)
 #
 # What is NOT restored (lives only on heavy):
 #   - n8n (prod+staging) — gateway will lack n8n integration
+#   - Secrets (.env files) — must be manually copied from heavy backup
 #
 # All node services are re-pointed to master's gateway.
 # Cloudflare tunnel is updated to serve MC from master.
@@ -28,8 +33,13 @@ source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" | tee -a "$LOG"; }
 
-log "=== Emergency restore to master ==="
-send_telegram "🔄 Emergency restore STARTING on master..."
+log "=== Emergency restore to master (heavy down) ==="
+send_telegram "🔄 Emergency restore STARTING on master (heavy 192.168.0.5 unreachable)..."
+
+# 0. Re-enable NFS server on master (serve backup data to cluster)
+log "Re-enabling NFS server on master..."
+sudo systemctl enable --now nfs-kernel-server 2>/dev/null || log "WARN: NFS server start failed"
+sudo exportfs -ra 2>/dev/null || log "WARN: exportfs failed"
 
 # 1. Gateway
 log "Starting gateway..."
@@ -52,15 +62,17 @@ cd /mnt/external/mission-control && docker compose up -d 2>/dev/null || log "WAR
 
 # 4. Re-enable Cloudflare tunnel on master (primary tunnel runs on heavy)
 log "Re-enabling Cloudflare tunnel on master..."
-sudo sed -i 's|service: http://localhost:5678|service: http://localhost:5678|; s|service: http://localhost:3000|service: http://localhost:3000|' /etc/cloudflared/config.yml 2>/dev/null
 sudo systemctl enable --now cloudflared 2>/dev/null || log "WARN: cloudflared start failed"
 
 # 5. Re-point all node services to master gateway
 log "Re-pointing node services to master gateway..."
 for host in master slave0 slave1; do
     if [ "$host" = "slave0" ]; then
-        # slave0 uses Tailscale — needs master's Tailscale IP
-        MASTER_TS=$(tailscale status 2>/dev/null | grep "$(hostname)" | awk '{print $1}' || echo "100.88.240.88")
+        MASTER_TS=$(tailscale status 2>/dev/null | grep "$(hostname)" | awk '{print $1}')
+        if [ -z "$MASTER_TS" ]; then
+            log "WARN: Could not determine master's Tailscale IP for slave0"
+            continue
+        fi
         ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host $MASTER_TS|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
     else
         ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
@@ -86,5 +98,6 @@ sudo systemctl enable --now openclaw-watchdog-cluster.timer 2>/dev/null || true
 RUNNING=$(docker ps --format '{{.Names}}' | sort | tr '\n' ', ')
 log "Running containers: $RUNNING"
 
-send_telegram "✅ Emergency restore COMPLETE on master. Running: $RUNNING"
+send_telegram "✅ Emergency restore COMPLETE on master. NFS re-enabled. Running: $RUNNING"
 log "=== Emergency restore finished ==="
+log "NOTE: Data may be up to 6h stale. When heavy recovers, run emergency-restore-heavy.sh"

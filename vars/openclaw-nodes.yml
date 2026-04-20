@@ -10,14 +10,12 @@ openclaw_gateway_host: 192.168.0.5
 openclaw_gateway_port: 18789
 openclaw_gateway_token: "{{ vault_openclaw_gateway_token }}"
 
-# NFS configuration
-nfs_server: 192.168.0.22
+# NFS configuration (heavy is primary server since Phase 12)
+nfs_server: 192.168.0.5
 nfs_exports:
-  - path: /home/enrico/homelab
-    mount: /opt/workspace
-  - path: /mnt/external
+  - path: /mnt/data
     mount: /mnt/external
-nfs_options: "defaults,soft,timeo=10,_netdev"
+nfs_options: "defaults,soft,timeo=30,retrans=3,nolock,_netdev"
 
 # Workspace path (consistent across all nodes)
 openclaw_workspace: /opt/workspace
