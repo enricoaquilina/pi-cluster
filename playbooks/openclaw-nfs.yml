@@ -48,10 +48,35 @@
         - { port: "2049", comment: "NFS cluster" }
         - { port: "20048", comment: "NFS mountd cluster" }
 
+    - name: Deploy NFS backup service
+      ansible.builtin.template:
+        src: ../templates/nfs-backup.service.j2
+        dest: /etc/systemd/system/nfs-backup.service
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Deploy NFS backup timer (hourly)
+      ansible.builtin.template:
+        src: ../templates/nfs-backup.timer.j2
+        dest: /etc/systemd/system/nfs-backup.timer
+        mode: "0644"
+      notify: Reload systemd
+
+    - name: Enable NFS backup timer
+      ansible.builtin.systemd:
+        name: nfs-backup.timer
+        state: started
+        enabled: true
+        daemon_reload: true
+
   handlers:
     - name: Re-export NFS
       ansible.builtin.command: exportfs -ra
       changed_when: true
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
 
 - name: Disable NFS server on master (migrated to heavy)
   hosts: masters

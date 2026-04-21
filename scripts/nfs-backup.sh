@@ -3,6 +3,28 @@ set -uo pipefail
 
 LOG="/tmp/nfs-backup-$(date +%Y%m%d).log"
 
+# Pre-rsync: dump databases so rsync picks up fresh copies
+mkdir -p /mnt/data/mongodb-dump-latest
+rm -rf /mnt/data/mongodb-dump-latest/*
+docker exec mongodb mongodump --quiet --out /data/dump-staging/ 2>/dev/null \
+    && docker cp mongodb:/data/dump-staging/. /mnt/data/mongodb-dump-latest/ 2>/dev/null \
+    && docker exec mongodb rm -rf /data/dump-staging/ 2>/dev/null \
+    || logger -t nfs-backup "WARN: mongodump failed"
+
+docker exec mission-control-db pg_dump -U missioncontrol missioncontrol \
+    > /mnt/data/mc-dump-latest.sql 2>/dev/null \
+    || logger -t nfs-backup "WARN: MC pg_dump failed"
+
+mkdir -p /mnt/data/n8n-backup
+docker exec n8n-production n8n export:workflow --all \
+    --output=/tmp/n8n-workflows.json 2>/dev/null \
+    && docker cp n8n-production:/tmp/n8n-workflows.json /mnt/data/n8n-backup/ 2>/dev/null \
+    || logger -t nfs-backup "WARN: n8n workflow export failed"
+docker exec n8n-production n8n export:credentials --all \
+    --output=/tmp/n8n-credentials.json 2>/dev/null \
+    && docker cp n8n-production:/tmp/n8n-credentials.json /mnt/data/n8n-backup/ 2>/dev/null \
+    || logger -t nfs-backup "WARN: n8n credential export failed"
+
 /usr/bin/rsync -az --delete --no-group --no-perms \
     --ignore-errors \
     --log-file="$LOG" \

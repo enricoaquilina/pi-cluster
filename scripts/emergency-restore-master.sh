@@ -4,17 +4,17 @@ set -uo pipefail
 # Designed to run on master when heavy (192.168.0.5) is unreachable.
 #
 # Phase 12 topology: heavy is primary NFS server + all Docker services.
-# Master has async backup at /mnt/external (synced every 6h from heavy).
+# Master has async backup at /mnt/external (synced every 1h from heavy).
 #
-# What gets restored (from backup data, up to 6h stale):
+# What gets restored (from backup data, up to 1h stale):
 #   - NFS server (re-enabled on master, exports /mnt/external to cluster)
 #   - Gateway (from /mnt/external/openclaw)
-#   - MongoDB (from local data at ~/mongodb-data if available)
-#   - Mission Control (from /mnt/external/mission-control)
+#   - MongoDB (from hourly dump at /mnt/external/mongodb-dump-latest/)
+#   - Mission Control (from hourly dump at /mnt/external/mc-dump-latest.sql)
+#   - n8n (from hourly export at /mnt/external/n8n-backup/)
 #   - Monitoring services (router-api, stats-collector, watchdog)
 #
-# What is NOT restored (lives only on heavy):
-#   - n8n (prod+staging) — gateway will lack n8n integration
+# What is NOT restored:
 #   - Secrets (.env files) — must be manually copied from heavy backup
 #
 # All node services are re-pointed to master's gateway.
@@ -52,36 +52,57 @@ else
     log "WARN: Gateway not healthy yet, continuing..."
 fi
 
-# 2. MongoDB (stale fallback — primary data is on heavy)
-log "Starting MongoDB (stale fallback)..."
+# 2. MongoDB (restore from hourly dump)
+log "Starting MongoDB..."
 cd /mnt/external/mongodb && docker compose up -d 2>/dev/null || log "WARN: MongoDB start failed"
+sleep 10
+if [ -d /mnt/external/mongodb-dump-latest ]; then
+    DUMP_AGE=$(( ($(date +%s) - $(stat -c '%Y' /mnt/external/mongodb-dump-latest 2>/dev/null || echo 0)) / 3600 ))
+    [ "$DUMP_AGE" -gt 2 ] && log "WARN: MongoDB dump is ${DUMP_AGE}h old"
+    docker exec mongodb mongorestore --drop /data/dump/ 2>/dev/null && log "MongoDB restored from hourly dump" || log "WARN: mongorestore failed"
+else
+    log "WARN: No MongoDB hourly dump found — data may be stale"
+fi
 
-# 3. Mission Control (stale fallback — primary data is on heavy)
-log "Starting Mission Control (stale fallback)..."
+# 3. Mission Control (restore from hourly dump)
+log "Starting Mission Control..."
 cd /mnt/external/mission-control && docker compose up -d 2>/dev/null || log "WARN: Mission Control start failed"
+sleep 10
+if [ -f /mnt/external/mc-dump-latest.sql ]; then
+    DUMP_AGE=$(( ($(date +%s) - $(stat -c '%Y' /mnt/external/mc-dump-latest.sql)) / 3600 ))
+    [ "$DUMP_AGE" -gt 2 ] && log "WARN: MC dump is ${DUMP_AGE}h old"
+    docker exec -i mission-control-db psql -U missioncontrol missioncontrol < /mnt/external/mc-dump-latest.sql 2>/dev/null && log "MC restored from hourly dump" || log "WARN: MC dump restore failed"
+else
+    log "WARN: No MC hourly dump found — data may be stale"
+fi
 
 # 4. Re-enable Cloudflare tunnel on master (primary tunnel runs on heavy)
 log "Re-enabling Cloudflare tunnel on master..."
 sudo systemctl enable --now cloudflared 2>/dev/null || log "WARN: cloudflared start failed"
 
-# 5. Re-point all node services to master gateway
+# 5. Re-point all node services to master gateway (Ansible preferred, sed fallback)
 log "Re-pointing node services to master gateway..."
-for host in master slave0 slave1; do
-    if [ "$host" = "slave0" ]; then
-        MASTER_TS=$(tailscale status 2>/dev/null | grep "$(hostname)" | awk '{print $1}')
-        if [ -z "$MASTER_TS" ]; then
-            log "WARN: Could not determine master's Tailscale IP for slave0"
-            continue
+if ansible-playbook /home/enrico/homelab/playbooks/openclaw-nodes.yml \
+    -e "openclaw_gateway_host=192.168.0.22" \
+    --vault-password-file /home/enrico/homelab/secrets-vault-password 2>/dev/null; then
+    log "Nodes re-pointed via Ansible"
+else
+    log "WARN: Ansible repoint failed — falling back to sed"
+    for host in master slave0 slave1; do
+        if [ "$host" = "slave0" ]; then
+            MASTER_TS=$(tailscale status 2>/dev/null | grep "$(hostname)" | awk '{print $1}')
+            if [ -z "$MASTER_TS" ]; then
+                log "WARN: Could not determine master's Tailscale IP for slave0"
+                continue
+            fi
+            ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host $MASTER_TS|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
+        else
+            ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
         fi
-        ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host $MASTER_TS|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
-    else
-        ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
-    fi
-done
-
-# Update local (master) node service too
-sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service 2>/dev/null
-sudo systemctl daemon-reload
+    done
+    sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service 2>/dev/null
+    sudo systemctl daemon-reload
+fi
 
 # 6. Re-pair nodes with gateway on master
 log "Re-pairing nodes (waiting 10s for gateway to stabilize)..."
@@ -100,4 +121,4 @@ log "Running containers: $RUNNING"
 
 send_telegram "✅ Emergency restore COMPLETE on master. NFS re-enabled. Running: $RUNNING"
 log "=== Emergency restore finished ==="
-log "NOTE: Data may be up to 6h stale. When heavy recovers, run emergency-restore-heavy.sh"
+log "NOTE: Data may be up to 1h stale. When heavy recovers, run emergency-restore-heavy.sh"

@@ -49,11 +49,18 @@ ssh -o ConnectTimeout=5 master "sudo systemctl stop nfs-kernel-server && sudo sy
 log "Verifying heavy NFS server..."
 showmount -e localhost | grep -q "/mnt/data" || log "WARN: Heavy NFS not exporting /mnt/data"
 
-# 6. Re-point all node services to heavy
+# 6. Re-point all node services to heavy (Ansible preferred, sed fallback)
 log "Re-pointing node services to heavy gateway..."
-ssh -o ConnectTimeout=5 master "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.5|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: master node repoint failed"
-ssh -o ConnectTimeout=5 slave0 "sudo sed -i 's|--host [0-9.]*|--host 100.85.234.128|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: slave0 node repoint failed"
-ssh -o ConnectTimeout=5 slave1 "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.5|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: slave1 node repoint failed"
+if ssh -o ConnectTimeout=5 master "cd /home/enrico/homelab && ansible-playbook playbooks/openclaw-nodes.yml \
+    -e 'openclaw_gateway_host=192.168.0.5' \
+    --vault-password-file secrets-vault-password" 2>/dev/null; then
+    log "Nodes re-pointed via Ansible"
+else
+    log "WARN: Ansible repoint failed — falling back to sed"
+    ssh -o ConnectTimeout=5 master "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.5|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: master node repoint failed"
+    ssh -o ConnectTimeout=5 slave0 "sudo sed -i 's|--host [0-9.]*|--host 100.85.234.128|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: slave0 node repoint failed"
+    ssh -o ConnectTimeout=5 slave1 "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.5|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload && sudo systemctl restart openclaw-node" 2>/dev/null || log "WARN: slave1 node repoint failed"
+fi
 sudo systemctl restart openclaw-node 2>/dev/null || log "WARN: heavy node restart failed"
 
 # 7. Ensure Cloudflare tunnel is running on heavy, stop emergency tunnel on master

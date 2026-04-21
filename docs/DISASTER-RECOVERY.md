@@ -9,12 +9,25 @@
 
 Retention: 14 days on both local and remote.
 
-**Important notes (updated 2026-03-25):**
+**Important notes (updated 2026-04-21):**
 - Gateway config (openclaw.json, paired.json) is fetched from **heavy** via SSH (not local on master)
 - Dispatch log is fetched from **heavy** `/home/enrico/data/openclaw-dispatch-log.db`
 - MongoDB data is on heavy's **local storage** (`/home/enrico/mongodb-data/`), NOT on NFS
 - Backup size should be >100K — if smaller, the backup script may have lost connectivity to heavy
 - NFS backup wrapper (`scripts/nfs-backup.sh`) tolerates partial rsync failures (exit 23/24 treated as warnings)
+
+### Hourly NFS Sync (heavy→master)
+
+`scripts/nfs-backup.sh` runs hourly via systemd timer on heavy. Before rsync, it dumps:
+
+| Dump | Target Path | Command |
+|------|-------------|---------|
+| MongoDB | `/mnt/data/mongodb-dump-latest/` | `docker exec mongodb mongodump` |
+| MC PostgreSQL | `/mnt/data/mc-dump-latest.sql` | `docker exec mission-control-db pg_dump` |
+| n8n workflows | `/mnt/data/n8n-backup/n8n-workflows.json` | `docker exec n8n-production n8n export:workflow --all` |
+| n8n credentials | `/mnt/data/n8n-backup/n8n-credentials.json` | `docker exec n8n-production n8n export:credentials --all` |
+
+Master receives these at `/mnt/external/` via rsync. Max data loss during emergency failover: **1 hour**.
 
 ## Backup Contents
 
@@ -38,6 +51,9 @@ YYYY-MM-DD/
     missioncontrol.sql     # PostgreSQL dump of Mission Control
   ansible/
     *.yml                  # Vault secrets, vars, inventory
+  n8n/
+    workflows.json         # All n8n workflow definitions
+    credentials.json       # n8n credential exports
   polymarket-bot/
     .env                   # Polymarket bot secrets (CLOB auth, Telegram)
     data/                  # positions.json, control.json
@@ -163,6 +179,22 @@ sudo systemctl restart openclaw-cluster-service
 # Verify all nodes reconnect
 sleep 10
 make openclaw-test
+```
+
+### Restore n8n
+
+```bash
+# Restore workflows from hourly dump (preferred — freshest)
+docker cp /mnt/external/n8n-backup/n8n-workflows.json n8n-production:/tmp/
+docker exec n8n-production n8n import:workflow --input=/tmp/n8n-workflows.json
+
+# Or from daily backup tarball
+docker cp "$TMP/$DATE/n8n/workflows.json" n8n-production:/tmp/
+docker exec n8n-production n8n import:workflow --input=/tmp/workflows.json
+
+# Restore credentials (if needed)
+docker cp /mnt/external/n8n-backup/n8n-credentials.json n8n-production:/tmp/
+docker exec n8n-production n8n import:credentials --input=/tmp/n8n-credentials.json
 ```
 
 ### Restore Polymarket Bot
