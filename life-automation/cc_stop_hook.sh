@@ -9,7 +9,7 @@
 if command -v gh >/dev/null 2>&1; then
     _repo_dir="$HOME/pi-cluster"
     _branch_count=$(git -C "$_repo_dir" branch --format='%(refname:short)' | grep -cv '^master$' 2>/dev/null || echo 0)
-    if [ "$_branch_count" -gt 1 ]; then
+    if [ "$_branch_count" -gt 0 ]; then
         _merged=$(gh pr list --repo enricoaquilina/pi-cluster --state merged --limit 100 \
             --json headRefName --jq '.[].headRefName' 2>/dev/null) || _merged=""
         if [ -n "$_merged" ]; then
