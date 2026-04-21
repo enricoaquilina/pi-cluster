@@ -140,6 +140,7 @@
   "tags": ["pi-cluster"],
   "templating": { "list": [] },
   "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
   "timepicker": {},
   "timezone": "Europe/Malta",
   "title": "Pi Cluster Overview",
