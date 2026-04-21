@@ -75,7 +75,7 @@ export function Copybot() {
   return html`
     <div class="metric-grid">
       <${MetricCard} label="Mode" value=${summary.mode.toUpperCase()} colorClass=${summary.mode === 'paper' ? 'text-yellow' : 'text-red'} />
-      <${MetricCard} label="Unrealized PnL" value=${formatUsd(summary.unrealized_pnl)} colorClass=${pnlClass(summary.unrealized_pnl)} variant=${summary.unrealized_pnl >= 0 ? 'profit' : 'loss'} />
+      <${MetricCard} label="Total PnL" value=${formatUsd(summary.total_pnl)} colorClass=${pnlClass(summary.total_pnl)} variant=${summary.total_pnl >= 0 ? 'profit' : 'loss'} sub=${`Realized: ${formatUsd(summary.realized_pnl)} | Open: ${formatUsd(summary.unrealized_pnl)}`} />
       <${MetricCard} label="Active Positions" value=${summary.position_count} sub=${`of ${summary.max_total_positions} max`} />
       <${MetricCard} label="Daily Budget" value=${`$${summary.daily_spent_usd.toFixed(0)} / $${summary.daily_budget_usd.toFixed(0)}`} sub=${summary.daily_date} />
       <${MetricCard} label="Win Rate" value=${formatPct(summary.win_rate)} sub=${`${summary.wins}W / ${summary.losses}L of ${summary.resolved_trades} resolved`} />

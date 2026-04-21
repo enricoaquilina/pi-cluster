@@ -25,7 +25,7 @@ def trading_overview():
     sb = _compute_spreadbot_stats(spread_control, spread_state)
     sc = _compute_scalper_stats(spread_control, scalp_state)
 
-    total_pnl = cb["unrealized_pnl"] + sb["settled_pnl"] + sc["total_pnl"]
+    total_pnl = cb["total_pnl"] + sb["settled_pnl"] + sc["total_pnl"]
     total_positions = cb["position_count"] + sb["state_counts"].get("LOCKED", 0) + sb["state_counts"].get("PARTIAL", 0) + sc["active_count"]
 
     # Recent activity: merge last trades from both bots

@@ -43,6 +43,10 @@ def _compute_copybot_stats(control, positions, trades):
         if not p.get("resolved") and p.get("current_price", 0) > 0
     )
 
+    total_realized = sum(
+        p.get("pnl", 0) for p in positions if p.get("resolved")
+    )
+
     executed = [t for t in trades if t.get("executed")]
     resolved = [t for t in executed if t.get("paper_result") in ("WIN", "LOSS")]
     wins = sum(1 for t in resolved if t["paper_result"] == "WIN")
@@ -61,6 +65,8 @@ def _compute_copybot_stats(control, positions, trades):
         "position_count": len([p for p in positions if not p.get("resolved")]),
         "total_positions": len(positions),
         "unrealized_pnl": round(total_unrealized, 2),
+        "realized_pnl": round(total_realized, 2),
+        "total_pnl": round(total_unrealized + total_realized, 2),
         "total_trades": len(executed),
         "resolved_trades": len(resolved),
         "wins": wins,

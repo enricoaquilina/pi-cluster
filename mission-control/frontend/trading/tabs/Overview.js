@@ -40,7 +40,7 @@ export function Overview() {
           <${StatusBadge} status=${cb.mode} pulse=${true} />
         </div>
         <div class="bot-card-stat">${cb.position_count} active positions</div>
-        <div class="bot-card-stat">PnL: <strong class=${pnlClass(cb.unrealized_pnl)}>${formatUsd(cb.unrealized_pnl)}</strong></div>
+        <div class="bot-card-stat">PnL: <strong class=${pnlClass(cb.total_pnl)}>${formatUsd(cb.total_pnl)}</strong> <span class="text-dim">(${formatUsd(cb.realized_pnl)} realized)</span></div>
         <div class="bot-card-stat">Trades: <strong>${cb.total_trades}</strong> executed</div>
         <div class="bot-card-stat">Traders: <strong>${cb.enabled_traders.join(', ')}</strong></div>
       </div>
