@@ -1,26 +1,28 @@
 [Unit]
-Description=Mission Control Kiosk Display
+Description=Mission Control + Grafana Dual Kiosk Display
 After=default.target
 
 [Service]
 Type=simple
 Environment=DISPLAY=:0
 ExecStartPre=/bin/bash -c 'killall -9 chromium 2>/dev/null; sleep 2; true'
-ExecStart=/usr/bin/chromium \
-    --kiosk \
-    --incognito \
-    --noerrdialogs \
-    --disable-infobars \
-    --no-first-run \
-    --disable-session-crashed-bubble \
-    --disable-translate \
-    --disable-features=TranslateUI \
-    --autoplay-policy=no-user-gesture-required \
-    --disable-component-update \
-    --disable-background-networking \
-    --password-store=basic \
-    --user-data-dir=/tmp/chromium-kiosk \
-    http://heavy:3000
+ExecStart=/bin/bash -c '\
+  chromium --app=http://heavy:3000 \
+    --class=chromium-mc \
+    --user-data-dir=/tmp/chromium-mc \
+    --no-first-run --disable-infobars --disable-session-crashed-bubble \
+    --disable-translate --disable-features=TranslateUI \
+    --disable-component-update --disable-background-networking \
+    --password-store=basic & \
+  sleep 3; \
+  chromium --app=http://localhost:3001 \
+    --class=chromium-grafana \
+    --user-data-dir=/tmp/chromium-grafana \
+    --no-first-run --disable-infobars --disable-session-crashed-bubble \
+    --disable-translate --disable-features=TranslateUI \
+    --disable-component-update --disable-background-networking \
+    --password-store=basic & \
+  wait'
 Restart=always
 RestartSec=10
 
