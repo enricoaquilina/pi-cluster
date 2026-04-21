@@ -8,8 +8,8 @@ Ansible-managed infrastructure for a 4-node cluster running distributed OpenClaw
      ┌─────────────────────────┐
      │     master (Pi 5 8GB)   │
      │  NFS server · Pi-hole   │
-     │  Cloudflare tunnel      │
-     │  Backups · Orchestrator │
+     │  Monitoring (VM+Grafana)│
+     │  Cloudflare · Backups   │
      └─────┬──────┬──────┬─────┘
            │      │      │
  ┌─────────┘      │      └─────────┐
@@ -28,12 +28,14 @@ Ansible-managed infrastructure for a 4-node cluster running distributed OpenClaw
 
 | Node | Hardware | IP | Role |
 |------|----------|----|------|
-| **master** | Pi 5 8GB | 192.168.0.22 | NFS server, DNS, backups, orchestrator node |
+| **master** | Pi 5 8GB | 192.168.0.22 | NFS server, DNS, monitoring (VM+Grafana), backups, orchestrator |
 | **build** (slave0) | Pi 5 4GB | 192.168.0.3 / Tailscale | Coding node, Pi-hole MASTER |
 | **light** (slave1) | Pi 4 2GB | 192.168.0.4 | Research node, Pi-hole BACKUP |
-| **heavy** | NiPoGi P2 AMD Ryzen 3 12GB | 192.168.0.5 / Tailscale | All Docker services, monitoring, compute |
+| **heavy** | NiPoGi P2 AMD Ryzen 3 12GB | 192.168.0.5 / Tailscale | All Docker services (except monitoring), compute |
 
-## Services (all on heavy)
+## Services
+
+### On heavy
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -43,6 +45,13 @@ Ansible-managed infrastructure for a 4-node cluster running distributed OpenClaw
 | Mission Control UI | 3000 | Dashboard frontend (Caddy) |
 | MongoDB | 127.0.0.1:27017 | Data store (local storage) |
 | n8n | 5678 | Workflow automation |
+
+### On master
+
+| Service | Port | Description |
+|---------|------|-------------|
+| VictoriaMetrics | 8428 | Metrics DB (Prometheus-compatible) |
+| Grafana | 3001 | Dashboards (Pi Cluster Overview) |
 | Pi-hole VIP | 192.168.0.53 | HA DNS (keepalived failover) |
 
 ## Task Routing
@@ -59,7 +68,7 @@ Tasks are routed to the best-fit node based on role affinity and real-time healt
 ## Self-Healing
 
 - **Cluster watchdog** (2min): detects disconnected nodes, auto-re-pairs
-- **Heavy watchdog** (2min on master): monitors heavy, auto-restores to master after 6min failure
+- **Heavy watchdog** (2min on master): monitors heavy, auto-restores to master after 6min failure (1h-stale data)
 - **NFS watchdog** (2min): auto-remounts dropped shares
 - **Resource monitor** (5min): RAM/swap/temp/disk alerts via Telegram
 - **E2E test** (daily 6am): 36 tests, Telegram alert on failure
@@ -93,6 +102,8 @@ PR opened → Auto-merge armed (gh pr merge --auto)
 **GitHub App:** `pi-cluster-bot` generates tokens for Claude fix commits that re-trigger CI workflows.
 
 ## Monitoring & Alerting
+
+**Metrics stack** (on master — survives heavy outages): VictoriaMetrics scrapes node-exporter on all 4 nodes every 30s. Grafana dashboard at `master:3001`.
 
 Alerts via Telegram:
 - Resource thresholds: RAM >80%, swap >50%, temp >75°C, disk >85%
