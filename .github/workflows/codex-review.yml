@@ -63,81 +63,73 @@ jobs:
           DIFF_LINES=$(wc -l < /tmp/pr-diff.txt)
           echo "lines=$DIFF_LINES" >> "$GITHUB_OUTPUT"
 
-      - name: Run GPT-5.4 strict review
+      - name: Build review payload
         if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.lines != '0'
-        id: review
         run: |
-          PR_BODY=$(cat /tmp/pr-body.txt)
-          DIFF=$(cat /tmp/pr-diff.txt)
+          python3 - "${{ steps.pr.outputs.title }}" <<'PYEOF'
+          import json, sys
 
-          PROMPT=$(cat <<'PROMPT_EOF'
-          You are a strict code reviewer for a solo-dev infrastructure repo (Raspberry Pi cluster: Ansible, Docker Compose, Python backend, shell scripts, GitHub Actions).
+          title = sys.argv[1]
+          diff = open("/tmp/pr-diff.txt").read()
+          pr_body = open("/tmp/pr-body.txt").read()[:2000]
+
+          system_prompt = """You are a strict code reviewer for a solo-dev infrastructure repo (Raspberry Pi cluster: Ansible, Docker Compose, Python backend, shell scripts, GitHub Actions).
 
           Review this PR diff with extreme rigor. Focus on:
-          1. **Security**: secrets in code, injection risks, overly broad permissions, unsafe shell patterns
-          2. **Correctness**: logic bugs, race conditions, missing error handling at boundaries, off-by-one
-          3. **Reliability**: missing rollback paths, silent failures that should alert, unhandled edge cases
-          4. **Shell safety**: unquoted variables, missing set -euo pipefail, word splitting risks
-          5. **Ansible/Docker**: deprecated modules, privilege escalation, missing idempotency guards
+          1. Security: secrets in code, injection risks, overly broad permissions, unsafe shell patterns
+          2. Correctness: logic bugs, race conditions, missing error handling at boundaries, off-by-one
+          3. Reliability: missing rollback paths, silent failures that should alert, unhandled edge cases
+          4. Shell safety: unquoted variables, missing set -euo pipefail, word splitting risks
+          5. Ansible/Docker: deprecated modules, privilege escalation, missing idempotency guards
 
           Rules:
-          - Rate each finding 1-10 importance. Only report findings ≥5.
+          - Rate each finding 1-10 importance. Only report findings >= 5.
           - For each finding: file, line range, problem, suggested fix (as code).
           - If the PR is clean, say so in one line.
           - No praise, no filler, no summaries. Findings only.
           - Maximum 10 findings.
 
           Format each finding as:
-          ### [importance/10] `file:line` — short title
+          ### [importance/10] file:line - short title
           **Problem:** ...
-          **Fix:**
-          ```suggestion
-          ...
-          ```
-          PROMPT_EOF
+          **Fix:** (code block with suggestion)"""
 
-          export PR_TITLE="${{ steps.pr.outputs.title }}"
-          PAYLOAD=$(python3 -c "
-          import json, os
-          prompt = open('/dev/stdin').read()
-          diff = open('/tmp/pr-diff.txt').read()
-          pr_body = open('/tmp/pr-body.txt').read()
-          title = os.getenv('PR_TITLE', '')
-          messages = [
-              {'role': 'system', 'content': prompt},
-              {'role': 'user', 'content': f'## PR: {title}\n\n{pr_body[:2000]}\n\n## Diff\n\n{diff}'}
-          ]
-          print(json.dumps({
-              'model': 'openai/gpt-5.4',
-              'messages': messages,
-              'max_tokens': 4000,
-              'temperature': 0.2
-          }))
-          " <<< "$PROMPT")
+          payload = {
+              "model": "openai/gpt-5.4",
+              "messages": [
+                  {"role": "system", "content": system_prompt},
+                  {"role": "user", "content": f"## PR: {title}\n\n{pr_body}\n\n## Diff\n\n{diff}"}
+              ],
+              "max_tokens": 4000,
+              "temperature": 0.2
+          }
+          with open("/tmp/review-payload.json", "w") as f:
+              json.dump(payload, f)
+          PYEOF
 
+      - name: Call GPT-5.4 via OpenRouter
+        if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.lines != '0'
+        id: review
+        run: |
           RESPONSE=$(curl -sf -X POST "https://openrouter.ai/api/v1/chat/completions" \
             -H "Authorization: Bearer $OPENROUTER_API_KEY" \
             -H "Content-Type: application/json" \
             -H "HTTP-Referer: https://github.com/enricoaquilina/pi-cluster" \
             -H "X-Title: pi-cluster-review" \
-            -d "$PAYLOAD" 2>&1)
+            -d @/tmp/review-payload.json 2>&1)
 
           REVIEW=$(echo "$RESPONSE" | python3 -c "
           import json, sys
-          try:
-              data = json.load(sys.stdin)
-              print(data['choices'][0]['message']['content'])
-          except Exception as e:
-              print(f'Review failed: {e}')
-              sys.exit(1)
+          data = json.load(sys.stdin)
+          print(data['choices'][0]['message']['content'])
           " 2>&1) || REVIEW=""
 
-          if [ -n "$REVIEW" ] && ! echo "$REVIEW" | grep -q "^Review failed:"; then
+          if [ -n "$REVIEW" ]; then
             echo "$REVIEW" > /tmp/review-result.md
             echo "has_review=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_review=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::GPT-5.4 review failed or empty: $REVIEW"
+            echo "::warning::GPT-5.4 review returned empty response"
           fi
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
