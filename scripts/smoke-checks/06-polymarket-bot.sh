@@ -2,8 +2,20 @@
 # Checks: Polymarket copybot process + data freshness
 
 check_polymarket_bot() {
+    if [ "$(hostname)" != "heavy" ]; then
+        # Remote check via SSH
+        local status
+        status=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy \
+            "systemctl is-active polymarket-bot 2>/dev/null" 2>/dev/null)
+        if [ "$status" = "active" ]; then
+            check_service "polymarket-bot" "up"
+        else
+            check_service "polymarket-bot" "down" "Service not active on heavy"
+        fi
+        return
+    fi
+
     local is_active=false
-    # Check for running copybot process (may run as raw process or systemd)
     if pgrep -f "copybot.bot" >/dev/null 2>&1; then
         is_active=true
     elif systemctl is-active --quiet polymarket-bot 2>/dev/null; then
@@ -13,7 +25,6 @@ check_polymarket_bot() {
         check_service "polymarket-bot" "down" "No copybot process running"
         return
     fi
-    # Check data freshness - control.json should be updated within last hour
     local data_file="/mnt/external/polymarket-bot/data/control.json"
     if [ -f "$data_file" ]; then
         local age_s=$(( $(date +%s) - $(stat -c %Y "$data_file") ))
