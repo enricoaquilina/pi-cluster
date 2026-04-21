@@ -115,7 +115,72 @@ for pattern in "&&" "||" "grep -E" "testpassword" "503" "psycopg2"; do
   fi
 done
 
-# Test 15: No YAML lines > 200 chars (ansible-lint enforces this)
+# Test 15: codex-review.yml exists and uses OpenRouter
+if [[ -f ".github/workflows/codex-review.yml" ]]; then
+  ok "codex-review.yml exists"
+  if grep -q 'openrouter.ai/api/v1' .github/workflows/codex-review.yml; then
+    ok "codex-review.yml uses OpenRouter API"
+  else
+    fail "codex-review.yml not using OpenRouter"
+  fi
+  if grep -q 'openai/gpt-5.4' .github/workflows/codex-review.yml; then
+    ok "codex-review.yml targets GPT-5.4"
+  else
+    fail "codex-review.yml not targeting GPT-5.4"
+  fi
+else
+  fail "codex-review.yml missing"
+fi
+
+# Test 16: push-policy-check.yml exists with Telegram alert
+if [[ -f ".github/workflows/push-policy-check.yml" ]]; then
+  ok "push-policy-check.yml exists"
+  if grep -q 'TELEGRAM_BOT_TOKEN' .github/workflows/push-policy-check.yml; then
+    ok "push-policy-check.yml has Telegram alert"
+  else
+    fail "push-policy-check.yml missing Telegram alert"
+  fi
+else
+  fail "push-policy-check.yml missing"
+fi
+
+# Test 17: pr-size-check.yml exists
+if [[ -f ".github/workflows/pr-size-check.yml" ]]; then
+  ok "pr-size-check.yml exists"
+else
+  fail "pr-size-check.yml missing"
+fi
+
+# Test 18: enable-automerge.yml gates feat: PRs
+if grep -q "startsWith.*feat" .github/workflows/enable-automerge.yml; then
+  ok "enable-automerge.yml gates feat: PRs"
+else
+  fail "enable-automerge.yml missing feat: gate"
+fi
+
+# Test 19: pre-push hook has push policy
+if [[ -f "hooks/pre-push" ]]; then
+  if grep -q 'pushing_to_master' hooks/pre-push; then
+    ok "pre-push hook has push policy enforcement"
+  else
+    fail "pre-push hook missing push policy"
+  fi
+else
+  fail "hooks/pre-push missing"
+fi
+
+# Test 20: CLAUDE.md exists with push policy docs
+if [[ -f "CLAUDE.md" ]]; then
+  if grep -q 'Push Policy' CLAUDE.md; then
+    ok "CLAUDE.md documents push policy"
+  else
+    fail "CLAUDE.md missing push policy section"
+  fi
+else
+  fail "CLAUDE.md missing"
+fi
+
+# Test 21: No YAML lines > 200 chars (ansible-lint enforces this)
 long_lines=$(awk 'length > 200 {print FILENAME":"NR": "length" chars"}' .github/workflows/*.yml 2>/dev/null || true)
 if [[ -z "$long_lines" ]]; then
   ok "No workflow YAML lines exceed 200 chars"
