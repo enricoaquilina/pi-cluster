@@ -1,5 +1,6 @@
 ---
-# Deploy monitoring stack: node_exporter on all nodes, VictoriaMetrics + Grafana on heavy
+# Deploy monitoring stack: node_exporter on all nodes, VictoriaMetrics + Grafana on master
+# Monitoring runs on master so it survives heavy outages.
 # Usage: ansible-playbook playbooks/monitoring.yml
 
 - name: Deploy node_exporter on all nodes
@@ -32,14 +33,25 @@
         name: prometheus-node-exporter
         state: restarted
 
-- name: Deploy monitoring stack on heavy
-  hosts: heavy
+- name: Deploy monitoring stack on master
+  hosts: masters
   become: true
   tasks:
     - name: Start monitoring stack
-      ansible.builtin.shell: docker compose up -d
+      ansible.builtin.command: docker compose up -d --pull always
       args:
-        chdir: /home/enrico/pi-cluster/monitoring
+        chdir: /home/enrico/homelab/monitoring
       environment:
         GRAFANA_ADMIN_PASSWORD: "{{ grafana_admin_password | default('changeme') }}"
       changed_when: true
+
+- name: Remove monitoring stack from heavy (migrated to master)
+  hosts: heavy
+  become: true
+  tasks:
+    - name: Stop monitoring containers on heavy
+      ansible.builtin.command: docker compose down --remove-orphans
+      args:
+        chdir: /home/enrico/pi-cluster/monitoring
+      changed_when: true
+      ignore_errors: true

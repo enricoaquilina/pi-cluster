@@ -47,28 +47,6 @@ services:
         max-size: "5m"
         max-file: "2"
 
-  node-exporter:
-    image: prom/node-exporter:latest
-    container_name: node-exporter
-    mem_limit: 64m
-    restart: unless-stopped
-    network_mode: host
-    pid: host
-    command:
-      - "--path.rootfs=/host"
-      - "--collector.disable-defaults"
-      - "--collector.cpu"
-      - "--collector.meminfo"
-      - "--collector.diskstats"
-      - "--collector.filesystem"
-      - "--collector.hwmon"
-      - "--collector.nfs"
-      - "--collector.netdev"
-      - "--collector.loadavg"
-      - "--web.listen-address=:9100"
-    volumes:
-      - /:/host:ro,rslave
-
 volumes:
   vm-data:
   grafana-data:

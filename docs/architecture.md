@@ -17,8 +17,8 @@ Last updated: 2026-04-21
 
 ### master (192.168.0.22)
 
-- **NO Docker containers** -- all Docker services migrated to heavy (Phase 9)
-- NFS server exporting shared storage to all nodes
+- **Docker containers:** VictoriaMetrics (metrics DB), Grafana (dashboards) -- monitoring survives heavy outages
+- NFS server (backup copy, hourly sync from heavy via `nfs-backup.sh`)
 - Pi-hole DNS (upstream of VIP at 192.168.0.53)
 - Cloudflare tunnel routing external traffic to heavy (n8n, MC)
 - OpenClaw node agent (orchestrator role)
@@ -39,8 +39,7 @@ Last updated: 2026-04-21
 
 ### heavy (192.168.0.5)
 
-- All Docker services (see below)
-- All monitoring services (see below)
+- All Docker services (see below) -- monitoring moved to master
 - OpenClaw compute node (Claude Opus 4.6, fallbacks: GPT-5.4, GLM-5)
 - Claude Code sessions run from heavy
 
@@ -69,7 +68,7 @@ MongoDB storage: `/home/enrico/mongodb-data/` (local, NOT NFS -- see Key Design 
 | `openclaw-node` | service | OpenClaw node agent |
 | `polymarket-bot` | service | Polymarket copy-trading bot (auto-restart, 250MB memory limit) |
 | `system-smoke-test` | timer (5min) | Modular health checks: 12 check modules in `smoke-checks/` |
-| `nfs-backup` | timer (6h) | Resilient rsync to master via `scripts/nfs-backup.sh` wrapper |
+| `nfs-backup` | timer (1h) | Dumps MongoDB/MC/n8n + rsync to master via `scripts/nfs-backup.sh` |
 
 ## NFS Topology
 
@@ -138,11 +137,16 @@ PR opened
 
 ## Backup Strategy
 
-- Daily backups run via cron on master: `scripts/openclaw-backup.sh`
-- Contents: gateway config, paired.json, node identities, MC database dump, dispatch log, Ansible secrets
-- Local retention: `/mnt/external/backups/` (14 days)
-- Off-site copy: rsync to heavy `/home/enrico/backups/` (14 days)
-- DR validation: weekly (Sunday 4am) via `scripts/openclaw-dr-test.sh`
+- **Hourly NFS sync** (heavy→master): `scripts/nfs-backup.sh` via systemd timer
+  - Pre-sync dumps: MongoDB (`mongodump`), MC PostgreSQL (`pg_dump`), n8n workflows+credentials
+  - Master copy at `/mnt/external/` — max 1h stale during emergency failover
+- **Daily full backup** (3am cron on master): `scripts/openclaw-backup.sh`
+  - Contents: gateway config, paired.json, node identities, MC dump, dispatch log, n8n workflows, Ansible secrets, polymarket-bot
+  - Local retention: `/mnt/external/backups/` (14 days)
+  - Off-site copy: rsync to heavy `/home/enrico/backups/` (14 days)
+  - Cloud copy: Backblaze B2 via rclone (if configured)
+- **DR validation**: weekly (Sunday 4am) via `scripts/openclaw-dr-test.sh`
+- **Emergency failover**: `heavy-watchdog.sh` triggers after 6 min downtime → `emergency-restore-master.sh` restores from hourly dumps
 
 ## Memory & Knowledge System
 

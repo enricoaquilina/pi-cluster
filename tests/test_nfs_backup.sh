@@ -12,8 +12,8 @@
     [ -f /etc/systemd/system/nfs-backup.timer ]
 }
 
-@test "nfs-backup timer fires every 6 hours" {
-    grep -q "OnCalendar=.*00/6" /etc/systemd/system/nfs-backup.timer
+@test "nfs-backup timer fires hourly" {
+    grep -q 'OnCalendar=.*\*:00:00' /etc/systemd/system/nfs-backup.timer
 }
 
 @test "backup excludes .env files" {

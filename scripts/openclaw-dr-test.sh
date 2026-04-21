@@ -194,6 +194,41 @@ else
     fail "life git repo" "not initialized"
 fi
 
+# 7. Hourly NFS backup freshness
+echo "7. Hourly backup freshness"
+LAST_BACKUP_TS=$(stat -c '%Y' /mnt/external/.last-backup 2>/dev/null || echo 0)
+NOW_TS=$(date +%s)
+NFS_AGE_H=$(( (NOW_TS - LAST_BACKUP_TS) / 3600 ))
+if [ "$NFS_AGE_H" -lt 2 ]; then
+    pass "NFS backup fresh (${NFS_AGE_H}h)"
+else
+    fail "NFS backup staleness" "${NFS_AGE_H}h old (expected <2h)"
+fi
+
+if [ -d /mnt/external/mongodb-dump-latest ] && [ "$(find /mnt/external/mongodb-dump-latest -name '*.bson' -mmin -120 2>/dev/null | head -1)" ]; then
+    pass "MongoDB hourly dump fresh"
+else
+    fail "MongoDB hourly dump" "missing or stale (>2h)"
+fi
+
+if [ -f /mnt/external/mc-dump-latest.sql ]; then
+    MC_DUMP_TS=$(stat -c '%Y' /mnt/external/mc-dump-latest.sql 2>/dev/null || echo 0)
+    MC_DUMP_AGE=$(( (NOW_TS - MC_DUMP_TS) / 3600 ))
+    if [ "$MC_DUMP_AGE" -lt 2 ]; then
+        pass "MC PostgreSQL dump fresh (${MC_DUMP_AGE}h)"
+    else
+        fail "MC dump staleness" "${MC_DUMP_AGE}h (expected <2h)"
+    fi
+else
+    fail "MC hourly dump" "not found"
+fi
+
+if [ -f /mnt/external/n8n-backup/n8n-workflows.json ] && [ -s /mnt/external/n8n-backup/n8n-workflows.json ]; then
+    pass "n8n workflow backup exists"
+else
+    fail "n8n backup" "missing or empty"
+fi
+
 # Summary
 echo ""
 echo "=== DR Validation Results ==="

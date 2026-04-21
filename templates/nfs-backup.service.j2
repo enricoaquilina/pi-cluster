@@ -1,0 +1,10 @@
+[Unit]
+Description=NFS backup sync to master
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/home/enrico/homelab/scripts/nfs-backup.sh
+TimeoutStartSec=600

@@ -5,10 +5,24 @@ After=default.target
 [Service]
 Type=simple
 Environment=DISPLAY=:0
-ExecStartPre=/bin/sleep 5
-ExecStart=/usr/bin/chromium --start-fullscreen --noerrdialogs --disable-infobars --no-first-run --disable-session-crashed-bubble http://heavy:3000
+ExecStartPre=/bin/bash -c 'killall -9 chromium 2>/dev/null; sleep 2; true'
+ExecStart=/usr/bin/chromium \
+    --kiosk \
+    --incognito \
+    --noerrdialogs \
+    --disable-infobars \
+    --no-first-run \
+    --disable-session-crashed-bubble \
+    --disable-translate \
+    --disable-features=TranslateUI \
+    --autoplay-policy=no-user-gesture-required \
+    --disable-component-update \
+    --disable-background-networking \
+    --password-store=basic \
+    --user-data-dir=/tmp/chromium-kiosk \
+    http://heavy:3000
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=default.target

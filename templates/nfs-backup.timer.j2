@@ -1,0 +1,11 @@
+[Unit]
+Description=NFS backup sync to master (hourly)
+
+[Timer]
+OnBootSec=300
+OnCalendar=*-*-* *:00:00
+AccuracySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

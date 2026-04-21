@@ -86,6 +86,16 @@ log "Backing up tunnel config..."
 cluster_ssh "${HEAVY_HOST:-heavy}" "cat /etc/cloudflared/config.yml" \
     > "$BACKUP_DIR/gateway/cloudflared.yml" 2>/dev/null || log "  WARN: cloudflared config not found on heavy"
 
+# 8. n8n workflows and credentials (lives on heavy Docker volume)
+log "Backing up n8n..."
+mkdir -p "$BACKUP_DIR/n8n"
+cluster_ssh "${HEAVY_HOST:-heavy}" \
+    "docker exec n8n-production n8n export:workflow --all 2>/dev/null" \
+    > "$BACKUP_DIR/n8n/workflows.json" 2>/dev/null || log "  WARN: n8n workflow export failed"
+cluster_ssh "${HEAVY_HOST:-heavy}" \
+    "docker exec n8n-production n8n export:credentials --all 2>/dev/null" \
+    > "$BACKUP_DIR/n8n/credentials.json" 2>/dev/null || log "  WARN: n8n credential export failed"
+
 # Fix ownership so tar works
 sudo chown -R enrico:enrico "$BACKUP_DIR" 2>/dev/null
 
