@@ -1,10 +1,10 @@
-import { html, render, useState, useEffect, useCallback } from './lib.js';
-import { clearCache } from './api.js';
-import { Overview } from './tabs/Overview.js';
-import { Copybot } from './tabs/Copybot.js';
-import { Spreadbot } from './tabs/Spreadbot.js';
-import { Scalper } from './tabs/Scalper.js';
-import { Backtest } from './tabs/Backtest.js';
+import { html, render, useState, useEffect, useCallback } from './lib.js?v=20260421b';
+import { clearCache } from './api.js?v=20260421b';
+import { Overview } from './tabs/Overview.js?v=20260421b';
+import { Copybot } from './tabs/Copybot.js?v=20260421b';
+import { Spreadbot } from './tabs/Spreadbot.js?v=20260421b';
+import { Scalper } from './tabs/Scalper.js?v=20260421b';
+import { Backtest } from './tabs/Backtest.js?v=20260421b';
 
 const TABS = [
   { id: 'overview', label: 'Overview', component: Overview },
