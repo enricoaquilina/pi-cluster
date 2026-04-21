@@ -1,0 +1,74 @@
+services:
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: victoriametrics
+    mem_limit: 128m
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - vm-data:/victoria-metrics-data
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "-retentionPeriod=6"
+      - "-httpListenAddr=:8428"
+      - "-promscrape.config=/etc/prometheus/prometheus.yml"
+      - "-search.latencyOffset=5s"
+      - "-promscrape.config.strictParse=false"
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    mem_limit: 128m
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+      - GF_SERVER_ROOT_URL=https://grafana.siliconsentiments.work
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/node-exporter.json
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - victoriametrics
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    mem_limit: 64m
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.disable-defaults"
+      - "--collector.cpu"
+      - "--collector.meminfo"
+      - "--collector.diskstats"
+      - "--collector.filesystem"
+      - "--collector.hwmon"
+      - "--collector.nfs"
+      - "--collector.netdev"
+      - "--collector.loadavg"
+      - "--web.listen-address=:9100"
+    volumes:
+      - /:/host:ro,rslave
+
+volumes:
+  vm-data:
+  grafana-data:
