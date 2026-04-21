@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          ansible-galaxy collection install community.general ansible.posix
+          ansible-galaxy collection install -r requirements-collections.yml
 
       - name: Symlink test secrets for vault playbooks
         run: |
@@ -96,13 +96,12 @@ jobs:
       - name: Bash syntax check
         run: |
           failed=0
-          for script in scripts/*.sh scripts/lib/*.sh; do
-            [ -f "$script" ] || continue
+          while IFS= read -r script; do
             echo "=== $script ==="
             if ! bash -n "$script"; then
               failed=1
             fi
-          done
+          done < <(find scripts/ -name '*.sh' -type f)
           exit $failed
 
       - name: Python compile check
@@ -120,13 +119,12 @@ jobs:
       - name: Bash strict mode check
         run: |
           failed=0
-          for f in scripts/*.sh; do
-            [ -f "$f" ] || continue
+          while IFS= read -r f; do
             if ! head -25 "$f" | grep -q 'set -.*u.*o pipefail'; then
               echo "WARN: $f missing strict mode (set -uo pipefail)"
               failed=1
             fi
-          done
+          done < <(find scripts/ -maxdepth 1 -name '*.sh' -type f)
           exit $failed
 
       - name: Duplicate function detection
