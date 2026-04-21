@@ -37,8 +37,9 @@
   become: true
   tasks:
     - name: Start monitoring stack
-      community.docker.docker_compose_v2:
-        project_src: /home/enrico/pi-cluster/monitoring
-        state: present
+      ansible.builtin.shell: docker compose up -d
+      args:
+        chdir: /home/enrico/pi-cluster/monitoring
       environment:
         GRAFANA_ADMIN_PASSWORD: "{{ grafana_admin_password | default('changeme') }}"
+      changed_when: true

@@ -3,11 +3,13 @@
 
 check_polymarket_bot() {
     if [ "$(hostname)" != "heavy" ]; then
-        # Remote check via SSH
         local status
         status=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy \
             "systemctl is-active polymarket-bot 2>/dev/null" 2>/dev/null)
-        if [ "$status" = "active" ]; then
+        local ssh_rc=$?
+        if [ "$ssh_rc" -eq 255 ]; then
+            check_service "polymarket-bot" "degraded" "Cannot reach heavy via SSH"
+        elif [ "$status" = "active" ]; then
             check_service "polymarket-bot" "up"
         else
             check_service "polymarket-bot" "down" "Service not active on heavy"
