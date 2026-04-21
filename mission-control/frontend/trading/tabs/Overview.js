@@ -29,7 +29,7 @@ export function Overview() {
     <div class="metric-grid">
       <${MetricCard} label="Total PnL" value=${formatUsd(data.total_pnl)} colorClass=${pnlClass(data.total_pnl)} variant=${pnlVariant} />
       <${MetricCard} label="Active Positions" value=${data.total_positions} sub=${`${cb.position_count} copy + ${(sb.state_counts.LOCKED || 0) + (sb.state_counts.PARTIAL || 0)} spread + ${sc.active_count} scalp`} />
-      <${MetricCard} label="Daily Budget" value=${`$${data.daily_spent_total.toFixed(0)} / $${data.daily_budget_total.toFixed(0)}`} sub=${`${Math.round(data.daily_spent_total / data.daily_budget_total * 100)}% used`} />
+      <${MetricCard} label="Daily Limit" value=${`$${data.daily_budget_total.toFixed(0)}/day`} sub=${`Spent today: $${data.daily_spent_total.toFixed(0)}`} />
       <${MetricCard} label="Win Rate" value=${formatPct(cb.win_rate)} sub=${`${cb.wins}W / ${cb.losses}L (copybot)`} />
     </div>
 

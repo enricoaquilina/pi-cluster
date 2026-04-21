@@ -77,7 +77,7 @@ export function Copybot() {
       <${MetricCard} label="Mode" value=${summary.mode.toUpperCase()} colorClass=${summary.mode === 'paper' ? 'text-yellow' : 'text-red'} />
       <${MetricCard} label="Total PnL" value=${formatUsd(summary.total_pnl)} colorClass=${pnlClass(summary.total_pnl)} variant=${summary.total_pnl >= 0 ? 'profit' : 'loss'} sub=${`Realized: ${formatUsd(summary.realized_pnl)} | Open: ${formatUsd(summary.unrealized_pnl)}`} />
       <${MetricCard} label="Active Positions" value=${summary.position_count} sub=${`of ${summary.max_total_positions} max`} />
-      <${MetricCard} label="Daily Budget" value=${`$${summary.daily_spent_usd.toFixed(0)} / $${summary.daily_budget_usd.toFixed(0)}`} sub=${summary.daily_date} />
+      <${MetricCard} label="Daily Limit" value=${`$${summary.daily_budget_usd.toFixed(0)}/day`} sub=${`Spent today: $${summary.daily_spent_usd.toFixed(0)} (${summary.daily_date})`} />
       <${MetricCard} label="Win Rate" value=${formatPct(summary.win_rate)} sub=${`${summary.wins}W / ${summary.losses}L of ${summary.resolved_trades} resolved`} />
       <${MetricCard} label="Order Size" value=${`$${summary.order_size_usd.toFixed(2)}`} sub="per trade (drawdown adjusted)" />
     </div>
