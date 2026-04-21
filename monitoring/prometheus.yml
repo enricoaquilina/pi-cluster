@@ -1,0 +1,32 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: "node-heavy"
+    static_configs:
+      - targets: ["localhost:9100"]
+        labels:
+          node: "heavy"
+
+  - job_name: "node-master"
+    static_configs:
+      - targets: ["192.168.0.22:9100"]
+        labels:
+          node: "master"
+
+  - job_name: "node-build"
+    static_configs:
+      - targets: ["100.65.188.85:9100"]
+        labels:
+          node: "build"
+
+  - job_name: "node-light"
+    static_configs:
+      - targets: ["192.168.0.4:9100"]
+        labels:
+          node: "light"
+
+  - job_name: "victoriametrics"
+    static_configs:
+      - targets: ["localhost:8428"]

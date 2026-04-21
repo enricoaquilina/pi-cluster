@@ -1,0 +1,44 @@
+---
+# Deploy monitoring stack: node_exporter on all nodes, VictoriaMetrics + Grafana on heavy
+# Usage: ansible-playbook playbooks/monitoring.yml
+
+- name: Deploy node_exporter on all nodes
+  hosts: all
+  become: true
+  tasks:
+    - name: Install node_exporter
+      ansible.builtin.apt:
+        name: prometheus-node-exporter
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Configure node_exporter collectors
+      ansible.builtin.copy:
+        dest: /etc/default/prometheus-node-exporter
+        content: |
+          ARGS="--collector.disable-defaults --collector.cpu --collector.meminfo --collector.diskstats --collector.filesystem --collector.hwmon --collector.nfs --collector.netdev --collector.loadavg"
+        mode: "0644"
+      notify: restart node-exporter
+
+    - name: Ensure node_exporter running
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: started
+        enabled: true
+
+  handlers:
+    - name: restart node-exporter
+      ansible.builtin.systemd:
+        name: prometheus-node-exporter
+        state: restarted
+
+- name: Deploy monitoring stack on heavy
+  hosts: heavy
+  become: true
+  tasks:
+    - name: Start monitoring stack
+      community.docker.docker_compose_v2:
+        project_src: /home/enrico/pi-cluster/monitoring
+        state: present
+      environment:
+        GRAFANA_ADMIN_PASSWORD: "{{ grafana_admin_password | default('changeme') }}"
