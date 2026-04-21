@@ -1,0 +1,51 @@
+---
+name: PR Size Check
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  size-check:
+    name: PR size advisory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR size and type
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          TITLE="${{ github.event.pull_request.title }}"
+
+          ADDITIONS=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
+            --json additions --jq '.additions')
+          DELETIONS=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
+            --json deletions --jq '.deletions')
+          NET=$((ADDITIONS - DELETIONS))
+
+          WARNING=""
+          if [ "$ADDITIONS" -gt 500 ]; then
+            WARNING="Large PR: **+${ADDITIONS}** lines. Consider splitting into smaller PRs."
+          fi
+
+          if echo "$TITLE" | grep -q '^fix' && [ "$NET" -gt 200 ]; then
+            SEP=""
+            [ -n "$WARNING" ] && SEP=$'\n'
+            WARNING="${WARNING}${SEP}Labeled \`fix:\` but **+${NET}** net lines — should this be \`feat:\`?"
+          fi
+
+          if [ -n "$WARNING" ]; then
+            gh pr comment "$PR_NUM" -R "${{ github.repository }}" \
+              --body "$(cat <<EOF
+          ⚠️ **PR Size Check**
+
+          ${WARNING}
+
+          _This is advisory, not blocking._
+          EOF
+          )"
+          fi

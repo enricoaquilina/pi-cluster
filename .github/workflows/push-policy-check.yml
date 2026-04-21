@@ -1,0 +1,66 @@
+---
+name: Push Policy Check
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Direct push policy check
+    if: github.event.head_commit.author.username != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for policy violations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          COMMIT="${{ github.event.head_commit.id }}"
+
+          PR_NUM=$(gh pr list --search "$COMMIT" --state merged \
+            --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [ -n "$PR_NUM" ]; then
+            echo "Commit came via PR #$PR_NUM — OK"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "")
+          VIOLATION=""
+
+          for pattern in \
+            '^mission-control/backend/' \
+            '^playbooks/' \
+            '^\.github/workflows/' \
+            'docker-compose.*\.yml$' \
+            '^hooks/'; do
+            match=$(echo "$CHANGED" | grep -E "$pattern" | head -1)
+            if [ -n "$match" ]; then
+              VIOLATION="$match"
+              break
+            fi
+          done
+
+          COUNT=$(echo "$CHANGED" | grep -c '.' || echo 0)
+          if [ "$COUNT" -ge 4 ] && [ -z "$VIOLATION" ]; then
+            VIOLATION="$COUNT files changed directly"
+          fi
+
+          if [ -n "$VIOLATION" ]; then
+            MSG="⚠️ Direct push to master: $VIOLATION (commit ${COMMIT:0:7})"
+            echo "::warning::$MSG"
+            if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+              curl -sf -X POST \
+                "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+                --data-urlencode "text=${MSG}" > /dev/null 2>&1 || true
+            fi
+          fi

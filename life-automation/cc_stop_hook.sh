@@ -5,12 +5,23 @@
 /usr/bin/python3 /home/enrico/life/scripts/cc_session_digest.py || true
 /home/enrico/life/scripts/mini-consolidate.sh || true
 
-# Clean up merged local branches and stale worktrees
-if command -v git >/dev/null 2>&1; then
-    git -C /home/enrico/pi-cluster branch --merged master 2>/dev/null \
-        | grep -v '^\*\|master' | xargs -r git -C /home/enrico/pi-cluster branch -d 2>/dev/null || true
-    git -C /home/enrico/pi-cluster worktree prune 2>/dev/null || true
+# Clean up squash-merged local branches and stale worktrees
+if command -v gh >/dev/null 2>&1; then
+    _repo_dir="$HOME/pi-cluster"
+    _branch_count=$(git -C "$_repo_dir" branch --format='%(refname:short)' | grep -cv '^master$' 2>/dev/null || echo 0)
+    if [ "$_branch_count" -gt 1 ]; then
+        _merged=$(gh pr list --repo enricoaquilina/pi-cluster --state merged --limit 100 \
+            --json headRefName --jq '.[].headRefName' 2>/dev/null) || _merged=""
+        if [ -n "$_merged" ]; then
+            for _b in $(git -C "$_repo_dir" branch --format='%(refname:short)' | grep -v '^master$'); do
+                if echo "$_merged" | grep -qxF "$_b"; then
+                    git -C "$_repo_dir" branch -D "$_b" 2>/dev/null || true
+                fi
+            done
+        fi
+    fi
 fi
+git -C "$HOME/pi-cluster" worktree prune 2>/dev/null || true
 
 # Sync ~/life to git (capture session changes)
 if [ -d "$HOME/life/.git" ]; then
