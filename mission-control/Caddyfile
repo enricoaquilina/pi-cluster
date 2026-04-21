@@ -50,6 +50,7 @@
 		root * /srv/frontend
 		try_files {path} /trading/index.html
 		file_server
+		header *.js Cache-Control "no-cache, must-revalidate"
 	}
 
 	handle /trading {
