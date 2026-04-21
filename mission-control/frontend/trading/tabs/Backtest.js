@@ -2,6 +2,7 @@ import { html, useState, useEffect, useRef } from '../lib.js';
 import { API } from '../api.js';
 import { formatUsd, formatPct, pnlClass } from '../lib.js';
 import { SortableTable } from '../components/SortableTable.js';
+import { MetricCard } from '../components/MetricCard.js';
 import { Skeleton } from '../components/Skeleton.js';
 
 export function Backtest() {
@@ -27,8 +28,10 @@ export function Backtest() {
 
       if (chartInstanceRef.current) chartInstanceRef.current.destroy();
 
-      // Use report data, filter to realistic slippage, sort by ROI
-      const realistic = (data.report || []).filter(r => r.slippage_model === 'realistic' || r.slippage_model === 'optimistic');
+      // Use report data, filter to realistic slippage, exclude PORTFOLIO summary row
+      const realistic = (data.report || []).filter(r =>
+        (r.slippage_model === 'realistic' || r.slippage_model === 'optimistic') && r.trader !== 'PORTFOLIO'
+      );
       // Deduplicate: keep one entry per trader (prefer realistic)
       const byTrader = {};
       for (const r of realistic) {
@@ -101,8 +104,21 @@ export function Backtest() {
     { key: 'max_drawdown', label: 'Max DD', sortable: true, class: 'num', render: v => `$${(v || 0).toFixed(0)}` },
   ];
 
+  const portfolio = (data.report || []).find(r => r.trader === 'PORTFOLIO');
+  const traderReport = (data.report || []).filter(r => r.trader !== 'PORTFOLIO');
+
   return html`
-    <div class="section-title">ROI Comparison</div>
+    ${portfolio && html`
+      <div class="section-title">Portfolio Backtest Summary</div>
+      <div class="metric-grid">
+        <${MetricCard} label="Trades" value=${(portfolio.num_trades || 0).toLocaleString()} sub="with 2% slippage + 2% fees" />
+        <${MetricCard} label="Win Rate" value=${formatPct(portfolio.win_rate)} />
+        <${MetricCard} label="Max Drawdown" value=${formatPct(portfolio.max_drawdown)} colorClass="loss" />
+        <${MetricCard} label="Bankroll" value="$100" sub="9 traders, proportional sizing" />
+      </div>
+    `}
+
+    <div class="section-title">ROI Comparison (per trader)</div>
     <div class="chart-container" style="height: 400px;">
       <canvas ref=${chartRef}></canvas>
     </div>
@@ -113,7 +129,7 @@ export function Backtest() {
     `}
 
     <div class="section-title">Backtest Results</div>
-    <${SortableTable} columns=${reportColumns} data=${data.report} emptyText="No backtest data" />
+    <${SortableTable} columns=${reportColumns} data=${traderReport} emptyText="No backtest data" />
 
     <div style="margin-top: 1rem; font-size: 0.78rem; color: var(--muted);">
       \u2B50 = Currently enabled trader. Green bars = enabled traders in chart.
