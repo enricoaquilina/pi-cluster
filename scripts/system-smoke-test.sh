@@ -271,17 +271,27 @@ check_spreadbot() {
 
 # 11. Polymarket Bot
 check_polymarket_bot() {
-    if ! systemctl is-active --quiet polymarket-bot 2>/dev/null; then
-        check_service "polymarket-bot" "down" "Service not active"
+    local is_active=false
+    # Check for running copybot process (may run as raw process or systemd)
+    if pgrep -f "copybot.bot" >/dev/null 2>&1; then
+        is_active=true
+    elif systemctl --user is-active --quiet polymarket-bot 2>/dev/null; then
+        is_active=true
+    fi
+    if [[ "$is_active" != "true" ]]; then
+        check_service "polymarket-bot" "down" "No copybot process running"
         return
     fi
-    local recent_errors
-    recent_errors=$(journalctl -u polymarket-bot --since "10 min ago" --no-pager 2>/dev/null | grep -c "ERROR" 2>/dev/null || true); recent_errors=${recent_errors:-0}; recent_errors=$(echo "$recent_errors" | tr -d "[:space:]")
-    if [ "$recent_errors" -gt 20 ]; then
-        check_service "polymarket-bot" "degraded" "${recent_errors} errors in last 10 min"
-    else
-        check_service "polymarket-bot" "up"
+    # Check data freshness - control.json should be updated within last hour
+    local data_file="/mnt/external/polymarket-bot/data/control.json"
+    if [ -f "$data_file" ]; then
+        local age_s=$(( $(date +%s) - $(stat -c %Y "$data_file") ))
+        if [ "$age_s" -gt 3600 ]; then
+            check_service "polymarket-bot" "degraded" "Data stale (${age_s}s old)"
+            return
+        fi
     fi
+    check_service "polymarket-bot" "up"
 }
 
 # 12. Pi-hole DNS
