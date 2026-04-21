@@ -275,7 +275,7 @@ check_polymarket_bot() {
     # Check for running copybot process (may run as raw process or systemd)
     if pgrep -f "copybot.bot" >/dev/null 2>&1; then
         is_active=true
-    elif systemctl --user is-active --quiet polymarket-bot 2>/dev/null; then
+    elif systemctl is-active --quiet polymarket-bot 2>/dev/null; then
         is_active=true
     fi
     if [[ "$is_active" != "true" ]]; then
