@@ -98,11 +98,11 @@ jobs:
 
           export PR_TITLE="${{ steps.pr.outputs.title }}"
           PAYLOAD=$(python3 -c "
-          import json, sys, os
+          import json, os
           prompt = open('/dev/stdin').read()
           diff = open('/tmp/pr-diff.txt').read()
           pr_body = open('/tmp/pr-body.txt').read()
-          title = os.environ['PR_TITLE']
+          title = os.getenv('PR_TITLE', '')
           messages = [
               {'role': 'system', 'content': prompt},
               {'role': 'user', 'content': f'## PR: {title}\n\n{pr_body[:2000]}\n\n## Diff\n\n{diff}'}
