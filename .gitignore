@@ -16,6 +16,7 @@ ansible/logs/
 .venv/
 __pycache__/
 .pytest_cache/
+.hypothesis/
 scripts/.env.cluster
 
 # Secrets - never commit
