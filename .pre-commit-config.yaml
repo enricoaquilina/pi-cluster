@@ -18,6 +18,15 @@ repos:
       - id: yamllint
         args: ["-c", ".yamllint.yml"]
 
+  - repo: local
+    hooks:
+      - id: ansible-lint
+        name: ansible-lint
+        entry: ansible-lint --profile basic
+        language: system
+        files: ^playbooks/.*\.yml$
+        pass_filenames: false
+
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.21.2
     hooks:
