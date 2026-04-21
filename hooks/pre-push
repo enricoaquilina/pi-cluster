@@ -13,6 +13,52 @@ if [ -z "$changed_files" ]; then
     exit 0
 fi
 
+# --- Push policy: require PR for critical paths pushed to master ---
+pushing_to_master=0
+while read -r _local_ref _local_sha _remote_ref _remote_sha; do
+    case "$_remote_ref" in
+        refs/heads/master|refs/heads/main) pushing_to_master=1 ;;
+    esac
+done
+
+if [ "$pushing_to_master" -eq 1 ] && [ -n "$changed_files" ]; then
+    PR_REQUIRED_PATTERNS=(
+        '^mission-control/backend/'
+        '^playbooks/'
+        '^\.github/workflows/'
+        'docker-compose.*\.yml$'
+        '^hooks/'
+        '^\.pre-commit-config\.yaml$'
+    )
+
+    blocked=0
+    blocked_reason=""
+
+    for pattern in "${PR_REQUIRED_PATTERNS[@]}"; do
+        match=$(echo "$changed_files" | grep -E "$pattern" | head -1)
+        if [ -n "$match" ]; then
+            blocked=1
+            blocked_reason="$match matches policy pattern"
+            break
+        fi
+    done
+
+    file_count=$(echo "$changed_files" | grep -c '.' || echo 0)
+    if [ "$file_count" -ge 4 ] && [ "$blocked" -eq 0 ]; then
+        blocked=1
+        blocked_reason="$file_count files changed (≥4 requires PR)"
+    fi
+
+    if [ "$blocked" -eq 1 ]; then
+        echo ""
+        echo "pre-push: BLOCKED — direct push to master not allowed."
+        echo "  Reason: $blocked_reason"
+        echo "  Create a branch: git checkout -b fix/description"
+        echo "  Override: git push --no-verify (use sparingly)"
+        exit 1
+    fi
+fi
+
 # Ansible playbook syntax check
 playbooks=$(echo "$changed_files" | grep '^playbooks/.*\.yml$' || true)
 if [ -n "$playbooks" ]; then
