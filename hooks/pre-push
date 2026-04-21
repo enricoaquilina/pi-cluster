@@ -1,0 +1,68 @@
+#!/bin/bash
+# Pre-push validation: syntax-check changed playbooks and shell scripts.
+# Runs only on files changed vs the tracking remote — fast (~2-3s).
+set -o pipefail
+
+failed=0
+
+# Find what changed vs the remote tracking branch
+upstream=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null) || upstream="origin/master"
+changed_files=$(git diff --name-only "$upstream"...HEAD 2>/dev/null) || changed_files=""
+
+if [ -z "$changed_files" ]; then
+    exit 0
+fi
+
+# Ansible playbook syntax check
+playbooks=$(echo "$changed_files" | grep '^playbooks/.*\.yml$' || true)
+if [ -n "$playbooks" ]; then
+    echo "pre-push: checking Ansible playbooks..."
+    for pb in $playbooks; do
+        if [ -f "$pb" ]; then
+            if ! ansible-playbook --syntax-check -i tests/inventory.yml "$pb" >/dev/null 2>&1; then
+                echo "  FAIL: $pb"
+                failed=1
+            else
+                echo "  OK: $pb"
+            fi
+        fi
+    done
+fi
+
+# Shell script syntax check
+scripts=$(echo "$changed_files" | grep '\.sh$' || true)
+if [ -n "$scripts" ]; then
+    echo "pre-push: checking shell scripts..."
+    for s in $scripts; do
+        if [ -f "$s" ]; then
+            if ! bash -n "$s" 2>/dev/null; then
+                echo "  FAIL: $s"
+                failed=1
+            else
+                echo "  OK: $s"
+            fi
+        fi
+    done
+fi
+
+# Docker compose validation
+compose_files=$(echo "$changed_files" | grep 'docker-compose.*\.yml$' || true)
+if [ -n "$compose_files" ]; then
+    echo "pre-push: checking docker-compose files..."
+    for f in $compose_files; do
+        if [ -f "$f" ]; then
+            if ! docker compose -f "$f" config --quiet 2>/dev/null; then
+                echo "  FAIL: $f"
+                failed=1
+            else
+                echo "  OK: $f"
+            fi
+        fi
+    done
+fi
+
+if [ "$failed" -ne 0 ]; then
+    echo ""
+    echo "pre-push: validation failed. Fix errors before pushing."
+    exit 1
+fi

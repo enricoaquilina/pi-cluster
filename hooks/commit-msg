@@ -1,0 +1,36 @@
+#!/bin/bash
+# Enforce conventional commit format on the first line.
+# Allows: fix, feat, docs, refactor, test, chore, ci, perf, style, build, revert
+# Optional scope: fix(smoke): ...
+# Also allows: Merge branch ..., Revert "..."
+
+msg_file="$1"
+first_line=$(head -1 "$msg_file")
+
+# Allow merge/revert commits
+if echo "$first_line" | grep -qE '^(Merge |Revert ")'; then
+    exit 0
+fi
+
+# Conventional commit: type[(scope)][!]: description
+if ! echo "$first_line" | grep -qE '^(fix|feat|docs|refactor|test|chore|ci|perf|style|build|revert)(\([a-z0-9_-]+\))?!?: .+'; then
+    echo "ERROR: Commit message must follow conventional commits format."
+    echo ""
+    echo "  type[(scope)]: description"
+    echo ""
+    echo "  Types: fix, feat, docs, refactor, test, chore, ci, perf, style, build, revert"
+    echo "  Examples:"
+    echo "    fix(smoke): handle SSH timeout in polymarket check"
+    echo "    feat: add VictoriaMetrics monitoring stack"
+    echo "    docs: update smoke-checks README"
+    echo ""
+    echo "  Got: $first_line"
+    exit 1
+fi
+
+# Check first line length (max 72 chars for git log readability)
+if [ ${#first_line} -gt 72 ]; then
+    echo "WARNING: First line is ${#first_line} chars (recommended max: 72)"
+    echo "  $first_line"
+    # Warning only, don't block
+fi
