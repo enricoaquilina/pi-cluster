@@ -14,6 +14,7 @@ Retention: 14 days on both local and remote.
 - Dispatch log is fetched from **heavy** `/home/enrico/data/openclaw-dispatch-log.db`
 - MongoDB data is on heavy's **local storage** (`/home/enrico/mongodb-data/`), NOT on NFS
 - Backup size should be >100K — if smaller, the backup script may have lost connectivity to heavy
+- NFS backup wrapper (`scripts/nfs-backup.sh`) tolerates partial rsync failures (exit 23/24 treated as warnings)
 
 ## Backup Contents
 
@@ -37,6 +38,9 @@ YYYY-MM-DD/
     missioncontrol.sql     # PostgreSQL dump of Mission Control
   ansible/
     *.yml                  # Vault secrets, vars, inventory
+  polymarket-bot/
+    .env                   # Polymarket bot secrets (CLOB auth, Telegram)
+    data/                  # positions.json, control.json
 ```
 
 ## Restore Procedures
@@ -160,6 +164,15 @@ sudo systemctl restart openclaw-cluster-service
 sleep 10
 make openclaw-test
 ```
+
+### Restore Polymarket Bot
+
+1. Clone repo: `git clone git@github.com:enricoaquilina/polly-bot.git /mnt/external/polymarket-bot`
+2. Create venv: `python3 -m venv /home/enrico/polymarket-venv`
+3. Install: `bash scripts/install.sh`
+4. Restore `.env` from backup or vault
+5. Restore `data/` directory from NFS backup (positions.json, control.json)
+6. Deploy service: `bash scripts/deploy.sh`
 
 ## Validation
 

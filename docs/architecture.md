@@ -1,6 +1,6 @@
 # OpenClaw Cluster Architecture
 
-Last updated: 2026-03-25
+Last updated: 2026-04-21
 
 ## Cluster Overview
 
@@ -67,6 +67,9 @@ MongoDB storage: `/home/enrico/mongodb-data/` (local, NOT NFS -- see Key Design 
 | `openclaw-stats-collector` | timer (30s) | Collects node stats, updates cache + MC feed |
 | `openclaw-watchdog-cluster` | timer (2min) | Detects disconnected nodes, auto-re-pairs |
 | `openclaw-node` | service | OpenClaw node agent |
+| `polymarket-bot` | service | Polymarket copy-trading bot (auto-restart, 250MB memory limit) |
+| `system-smoke-test` | timer (5min) | Modular health checks: 12 check modules in `smoke-checks/` |
+| `nfs-backup` | timer (6h) | Resilient rsync to master via `scripts/nfs-backup.sh` wrapper |
 
 ## NFS Topology
 

@@ -1,6 +1,6 @@
 # OpenClaw Operations Runbook
 
-Last updated: 2026-03-25
+Last updated: 2026-04-21
 
 ---
 
@@ -65,6 +65,29 @@ make openclaw-route coding   # Show which node would handle it (dry run)
 
 ```bash
 make openclaw-pair           # Re-pair all 4 nodes with gateway
+```
+
+### Deploy Polymarket Bot
+
+```bash
+ssh heavy "cd /mnt/external/polymarket-bot && bash scripts/deploy.sh"
+```
+
+Rolls back automatically on failure. Check logs: `ssh heavy "journalctl -u polymarket-bot -f"`
+
+### Restart Polymarket Bot
+
+```bash
+ssh heavy "sudo systemctl restart polymarket-bot"
+ssh heavy "journalctl -u polymarket-bot --since '1 min ago' --no-pager"
+```
+
+### Run NFS Backup Manually
+
+```bash
+ssh heavy "sudo systemctl start nfs-backup"
+# Check log for partial failures:
+ssh heavy "ls -lt /tmp/nfs-backup-*.log | head -1 | xargs tail -20"
 ```
 
 ---
@@ -288,6 +311,7 @@ All alerts are sent to Telegram via the bot configured in `secrets/monitoring.ym
 | **Cluster-watchdog** | Disconnected nodes detected | Every 2 min on heavy | Auto-re-pairs disconnected nodes |
 | **DR validation** | Backup missing, stale, or incomplete | Weekly (Sunday 4am) | Validates backup freshness, size, restore capability |
 | **Version check** | New OpenClaw version available | Nightly at 2am | Tests before applying, rolls back if broken |
+| **Smoke test (degraded)** | Service in degraded state | Hourly re-notification | Alerts repeat hourly for services that remain degraded |
 
 ### Alert triage priority
 
