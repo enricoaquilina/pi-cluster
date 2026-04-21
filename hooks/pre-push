@@ -29,12 +29,16 @@ if [ -n "$playbooks" ]; then
     done
 fi
 
-# Shell script syntax check
+# Shell script syntax check (skip bats test files — @test is not bash syntax)
 scripts=$(echo "$changed_files" | grep '\.sh$' || true)
 if [ -n "$scripts" ]; then
     echo "pre-push: checking shell scripts..."
     for s in $scripts; do
         if [ -f "$s" ]; then
+            if head -1 "$s" | grep -q 'bats$'; then
+                echo "  SKIP (bats): $s"
+                continue
+            fi
             if ! bash -n "$s" 2>/dev/null; then
                 echo "  FAIL: $s"
                 failed=1
