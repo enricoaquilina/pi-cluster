@@ -39,7 +39,8 @@ def _compute_copybot_stats(control, positions, trades):
 
     total_unrealized = sum(
         (p.get("current_price", 0) - p.get("entry_price", 0)) * p.get("size", 0)
-        for p in positions if not p.get("resolved")
+        for p in positions
+        if not p.get("resolved") and p.get("current_price", 0) > 0
     )
 
     executed = [t for t in trades if t.get("executed")]

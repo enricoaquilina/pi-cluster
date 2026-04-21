@@ -77,7 +77,10 @@ def copybot_positions():
         entry = p.get("entry_price", 0)
         current = p.get("current_price", 0)
         size = p.get("size", 0)
-        p["computed_pnl"] = round((current - entry) * size, 2)
+        if current > 0:
+            p["computed_pnl"] = round((current - entry) * size, 2)
+        else:
+            p["computed_pnl"] = None
     return positions
 
 
@@ -94,7 +97,6 @@ def copybot_trades(limit: int = Query(50, ge=1, le=500), offset: int = Query(0, 
 @router.get("/api/trading/copybot/traders")
 def copybot_traders():
     trades = _read_json_cached("paper_trades.json")
-    positions = _read_json_cached("positions.json")
     if not trades:
         return []
 
