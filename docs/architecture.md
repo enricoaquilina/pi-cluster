@@ -10,10 +10,10 @@ Last updated: 2026-04-21
 
 | Node | Hardware | IPs | Role | Max Concurrent |
 |------|----------|-----|------|----------------|
-| **master** | Pi 5 8GB | 192.168.0.22 | NFS server, Pi-hole DNS, Cloudflare tunnel, compute (orchestrator) | 5 |
+| **master** | Pi 5 8GB | 192.168.0.22 | NFS server, Pi-hole DNS, Cloudflare tunnel, monitoring (VM+Grafana), compute (orchestrator) | 5 |
 | **build** (slave0) | Pi 5 4GB | 192.168.0.3, Tailscale 100.65.188.85 | Coding node, Pi-hole MASTER | 5 |
 | **light** (slave1) | Pi 4 2GB | 192.168.0.4 | Research node, Pi-hole BACKUP | 3 |
-| **heavy** | NiPoGi P2, AMD Ryzen 3, 12GB | 192.168.0.5, Tailscale 100.85.234.128 | ALL Docker services, monitoring, compute | 10 |
+| **heavy** | NiPoGi P2, AMD Ryzen 3, 12GB | 192.168.0.5, Tailscale 100.85.234.128 | ALL Docker services (except monitoring), compute | 10 |
 
 ### master (192.168.0.22)
 

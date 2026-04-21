@@ -41,6 +41,9 @@ ansible-playbook "$REPO_DIR/playbooks/log-maintenance.yml" --quiet 2>&1 | while 
 log "Running openclaw-monitoring playbook..."
 ansible-playbook "$REPO_DIR/playbooks/openclaw-monitoring.yml" --quiet 2>&1 | while read -r line; do log "monitoring: $line"; done
 
+log "Running monitoring stack playbook..."
+ansible-playbook "$REPO_DIR/playbooks/monitoring.yml" --quiet 2>&1 | while read -r line; do log "mon-stack: $line"; done
+
 # Sync heavy's clone and rebuild MC if needed (single SSH call)
 # Smart rebuild: only docker build when Dockerfile/requirements change,
 # skip pip when only app code changes (layer cache handles it),
