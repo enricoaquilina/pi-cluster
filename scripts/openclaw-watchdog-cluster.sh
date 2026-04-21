@@ -32,27 +32,34 @@ save_state() {
     echo "$1" > "$STATE_FILE"
 }
 
-# Step 1: Check gateway health
-gateway_status=$(docker ps --filter "name=$GATEWAY_CONTAINER" --format '{{.Status}}' 2>/dev/null || echo "")
+# Step 1: Check gateway health (only on the node that runs it)
+if [ "$(hostname)" = "heavy" ]; then
+    gateway_status=$(docker ps --filter "name=$GATEWAY_CONTAINER" --format '{{.Status}}' 2>/dev/null || echo "")
 
-if [ -z "$gateway_status" ]; then
-    log "CRITICAL: Gateway container not found"
-    if [ "$(get_state gateway_alert)" != "true" ]; then
-        send_telegram "🔴 *OpenClaw Gateway DOWN*
+    if [ -z "$gateway_status" ]; then
+        log "CRITICAL: Gateway container not found"
+        if [ "$(get_state gateway_alert)" != "true" ]; then
+            send_telegram "🔴 *OpenClaw Gateway DOWN*
 Container \`$GATEWAY_CONTAINER\` not found.
 Manual intervention required."
-        save_state '{"gateway_alert":"true"}'
+            save_state '{"gateway_alert":"true"}'
+        fi
+        exit 1
     fi
-    exit 1
-fi
 
-if echo "$gateway_status" | grep -qi "restarting"; then
-    log "WARNING: Gateway is restarting, waiting..."
-    exit 0
+    if echo "$gateway_status" | grep -qi "restarting"; then
+        log "WARNING: Gateway is restarting, waiting..."
+        exit 0
+    fi
 fi
 
 # Step 2: Refresh stats cache
-bash "$SCRIPT_DIR/openclaw-stats-collector.sh" 2>/dev/null
+if [ "$(hostname)" = "heavy" ]; then
+    bash "$SCRIPT_DIR/openclaw-stats-collector.sh" 2>/dev/null
+else
+    # On non-heavy nodes, pull node status from MC API
+    curl -sf --max-time 10 http://192.168.0.5:8000/api/nodes > "$CACHE_FILE" 2>/dev/null
+fi
 
 if [ ! -f "$CACHE_FILE" ]; then
     log "ERROR: Stats cache not available"
@@ -67,7 +74,11 @@ node_status=$(python3 -c "
 import json
 with open('$CACHE_FILE') as f:
     data = json.load(f)
-status = {n['name']: n.get('connected', False) for n in data.get('nodes', [])}
+if isinstance(data, list):
+    nodes = data
+else:
+    nodes = data.get('nodes', [])
+status = {n['name']: n.get('metadata', {}).get('connected', False) for n in nodes}
 for name in '${EXPECTED_NODES[*]}'.split():
     print(name, 'true' if status.get(name) else 'false')
 " 2>/dev/null)

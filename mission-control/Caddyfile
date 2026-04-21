@@ -3,16 +3,20 @@
 		timeouts {
 			read_body 10s
 			read_header 5s
-			write 30s
-			idle 60s
+			idle 120s
 		}
 	}
 }
 
 :80 {
+	header {
+		X-Request-ID {http.request.uuid}
+	}
+
 	handle /api/events {
 		reverse_proxy api:8000 {
 			header_up X-Api-Key {$API_KEY}
+			header_up X-Request-ID {http.request.uuid}
 			flush_interval -1
 			transport http {
 				dial_timeout 10s
@@ -26,6 +30,7 @@
 		}
 		reverse_proxy api:8000 {
 			header_up X-Api-Key {$API_KEY}
+			header_up X-Request-ID {http.request.uuid}
 			transport http {
 				dial_timeout 10s
 			}
@@ -34,6 +39,7 @@
 
 	handle /health {
 		reverse_proxy api:8000 {
+			header_up X-Request-ID {http.request.uuid}
 			transport http {
 				dial_timeout 10s
 			}

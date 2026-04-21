@@ -27,5 +27,6 @@ elif [ "$rc" -ne 0 ]; then
     exit $rc
 fi
 
+ssh master "touch /mnt/external/.last-backup" 2>/dev/null
 logger -t nfs-backup "Backup completed successfully"
 exit 0
