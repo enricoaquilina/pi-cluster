@@ -744,6 +744,19 @@ for svc in "${!RESULTS[@]}"; do
             fail_count=$((fail_count + 1))
             echo "$fail_count" > "$FAIL_COUNT_DIR/${svc}.count"
         fi
+
+        # Still-degraded reminders (hourly)
+        if [[ "$new_status" == "degraded" ]]; then
+            last_notified=$(cat "$notified_file" 2>/dev/null || echo "0")
+            elapsed=$(( TIMESTAMP - last_notified ))
+            if [[ "$elapsed" -ge 3600 ]]; then
+                since_ts=$(cat "$since_file" 2>/dev/null || echo "$TIMESTAMP")
+                downtime_min=$(( (TIMESTAMP - since_ts) / 60 ))
+                msg="STILL DEGRADED: ${svc} (${downtime_min} min)"
+                send_alert "$msg"
+                echo "$TIMESTAMP" > "$notified_file"
+            fi
+        fi
     fi
 done
 
