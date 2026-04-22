@@ -2,7 +2,7 @@ services:
   victoriametrics:
     image: victoriametrics/victoria-metrics:latest
     container_name: victoriametrics
-    mem_limit: 128m
+    mem_limit: 256m
     restart: unless-stopped
     network_mode: host
     volumes:
@@ -23,7 +23,7 @@ services:
   grafana:
     image: grafana/grafana-oss:latest
     container_name: grafana
-    mem_limit: 128m
+    mem_limit: 256m
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
