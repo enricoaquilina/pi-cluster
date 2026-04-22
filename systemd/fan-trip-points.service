@@ -1,0 +1,11 @@
+[Unit]
+Description=Set custom fan trip points for Pi 5
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/set-fan-trip-points.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
