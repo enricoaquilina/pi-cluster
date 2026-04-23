@@ -237,10 +237,13 @@ teardown() {
 
 # === life_notify_telegram ===
 
-@test "notify_telegram no-ops without credentials" {
+@test "notify_telegram returns error without telegram lib" {
     life_init_env
     unset TELEGRAM_BOT_TOKEN
     unset TELEGRAM_CHAT_ID
+    # Override HOME so telegram lib path doesn't exist
+    export HOME="$TMPDIR_TEST/nonexistent-home"
     run life_notify_telegram "test message"
-    [[ "$status" -eq 0 ]]
+    [[ "$status" -eq 1 ]]
+    [[ "$output" == *"not found"* ]]
 }

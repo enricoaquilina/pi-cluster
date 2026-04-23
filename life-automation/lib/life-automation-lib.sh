@@ -11,8 +11,8 @@
 #       TODAY, YEAR, MONTH, DAILY_NOTE
 # Creates LOG_DIR if missing.
 life_init_env() {
-    export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
     export HOME="${HOME:-/home/enrico}"
+    export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
     export LANG="en_US.UTF-8"
     export PYTHONIOENCODING="utf-8"
 
@@ -127,17 +127,24 @@ life_require_claude_cli() {
 
 # --- Telegram notification ---
 # Sends a message via Telegram. Requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
-# Silently no-ops if credentials are unset or curl fails.
+# Returns 1 if notification could not be sent (logs error to stderr).
 life_notify_telegram() {
-    local msg="${1:-}"
+    local msg="${1:?usage: life_notify_telegram MESSAGE}"
     local telegram_lib="$HOME/pi-cluster/scripts/lib/telegram.sh"
     if ! type send_telegram >/dev/null 2>&1; then
         if [[ -f "$telegram_lib" ]]; then
             # shellcheck source=/dev/null
-            source "$telegram_lib" 2>/dev/null || return 0
+            if ! source "$telegram_lib"; then
+                echo "ERROR: failed to source telegram library: $telegram_lib" >&2
+                return 1
+            fi
         else
-            return 0
+            echo "ERROR: telegram library not found: $telegram_lib" >&2
+            return 1
         fi
     fi
-    send_telegram "$msg" 2>/dev/null || true
+    if ! send_telegram "$msg"; then
+        echo "ERROR: send_telegram failed" >&2
+        return 1
+    fi
 }
