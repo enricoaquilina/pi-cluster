@@ -4,8 +4,48 @@ name: Lint
 on:
   push:
     branches: [master, main]
+    paths:
+      - '*.yml'
+      - '*.yaml'
+      - '.yamllint.yml'
+      - '.ansible-lint'
+      - 'playbooks/**'
+      - 'templates/**'
+      - 'vars/**'
+      - 'inventory/**'
+      - 'scripts/**'
+      - 'files/**'
+      - 'mission-control/backend/**/*.py'
+      - 'life-automation/**/*.py'
+      - 'docker-compose*.yml'
+      - 'ruff.toml'
+      - '.pre-commit-config.yaml'
+      - '.gitleaksignore'
+      - '.github/**'
   pull_request:
     branches: [master, main]
+    paths:
+      - '*.yml'
+      - '*.yaml'
+      - '.yamllint.yml'
+      - '.ansible-lint'
+      - 'playbooks/**'
+      - 'templates/**'
+      - 'vars/**'
+      - 'inventory/**'
+      - 'scripts/**'
+      - 'files/**'
+      - 'mission-control/backend/**/*.py'
+      - 'life-automation/**/*.py'
+      - 'docker-compose*.yml'
+      - 'ruff.toml'
+      - '.pre-commit-config.yaml'
+      - '.gitleaksignore'
+      - '.github/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   yaml-lint:

@@ -5,7 +5,7 @@ on:
   issue_comment:
     types: [created]
   workflow_run:
-    workflows: ["AI PR Review", "Lint", "Validate", "Security Scan", "Mission Control Tests", "Life Automation"]
+    workflows: ["AI PR Review", "Lint", "Validate", "Security Scan", "Mission Control Tests", "Life Automation", "GPT-5.4 Strict Review"]
     types: [completed]
 
 permissions:
@@ -92,6 +92,9 @@ jobs:
       github.event.workflow_run.name == 'AI PR Review' &&
       github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    concurrency:
+      group: claude-fix-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
     steps:
       - name: Get PR info
         id: pr
@@ -162,7 +165,8 @@ jobs:
             - APPLY fixes for: bash &&/|| chains, grep basic-regex patterns, port matching precision,
               hardcoded CI passwords, mutable action tags, SSH empty-result handling
             If no findings are worth applying, do nothing — do NOT make changes just to make changes.
-            If you do make fixes, commit with clear messages, then push: git push origin HEAD
+            If you do make fixes, commit with message prefix "Auto-fix: PR-Agent review —"
+            followed by a brief description. Then push: git push origin HEAD
 
       - name: Notify of auto-fix changes
         if: always()
@@ -202,6 +206,201 @@ jobs:
         if: always() && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
         run: |
           echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review GPT-5.4 findings before merging manually."
+
+  # ── Auto: fix GPT-5.4 deep review findings ────────────────────────────────
+  claude-fix-on-gpt-review:
+    name: Claude Fix (GPT-5.4 review)
+    if: |
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'GPT-5.4 Strict Review' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: claude-fix-review-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    steps:
+      - name: Get PR and GPT-5.4 findings
+        id: pr
+        run: |
+          set -euo pipefail
+          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
+          REPO="${{ github.repository }}"
+
+          PR_DATA=$(gh pr list -R "$REPO" \
+            --head "$HEAD_BRANCH" --state open --json number,title -q '.[0]' 2>/dev/null || echo "{}")
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty' 2>/dev/null || echo "")
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // empty' 2>/dev/null || echo "")
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "No open PR for branch $HEAD_BRANCH"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
+
+          # Check PR is still open (may have merged during concurrency wait)
+          PR_STATE=$(gh pr view "$PR_NUMBER" -R "$REPO" --json state -q '.state' 2>/dev/null || echo "CLOSED")
+          if [ "$PR_STATE" != "OPEN" ]; then
+            echo "::notice::PR #$PR_NUMBER is $PR_STATE, skipping"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Loop prevention: max 1 GPT-5.4 auto-fix run per PR (one-shot)
+          FIX_COUNT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
+            --json comments --jq '[.comments[] | select(.author.login == "github-actions") | .body | select(contains("GPT-5.4 auto-fix"))] | length' 2>/dev/null || echo "0")
+          if [ "$FIX_COUNT" -ge 1 ]; then
+            echo "::warning::Already $FIX_COUNT GPT-5.4 auto-fix runs on PR #$PR_NUMBER — skipping"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Extract GPT-5.4 review comment (most recent)
+          GPT_COMMENT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
+            --json comments --jq '
+              [.comments[]
+                | select(.author.login == "github-actions")
+                | select(.body | contains("GPT-5.4 Strict Review"))]
+              | last
+              | .body // empty' 2>/dev/null || echo "")
+
+          if [ -z "$GPT_COMMENT" ]; then
+            echo "::notice::No GPT-5.4 review comment found on PR #$PR_NUMBER"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Check for findings >= 7/10 severity
+          HAS_ACTIONABLE=$(echo "$GPT_COMMENT" | grep -cE '\[([7-9]|10)/10\]' || echo "0")
+          if [ "$HAS_ACTIONABLE" -eq 0 ]; then
+            echo "::notice::No GPT-5.4 findings >= 7/10 severity on PR #$PR_NUMBER"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_fix=true" >> "$GITHUB_OUTPUT"
+          echo "Found $HAS_ACTIONABLE actionable GPT-5.4 findings (>= 7/10)"
+
+          # Pass full comment body via output
+          EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
+          {
+            echo "gpt_findings<<$EOF_MARKER"
+            echo "$GPT_COMMENT"
+            echo "$EOF_MARKER"
+          } >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+        if: steps.pr.outputs.should_fix == 'true'
+
+      - name: Capture base SHA before fixer
+        if: steps.pr.outputs.should_fix == 'true'
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: ./.github/actions/setup-claude-fix
+        if: steps.pr.outputs.should_fix == 'true'
+        with:
+          branch: ${{ steps.pr.outputs.branch }}
+          condition: ${{ steps.pr.outputs.should_fix }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          bot_app_id: ${{ vars.BOT_APP_ID }}
+          bot_private_key: ${{ secrets.BOT_PRIVATE_KEY }}
+          prompt: |
+            CRITICAL RULES:
+            - NEVER delete files that were added in this PR
+            - NEVER remove functions, classes, or imports that were intentionally added
+            - NEVER revert changes that are part of the PR's stated purpose
+            - The human author's intent takes priority over automated suggestions
+            - Do NOT re-do fixes already applied by the PR-Agent auto-fixer
+
+            You are fixing findings from a GPT-5.4 deep code review on PR #${{ steps.pr.outputs.number }}.
+
+            SEVERITY FILTER: Only fix findings rated 7/10 or higher. Skip 6/10 and below.
+
+            DUPLICATE CHECK: Before fixing each finding, run `git log --oneline -5` to check
+            for recent "Auto-fix:" commits. If a finding's file+line was already modified by a
+            prior auto-fix commit, verify the issue is still present before fixing again.
+
+            For each actionable finding (>= 6/10):
+            1. Verify the problem still exists in the current code (may have been fixed already)
+            2. Determine if the suggested fix is correct and safe
+            3. If valid, apply the fix
+            4. If the suggestion is wrong or would break something, skip it
+
+            Focus on: security fixes, correctness bugs, reliability issues, shell safety.
+            Do NOT make cosmetic-only changes.
+            Consult .github/best_practices.md for known good patterns in this codebase.
+
+            If you make fixes, commit with message prefix "Auto-fix: GPT-5.4 review —"
+            followed by a brief description. Then push: git push origin HEAD
+
+            If no findings are worth fixing (all already addressed, all low severity,
+            or all false positives), do nothing — do NOT make changes just to make changes.
+
+            GPT-5.4 REVIEW FINDINGS:
+            ```
+            ${{ steps.pr.outputs.gpt_findings }}
+            ```
+
+      - name: Post GPT-5.4 auto-fix result
+        if: always() && steps.pr.outputs.should_fix == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR_NUM="${{ steps.pr.outputs.number }}"
+          CHANGED=$(git diff --name-only "${{ steps.base.outputs.sha }}..HEAD" 2>/dev/null || echo "")
+          if [ -n "$CHANGED" ]; then
+            {
+              printf '🤖 **GPT-5.4 auto-fix modified files:**\n'
+              while IFS= read -r file; do
+                printf -- '- `%s`\n' "$file"
+              done <<< "$CHANGED"
+            } > /tmp/gpt-fix-comment.md
+            gh pr comment "$PR_NUM" --body-file /tmp/gpt-fix-comment.md || true
+          else
+            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed." || true
+          fi
+
+      - name: Telegram notification
+        if: always() && steps.pr.outputs.should_fix == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          CHANGED=$(git diff --name-only "${{ steps.base.outputs.sha }}..HEAD" 2>/dev/null || echo "")
+          if [ -n "$CHANGED" ]; then
+            MSG="🤖 GPT-5.4 auto-fix modified PR #${{ steps.pr.outputs.number }}:
+          $(echo "$CHANGED" | head -10)"
+            curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=${MSG}" \
+              -d "parse_mode=Markdown" > /dev/null 2>&1 \
+              || echo "::warning::Telegram notification failed"
+          fi
+
+      - name: Enable auto-merge after GPT-5.4 fixes
+        if: always() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUM="${{ steps.pr.outputs.number }}"
+          echo "Enabling auto-merge for PR #${PR_NUM} (after GPT-5.4 fix pass)..."
+          gh pr merge "$PR_NUM" \
+            -R "${{ github.repository }}" \
+            --squash --auto --delete-branch \
+            || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
+
+      - name: Skip auto-merge for feat PRs
+        if: always() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
+        run: |
+          echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review remaining GPT-5.4 findings before merging manually."
 
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
   claude-fix-on-ci-failure:

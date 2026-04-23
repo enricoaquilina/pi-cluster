@@ -4,8 +4,38 @@ name: Validate
 on:
   push:
     branches: [master, main]
+    paths:
+      - 'playbooks/**'
+      - 'templates/**'
+      - 'vars/**'
+      - 'inventory/**'
+      - 'tests/**'
+      - 'ansible.cfg'
+      - 'requirements*.yml'
+      - 'mission-control/backend/**'
+      - 'docker-compose*.yml'
+      - 'configs/**'
+      - 'openclaw/**'
+      - '.github/**'
   pull_request:
     branches: [master, main]
+    paths:
+      - 'playbooks/**'
+      - 'templates/**'
+      - 'vars/**'
+      - 'inventory/**'
+      - 'tests/**'
+      - 'ansible.cfg'
+      - 'requirements*.yml'
+      - 'mission-control/backend/**'
+      - 'docker-compose*.yml'
+      - 'configs/**'
+      - 'openclaw/**'
+      - '.github/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 env:
   ANSIBLE_VAULT_PASSWORD_FILE: tests/vault-password.txt
