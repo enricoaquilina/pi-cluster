@@ -95,7 +95,7 @@ jobs:
               "4. Shell safety: unquoted variables, missing set -euo pipefail, word splitting risks\n"
               "5. Ansible/Docker: deprecated modules, privilege escalation, missing idempotency guards\n\n"
               "Rules:\n"
-              "- Rate each finding 1-10 importance. Only report findings >= 7.\n"
+              "- Rate each finding 1-10 importance. Only report findings >= 8.\n"
               "- For each finding: file, line range, problem, suggested fix (as code).\n"
               "- If the PR is clean, say so in one line.\n"
               "- No praise, no filler, no summaries. Findings only.\n"
