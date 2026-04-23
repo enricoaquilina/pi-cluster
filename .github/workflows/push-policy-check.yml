@@ -58,7 +58,7 @@ jobs:
           if [ -n "$VIOLATION" ]; then
             MSG="⚠️ Direct push to master: $VIOLATION (commit ${COMMIT:0:7})"
             echo "::warning::$MSG"
-            if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
               curl -sf -X POST \
                 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
