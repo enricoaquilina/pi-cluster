@@ -222,6 +222,7 @@ jobs:
       - name: Get PR and GPT-5.4 findings
         id: pr
         run: |
+          set -euo pipefail
           HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
           REPO="${{ github.repository }}"
 
@@ -250,7 +251,7 @@ jobs:
 
           # Loop prevention: max 2 GPT-5.4 auto-fix runs per PR
           FIX_COUNT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
-            --json comments --jq '[.comments[].body | select(contains("GPT-5.4 auto-fix"))] | length' 2>/dev/null || echo "0")
+            --json comments --jq '[.comments[] | select(.author.login == "github-actions") | .body | select(contains("GPT-5.4 auto-fix"))] | length' 2>/dev/null || echo "0")
           if [ "$FIX_COUNT" -ge 2 ]; then
             echo "::warning::Already $FIX_COUNT GPT-5.4 auto-fix runs on PR #$PR_NUMBER — skipping"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
@@ -295,6 +296,11 @@ jobs:
 
       - uses: actions/checkout@v4
         if: steps.pr.outputs.should_fix == 'true'
+
+      - name: Capture base SHA before fixer
+        if: steps.pr.outputs.should_fix == 'true'
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/setup-claude-fix
         if: steps.pr.outputs.should_fix == 'true'
@@ -346,13 +352,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           PR_NUM="${{ steps.pr.outputs.number }}"
-          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          CHANGED=$(git diff --name-only "${{ steps.base.outputs.sha }}..HEAD" 2>/dev/null || echo "")
           if [ -n "$CHANGED" ]; then
-            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix modified files:**
-          $(echo "$CHANGED" | sed 's/^/- /')" 2>/dev/null || true
+            {
+              printf '🤖 **GPT-5.4 auto-fix modified files:**\n'
+              while IFS= read -r file; do
+                printf -- '- `%s`\n' "$file"
+              done <<< "$CHANGED"
+            } > /tmp/gpt-fix-comment.md
+            gh pr comment "$PR_NUM" --body-file /tmp/gpt-fix-comment.md || true
           else
-            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed." 2>/dev/null || true
+            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed." || true
           fi
 
       - name: Telegram notification
@@ -361,7 +373,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          set -euo pipefail
+          CHANGED=$(git diff --name-only "${{ steps.base.outputs.sha }}..HEAD" 2>/dev/null || echo "")
           if [ -n "$CHANGED" ]; then
             MSG="🤖 GPT-5.4 auto-fix modified PR #${{ steps.pr.outputs.number }}:
           $(echo "$CHANGED" | head -10)"
@@ -373,7 +386,7 @@ jobs:
           fi
 
       - name: Enable auto-merge after GPT-5.4 fixes
-        if: always() && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
+        if: always() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -385,7 +398,7 @@ jobs:
             || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
 
       - name: Skip auto-merge for feat PRs
-        if: always() && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
+        if: always() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
         run: |
           echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review remaining GPT-5.4 findings before merging manually."
 
