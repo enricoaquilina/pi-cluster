@@ -120,7 +120,7 @@ PARA-structured knowledge system at `~/life/` on heavy with automation in `life-
 - **Daily Notes** — session logs at `Daily/YYYY/MM/YYYY-MM-DD.md`, heartbeat reference
 - **Tacit Knowledge** — rules, habits, lessons in `Areas/about-me/`
 
-Nightly consolidation (2 AM) extracts facts from daily notes via Claude Haiku, with entity slug normalization, temporal-aware decay, and summary size monitoring. The `~/life/scripts/` directory symlinks to `life-automation/` in this repo. See [architecture.md](docs/architecture.md) for details.
+Nightly consolidation (2 AM) extracts facts from daily notes via Claude Haiku, with entity slug normalization, temporal-aware decay, and summary size monitoring. Daily maintenance (5:43 AM) carries forward pending items, checks deadlines, and runs full weekly review on Mondays via `/weekly` Claude Code skill. The `~/life/scripts/` directory symlinks to `life-automation/` in this repo. See [architecture.md](docs/architecture.md) for details.
 
 ## Project Structure
 
@@ -132,7 +132,8 @@ homelab/
 ├── templates/           # Jinja2 templates (systemd, configs)
 ├── scripts/             # Bash/Python scripts (router, watchdog, health, etc.)
 ├── life-automation/     # Knowledge base automation (symlinked from ~/life/scripts/)
-│   └── tests/           # pytest suite (281 tests)
+│   ├── lib/             # Shared bash library (life-automation-lib.sh, life-git-sync.sh)
+│   └── tests/           # pytest + bats test suite
 ├── secrets/             # Ansible Vault encrypted secrets
 ├── docs/                # Architecture, runbook, DR procedures
 ├── .github/workflows/   # CI/CD: review, fix, merge, lint, security

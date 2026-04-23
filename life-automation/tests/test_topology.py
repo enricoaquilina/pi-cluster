@@ -78,7 +78,10 @@ def test_nightly_refuses_when_scripts_is_not_symlink(tmp_path, monkeypatch):
 
 
 def test_nightly_script_mentions_kill_switch():
-    """Smoke check: nightly honors LIFE_LLM_DISABLED."""
-    text = NIGHTLY.read_text()
-    assert "LIFE_LLM_DISABLED" in text
-    assert ".llm-disabled" in text
+    """Smoke check: nightly honors LIFE_LLM_DISABLED (via lib or inline)."""
+    nightly_text = NIGHTLY.read_text()
+    lib_file = CANONICAL / "lib" / "life-automation-lib.sh"
+    lib_text = lib_file.read_text() if lib_file.exists() else ""
+    combined = nightly_text + lib_text
+    assert "LIFE_LLM_DISABLED" in combined
+    assert ".llm-disabled" in combined
