@@ -4,16 +4,11 @@
 # Shares consolidate.lock with nightly — skip if nightly is running.
 set -euo pipefail
 
-LIFE_DIR="${LIFE_DIR:-$HOME/life}"
-LOG_DIR="$LIFE_DIR/logs"
-TODAY=$(date '+%Y-%m-%d')
-YEAR=$(date '+%Y')
-MONTH=$(date '+%m')
-LOCK_FILE="$LOG_DIR/consolidate.lock"
-STATE_FILE="$LOG_DIR/.mini-consolidate-mtime"
-DAILY_NOTE="$LIFE_DIR/Daily/$YEAR/$MONTH/$TODAY.md"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/life-automation-lib.sh"
 
-mkdir -p "$LOG_DIR"
+life_init_env
+STATE_FILE="$LOG_DIR/.mini-consolidate-mtime"
 
 # 0. Auto-create daily note from template if missing
 if [ ! -f "$DAILY_NOTE" ]; then
@@ -26,8 +21,7 @@ if [ ! -f "$DAILY_NOTE" ]; then
 fi
 
 # Shared lock with nightly consolidation — skip if already running
-exec 9>"$LOCK_FILE"
-flock -n 9 || exit 0
+life_acquire_lock "$LOG_DIR/consolidate.lock" || exit 0
 
 # Dead man's switch — signal start (opt-in via HEALTHCHECKS_IO_UUID env var)
 HC_UUID="${HEALTHCHECKS_IO_UUID:-}"

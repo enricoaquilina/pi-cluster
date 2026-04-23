@@ -1,63 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-# Cron safety: explicit PATH, HOME, locale
-export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
-export HOME="${HOME:-/home/enrico}"
-export LANG="en_US.UTF-8"
-export PYTHONIOENCODING="utf-8"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/life-automation-lib.sh"
 
-readonly LIFE_DIR="$HOME/life"
-readonly CLAUDE_BIN="$HOME/.local/bin/claude"
-readonly LOG_DIR="$LIFE_DIR/logs"
-readonly LOCK_FILE="$LOG_DIR/consolidate.lock"
+life_init_env
+TAG="consolidate"
+log() { life_log "$TAG" "$*"; }
+
+life_check_topology || exit 1
+life_check_llm_killswitch && log "LLM kill switch active; LLM phases will be skipped"
+life_rotate_logs "$TAG"
+life_acquire_lock "$LOG_DIR/consolidate.lock" || { log "Already running — skipping"; exit 0; }
+
 readonly HEARTBEAT_FILE="$LOG_DIR/consolidate.heartbeat"
-TODAY=$(date '+%Y-%m-%d')
-readonly TODAY
-YEAR=$(date '+%Y')
-readonly YEAR
-MONTH=$(date '+%m')
-readonly MONTH
-readonly DAILY_NOTE="$LIFE_DIR/Daily/$YEAR/$MONTH/$TODAY.md"
-
-mkdir -p "$LOG_DIR"
-
-log() { echo "$(date '+%Y-%m-%d %H:%M:%S') [consolidate] $*" | tee -a "$LOG_DIR/consolidate.log"; }
-
-# --- Phase 8.0.1: topology invariant ---
-# ~/life/scripts must be a symlink into canonical. If someone has replaced it
-# with a real directory, deploy topology has drifted and the run is unsafe.
-if [[ ! -L "$LIFE_DIR/scripts" ]]; then
-    log "ERROR: $LIFE_DIR/scripts is not a symlink; topology has drifted"
-    log "Expected: symlink to ~/pi-cluster/life-automation/"
-    exit 1
-fi
-
-# --- Phase 8.0.1: global LLM kill switch ---
-# Honored by nightly (skips LLM phases) and by every LLM-calling script.
-if [[ -n "${LIFE_LLM_DISABLED:-}" ]]; then
-    log "LLM kill switch active (env LIFE_LLM_DISABLED=$LIFE_LLM_DISABLED); LLM phases will be skipped"
-elif [[ -f "$LIFE_DIR/.llm-disabled" ]]; then
-    export LIFE_LLM_DISABLED=1
-    log "LLM kill switch active (sentinel $LIFE_DIR/.llm-disabled); LLM phases will be skipped"
-fi
-
-# --- Log rotation: keep last 30 days ---
-find "$LOG_DIR" -name "consolidate-errors-*.json" -mtime +30 -delete 2>/dev/null || true
-if [[ -f "$LOG_DIR/consolidate.log" ]] && [[ $(wc -c < "$LOG_DIR/consolidate.log") -gt 1048576 ]]; then
-    mv "$LOG_DIR/consolidate.log" "$LOG_DIR/consolidate.log.old"
-    log "Rotated consolidate.log (exceeded 1MB)"
-fi
-
-# --- Prevent concurrent runs ---
-exec 9>"$LOCK_FILE"
-flock -n 9 || { log "Already running — skipping"; exit 0; }
 
 TMPFILE=$(mktemp /tmp/life-consolidate-XXXXXX.json)
 trap 'rm -f "$TMPFILE"' EXIT
 
-[ -f "$DAILY_NOTE" ] || { log "No daily note for $TODAY — nothing to consolidate"; exit 0; }
-[ -x "$CLAUDE_BIN" ] || { log "ERROR: claude CLI not found at $CLAUDE_BIN"; exit 1; }
+life_require_daily_note || { log "No daily note for $TODAY — nothing to consolidate"; exit 0; }
+life_require_claude_cli || { log "ERROR: claude CLI not found at $CLAUDE_BIN"; exit 1; }
 
 log "Starting consolidation for $TODAY"
 

@@ -171,6 +171,23 @@ Three-layer PARA knowledge base at `~/life/` on heavy, integrated with Mission C
 2. Apply changes via `apply_extraction.py` (dedup, conflict detection, JSON validation)
 3. Touch heartbeat file; alert via Telegram if no daily note exists
 
+### Daily/Weekly Maintenance (5:43 AM systemd timer)
+`~/life/scripts/weekly-maintenance.sh` runs via `life-weekly.timer`:
+- **Daily (Tue-Sun):** carry forward pending items, deadline alerts, dashboard
+- **Monday:** full weekly review — promotion candidates, project audit, orphan cleanup, archive review
+- Config-driven model selection (`weekly-maintenance.conf`), retry on failure, Telegram notification
+- Uses shared library `lib/life-automation-lib.sh` (env, logging, locking, topology checks)
+- Output verification: compares pre/post pending item counts for idempotency
+
+### Shared Automation Library
+`life-automation/lib/life-automation-lib.sh` — common functions sourced by nightly-consolidate.sh, mini-consolidate.sh, and weekly-maintenance.sh:
+- `life_init_env` — cron-safe PATH/HOME/LANG, derive date vars
+- `life_log` / `life_rotate_logs` — tagged logging with rotation
+- `life_check_topology` — verify ~/life/scripts symlink
+- `life_check_llm_killswitch` — env var + sentinel file check
+- `life_acquire_lock` — flock-based concurrency guard
+- `life_require_daily_note` / `life_require_claude_cli` — preflight checks
+
 ### Mission Control Integration
 - `GET /api/memories` — searches across workspace files, ~/life/ PARA files, and FTS5 index
 - `GET /api/life/daily-status` — checks today's daily note existence and consolidation status
