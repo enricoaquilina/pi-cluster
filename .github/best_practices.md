@@ -179,3 +179,33 @@ command: find /path ! -perm -g+s -exec chmod g+s {} +
 ```yaml
 command: find /path -not -perm -g+s -exec chmod g+s {} +
 ```
+
+---
+
+## Workflow Run Chains
+
+### Use artifact pass-through for 2+ level workflow_run chains
+
+At 2+ levels deep, `pull_requests[]` is empty and `head_sha` points to the merge commit, not the PR branch.
+
+**Bad:**
+```yaml
+PR_NUM="${{ github.event.workflow_run.pull_requests[0].number }}"
+```
+
+**Good:**
+```yaml
+# Upstream workflow uploads artifact:
+- uses: actions/upload-artifact@v4
+  with:
+    name: pr-meta
+    path: /tmp/pr-meta.json
+    retention-days: 1
+
+# Downstream downloads it:
+- uses: actions/download-artifact@v4
+  with:
+    name: pr-meta
+    path: /tmp/pr-meta
+    run-id: ${{ github.event.workflow_run.id }}
+```
