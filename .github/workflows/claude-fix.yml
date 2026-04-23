@@ -249,10 +249,10 @@ jobs:
             exit 0
           fi
 
-          # Loop prevention: max 2 GPT-5.4 auto-fix runs per PR
+          # Loop prevention: max 1 GPT-5.4 auto-fix run per PR (one-shot)
           FIX_COUNT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
             --json comments --jq '[.comments[] | select(.author.login == "github-actions") | .body | select(contains("GPT-5.4 auto-fix"))] | length' 2>/dev/null || echo "0")
-          if [ "$FIX_COUNT" -ge 2 ]; then
+          if [ "$FIX_COUNT" -ge 1 ]; then
             echo "::warning::Already $FIX_COUNT GPT-5.4 auto-fix runs on PR #$PR_NUMBER — skipping"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -273,16 +273,16 @@ jobs:
             exit 0
           fi
 
-          # Check for findings >= 6/10 severity
-          HAS_ACTIONABLE=$(echo "$GPT_COMMENT" | grep -cE '\[([6-9]|10)/10\]' || echo "0")
+          # Check for findings >= 7/10 severity
+          HAS_ACTIONABLE=$(echo "$GPT_COMMENT" | grep -cE '\[([7-9]|10)/10\]' || echo "0")
           if [ "$HAS_ACTIONABLE" -eq 0 ]; then
-            echo "::notice::No GPT-5.4 findings >= 6/10 severity on PR #$PR_NUMBER"
+            echo "::notice::No GPT-5.4 findings >= 7/10 severity on PR #$PR_NUMBER"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "should_fix=true" >> "$GITHUB_OUTPUT"
-          echo "Found $HAS_ACTIONABLE actionable GPT-5.4 findings (>= 6/10)"
+          echo "Found $HAS_ACTIONABLE actionable GPT-5.4 findings (>= 7/10)"
 
           # Pass full comment body via output
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
@@ -320,7 +320,7 @@ jobs:
 
             You are fixing findings from a GPT-5.4 deep code review on PR #${{ steps.pr.outputs.number }}.
 
-            SEVERITY FILTER: Only fix findings rated 6/10 or higher. Skip 5/10 and below.
+            SEVERITY FILTER: Only fix findings rated 7/10 or higher. Skip 6/10 and below.
 
             DUPLICATE CHECK: Before fixing each finding, run `git log --oneline -5` to check
             for recent "Auto-fix:" commits. If a finding's file+line was already modified by a

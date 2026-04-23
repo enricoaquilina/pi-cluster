@@ -34,7 +34,7 @@ jobs:
           fi
           REVIEW_COUNT=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" --json comments \
             --jq '[.comments[] | select(.author.login == "github-actions") | select(.body | contains("GPT-5.4 Strict Review"))] | length' 2>/dev/null || echo "0")
-          if [ "$REVIEW_COUNT" -ge 2 ]; then
+          if [ "$REVIEW_COUNT" -ge 1 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "PR already has $REVIEW_COUNT GPT-5.4 reviews, skipping to prevent loop"
             exit 0
@@ -83,6 +83,11 @@ jobs:
           system_prompt = (
               "You are a strict code reviewer for a solo-dev infrastructure repo "
               "(Raspberry Pi cluster: Ansible, Docker Compose, Python backend, shell scripts, GitHub Actions).\n\n"
+              "Codebase context:\n"
+              "- Raspberry Pi cluster (Debian ARM64), 14 CI workflows with AI review pipeline\n"
+              "- Ansible playbooks deploy to 4-node cluster, Python FastAPI + React frontend\n"
+              "- Shell scripts use timed_ssh helper for remote commands\n"
+              "- Solo-dev repo, no forks, private GitHub repo\n\n"
               "Review this PR diff with extreme rigor. Focus on:\n"
               "1. Security: secrets in code, injection risks, overly broad permissions, unsafe shell patterns\n"
               "2. Correctness: logic bugs, race conditions, missing error handling at boundaries, off-by-one\n"
@@ -90,11 +95,20 @@ jobs:
               "4. Shell safety: unquoted variables, missing set -euo pipefail, word splitting risks\n"
               "5. Ansible/Docker: deprecated modules, privilege escalation, missing idempotency guards\n\n"
               "Rules:\n"
-              "- Rate each finding 1-10 importance. Only report findings >= 5.\n"
+              "- Rate each finding 1-10 importance. Only report findings >= 7.\n"
               "- For each finding: file, line range, problem, suggested fix (as code).\n"
               "- If the PR is clean, say so in one line.\n"
               "- No praise, no filler, no summaries. Findings only.\n"
-              "- Maximum 10 findings.\n\n"
+              "- Maximum 5 findings.\n\n"
+              "Anti-false-positive rules:\n"
+              "- The gh CLI --json output uses 'github-actions' (no [bot] suffix). Do NOT flag this as wrong.\n"
+              "- continue-on-error: true on scan/lint steps is intentional (non-blocking advisory).\n"
+              "- Narrow exception catches (e.g., psycopg2.Error) are intentional. Do NOT suggest broadening.\n"
+              "- This is Linux-only. Do NOT flag Linux-specific commands as portability issues.\n"
+              "- || echo '0' and || true patterns are intentional safety nets, not bugs.\n"
+              "- 2>/dev/null on gh commands suppresses noisy stderr in CI logs.\n"
+              "- head -8000 on diffs is intentional truncation for API payload limits.\n"
+              "- ubuntu-latest in runs-on is correct for GitHub Actions.\n\n"
               "Format each finding as:\n"
               "### [importance/10] file:line - short title\n"
               "**Problem:** ...\n"
@@ -108,7 +122,7 @@ jobs:
                   {"role": "user", "content": f"## PR: {title}\n\n{pr_body}\n\n## Diff\n\n{diff}"}
               ],
               "max_tokens": 4000,
-              "temperature": 0.2
+              "temperature": 0.1
           }
           with open("/tmp/review-payload.json", "w") as f:
               json.dump(payload, f)

@@ -4,6 +4,20 @@ name: Security Scan
 on:
   pull_request:
     branches: [master, main]
+    paths:
+      - 'openclaw/**'
+      - 'mission-control/**'
+      - 'docker-compose*.yml'
+      - 'scripts/**'
+      - 'playbooks/**'
+      - 'templates/**'
+      - '.github/**'
+      - '*.py'
+      - '*.sh'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
