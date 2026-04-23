@@ -223,16 +223,25 @@ jobs:
         id: pr
         run: |
           set -euo pipefail
-          HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
           REPO="${{ github.repository }}"
 
-          PR_DATA=$(gh pr list -R "$REPO" \
-            --head "$HEAD_BRANCH" --state open --json number,title -q '.[0]' 2>/dev/null || echo "{}")
-          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty' 2>/dev/null || echo "")
-          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // empty' 2>/dev/null || echo "")
+          # Get PR number from workflow_run event (not branch lookup — head_branch
+          # resolves to master for workflow_run-triggered workflows)
+          PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
 
-          if [ -z "$PR_NUMBER" ]; then
-            echo "No open PR for branch $HEAD_BRANCH"
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
+            echo "No PR associated with workflow run"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PR_DATA=$(gh pr view "$PR_NUMBER" -R "$REPO" --json number,title,headRefName,state 2>/dev/null || echo "{}")
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // empty')
+          HEAD_BRANCH=$(echo "$PR_DATA" | jq -r '.headRefName // empty')
+          PR_STATE=$(echo "$PR_DATA" | jq -r '.state // "CLOSED"')
+
+          if [ -z "$PR_TITLE" ] || [ "$PR_STATE" != "OPEN" ]; then
+            echo "::notice::PR #$PR_NUMBER is $PR_STATE, skipping"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -240,14 +249,6 @@ jobs:
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
           echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
-
-          # Check PR is still open (may have merged during concurrency wait)
-          PR_STATE=$(gh pr view "$PR_NUMBER" -R "$REPO" --json state -q '.state' 2>/dev/null || echo "CLOSED")
-          if [ "$PR_STATE" != "OPEN" ]; then
-            echo "::notice::PR #$PR_NUMBER is $PR_STATE, skipping"
-            echo "should_fix=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
 
           # Loop prevention: max 1 GPT-5.4 auto-fix run per PR (one-shot)
           FIX_COUNT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
@@ -273,16 +274,16 @@ jobs:
             exit 0
           fi
 
-          # Check for findings >= 7/10 severity
-          HAS_ACTIONABLE=$(echo "$GPT_COMMENT" | grep -cE '\[([7-9]|10)/10\]' || echo "0")
+          # Check for findings >= 8/10 severity
+          HAS_ACTIONABLE=$(echo "$GPT_COMMENT" | grep -cE '\[([8-9]|10)/10\]' || echo "0")
           if [ "$HAS_ACTIONABLE" -eq 0 ]; then
-            echo "::notice::No GPT-5.4 findings >= 7/10 severity on PR #$PR_NUMBER"
+            echo "::notice::No GPT-5.4 findings >= 8/10 severity on PR #$PR_NUMBER"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           echo "should_fix=true" >> "$GITHUB_OUTPUT"
-          echo "Found $HAS_ACTIONABLE actionable GPT-5.4 findings (>= 7/10)"
+          echo "Found $HAS_ACTIONABLE actionable GPT-5.4 findings (>= 8/10)"
 
           # Pass full comment body via output
           EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 2>/dev/null | base64)
@@ -320,13 +321,13 @@ jobs:
 
             You are fixing findings from a GPT-5.4 deep code review on PR #${{ steps.pr.outputs.number }}.
 
-            SEVERITY FILTER: Only fix findings rated 7/10 or higher. Skip 6/10 and below.
+            SEVERITY FILTER: Only fix findings rated 8/10 or higher. Skip 7/10 and below.
 
             DUPLICATE CHECK: Before fixing each finding, run `git log --oneline -5` to check
             for recent "Auto-fix:" commits. If a finding's file+line was already modified by a
             prior auto-fix commit, verify the issue is still present before fixing again.
 
-            For each actionable finding (>= 7/10):
+            For each actionable finding (>= 8/10):
             1. Verify the problem still exists in the current code (may have been fixed already)
             2. Determine if the suggested fix is correct and safe
             3. If valid, apply the fix
