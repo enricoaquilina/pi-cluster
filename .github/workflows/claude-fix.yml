@@ -326,7 +326,7 @@ jobs:
             for recent "Auto-fix:" commits. If a finding's file+line was already modified by a
             prior auto-fix commit, verify the issue is still present before fixing again.
 
-            For each actionable finding (>= 6/10):
+            For each actionable finding (>= 7/10):
             1. Verify the problem still exists in the current code (may have been fixed already)
             2. Determine if the suggested fix is correct and safe
             3. If valid, apply the fix
@@ -386,10 +386,11 @@ jobs:
           fi
 
       - name: Enable auto-merge after GPT-5.4 fixes
-        if: always() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
+        if: success() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           PR_NUM="${{ steps.pr.outputs.number }}"
           echo "Enabling auto-merge for PR #${PR_NUM} (after GPT-5.4 fix pass)..."
           gh pr merge "$PR_NUM" \
@@ -398,7 +399,7 @@ jobs:
             || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
 
       - name: Skip auto-merge for feat PRs
-        if: always() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
+        if: success() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
         run: |
           echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review remaining GPT-5.4 findings before merging manually."
 
