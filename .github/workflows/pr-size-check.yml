@@ -18,13 +18,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           PR_NUM="${{ github.event.pull_request.number }}"
-          TITLE="${{ github.event.pull_request.title }}"
+          REPO="${{ github.repository }}"
 
-          ADDITIONS=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
-            --json additions --jq '.additions')
-          DELETIONS=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
-            --json deletions --jq '.deletions')
+          PR_DATA=$(gh pr view "$PR_NUM" -R "$REPO" \
+            --json additions,deletions,title)
+          ADDITIONS=$(echo "$PR_DATA" | jq -r '.additions')
+          DELETIONS=$(echo "$PR_DATA" | jq -r '.deletions')
+          TITLE=$(echo "$PR_DATA" | jq -r '.title')
+          ADDITIONS=${ADDITIONS:-0}
+          DELETIONS=${DELETIONS:-0}
           NET=$((ADDITIONS - DELETIONS))
 
           WARNING=""
@@ -39,13 +43,8 @@ jobs:
           fi
 
           if [ -n "$WARNING" ]; then
-            gh pr comment "$PR_NUM" -R "${{ github.repository }}" \
-              --body "$(cat <<EOF
-          ⚠️ **PR Size Check**
-
-          ${WARNING}
-
-          _This is advisory, not blocking._
-          EOF
-          )"
+            BODY="⚠️ **PR Size Check**"
+            BODY+=$'\n\n'"${WARNING}"
+            BODY+=$'\n\n'"_This is advisory, not blocking._"
+            gh pr comment "$PR_NUM" -R "$REPO" --body "$BODY"
           fi
