@@ -97,10 +97,13 @@ jobs:
         id: pr
         run: |
           HEAD_BRANCH="${{ github.event.workflow_run.head_branch }}"
-          PR_NUMBER=$(gh pr list -R "${{ github.repository }}" \
-            --head "$HEAD_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || echo "")
+          PR_DATA=$(gh pr list -R "${{ github.repository }}" \
+            --head "$HEAD_BRANCH" --state open --json number,title -q '.[0]' 2>/dev/null || echo "{}")
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty' 2>/dev/null || echo "")
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // empty' 2>/dev/null || echo "")
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
           echo "branch=$HEAD_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "title=$PR_TITLE" >> "$GITHUB_OUTPUT"
 
           if [ -n "$PR_NUMBER" ]; then
             # Check for /improve suggestions OR /review focus areas
@@ -184,7 +187,7 @@ jobs:
           fi
 
       - name: Enable auto-merge after review fixes
-        if: always() && steps.pr.outputs.number != ''
+        if: always() && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -194,6 +197,11 @@ jobs:
             -R "${{ github.repository }}" \
             --squash --auto --delete-branch \
             || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
+
+      - name: Skip auto-merge for feat PRs
+        if: always() && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
+        run: |
+          echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review GPT-5.4 findings before merging manually."
 
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
   claude-fix-on-ci-failure:

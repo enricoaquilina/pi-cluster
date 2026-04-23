@@ -89,6 +89,15 @@ run_weekly() {
     [[ "$MODE" == "daily" ]]
 }
 
+@test "mode: invalid MODE_OVERRIDE rejected" {
+    export MODE_OVERRIDE="invalid"
+    case "$MODE_OVERRIDE" in
+        daily|full) VALID=true ;;
+        *) VALID=false ;;
+    esac
+    [[ "$VALID" == "false" ]]
+}
+
 # === Config loading ===
 
 @test "config: defaults loaded" {

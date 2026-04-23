@@ -29,9 +29,28 @@ life_acquire_lock "$LOG_DIR/weekly-maintenance.lock" || { log "Already running �
 life_require_daily_note || { log "No daily note for $TODAY — skipping"; exit 0; }
 life_require_claude_cli || { log "ERROR: claude CLI not found at $CLAUDE_BIN"; exit 1; }
 
+# --- Validate config ---
+require_nonneg_int() {
+    local name="$1" value="$2"
+    if [[ ! "$value" =~ ^[0-9]+$ ]]; then
+        log "ERROR: $name must be a non-negative integer, got: $value"
+        exit 1
+    fi
+}
+require_nonneg_int WEEKLY_MAX_RETRIES "${WEEKLY_MAX_RETRIES:-}"
+require_nonneg_int WEEKLY_CLAUDE_TIMEOUT "${WEEKLY_CLAUDE_TIMEOUT:-}"
+require_nonneg_int WEEKLY_RETRY_DELAY "${WEEKLY_RETRY_DELAY:-}"
+[[ "$WEEKLY_CLAUDE_TIMEOUT" -gt 0 ]] || { log "ERROR: WEEKLY_CLAUDE_TIMEOUT must be > 0"; exit 1; }
+
 # --- Mode selection ---
 if [[ -n "${MODE_OVERRIDE:-}" ]]; then
-    MODE="$MODE_OVERRIDE"
+    case "$MODE_OVERRIDE" in
+        daily|full) MODE="$MODE_OVERRIDE" ;;
+        *)
+            log "ERROR: invalid MODE_OVERRIDE=$MODE_OVERRIDE (expected: daily|full)"
+            exit 1
+            ;;
+    esac
 elif [[ "$(date +%u)" -eq 1 ]]; then
     MODE="full"
 else
@@ -65,18 +84,21 @@ while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
     ATTEMPT=$((ATTEMPT + 1))
     log "Claude invocation attempt $ATTEMPT/$MAX_ATTEMPTS"
 
-    if timeout "$WEEKLY_CLAUDE_TIMEOUT" "$CLAUDE_BIN" -p "/weekly $MODE" \
+    cmd_rc=0
+    timeout "$WEEKLY_CLAUDE_TIMEOUT" "$CLAUDE_BIN" -p "/weekly $MODE" \
         --output-format text \
         --no-session-persistence \
         --permission-mode auto \
         --model "$MODEL" \
         --append-system-prompt "Running unattended from systemd timer. Follow unattended mode rules: skip all interactive prompts, only do automated actions (carry forward, deadline alerts, changelog). Flag everything else for morning review in daily note." \
-        >> "$(life_log_file "$TAG")" 2>&1; then
+        >> "$(life_log_file "$TAG")" 2>&1 || cmd_rc=$?
+
+    if [[ "$cmd_rc" -eq 0 ]]; then
         SUCCESS=true
         break
     fi
 
-    log "Attempt $ATTEMPT failed (exit $?)"
+    log "Attempt $ATTEMPT failed (exit $cmd_rc)"
     if [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; then
         log "Retrying in ${WEEKLY_RETRY_DELAY}s..."
         sleep "$WEEKLY_RETRY_DELAY"
@@ -89,9 +111,9 @@ DURATION=$((END_TIME - START_TIME))
 if [[ "$SUCCESS" != "true" ]]; then
     log "ERROR: All $MAX_ATTEMPTS attempts failed (${DURATION}s elapsed)"
     if [[ "$WEEKLY_NOTIFY_ON_FAILURE" == "true" ]]; then
-        life_notify_telegram "⚠️ *Weekly maintenance failed* — mode=$MODE, $MAX_ATTEMPTS attempts, ${DURATION}s elapsed"
+        life_notify_telegram "⚠️ *Weekly maintenance failed* — mode=$MODE, $MAX_ATTEMPTS attempts, ${DURATION}s elapsed" || true
     fi
-    exit 0
+    exit 1
 fi
 
 log "Claude completed in ${DURATION}s"
