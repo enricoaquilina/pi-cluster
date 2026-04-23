@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # Lower Pi 5 fan trip points for always-on kiosk workload
 # Default: 50/60/67.5/75°C → Custom: 45/50/57/65°C
 ZONE=/sys/class/thermal/thermal_zone0

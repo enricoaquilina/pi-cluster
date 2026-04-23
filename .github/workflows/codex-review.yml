@@ -24,8 +24,8 @@ jobs:
           # Fallback: pull_requests[] is empty for 2+ level workflow_run chains
           if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "" ]; then
             HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-            PR_NUM=$(gh pr list -R "${{ github.repository }}" --state all \
-              --json number,headRefOid --jq ".[] | select(.headRefOid | startswith(\"${HEAD_SHA:0:12}\")) | .number" \
+            PR_NUM=$(gh pr list -R "${{ github.repository }}" --state open \
+              --json number,headRefOid --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number" \
               2>/dev/null | head -1)
           fi
           if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "" ]; then

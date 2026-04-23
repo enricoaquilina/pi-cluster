@@ -106,8 +106,8 @@ jobs:
           # Fallback: pull_requests[] can be empty for workflow_run chains
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
             HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-            PR_NUMBER=$(gh pr list -R "$REPO" --state all \
-              --json number,headRefOid --jq ".[] | select(.headRefOid | startswith(\"${HEAD_SHA:0:12}\")) | .number" \
+            PR_NUMBER=$(gh pr list -R "$REPO" --state open \
+              --json number,headRefOid --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number" \
               2>/dev/null | head -1)
           fi
 
@@ -249,8 +249,8 @@ jobs:
           # Fallback: pull_requests[] is empty for 2+ level workflow_run chains
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
             HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
-            PR_NUMBER=$(gh pr list -R "$REPO" --state all \
-              --json number,headRefOid --jq ".[] | select(.headRefOid | startswith(\"${HEAD_SHA:0:12}\")) | .number" \
+            PR_NUMBER=$(gh pr list -R "$REPO" --state open \
+              --json number,headRefOid --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number" \
               2>/dev/null | head -1)
           fi
 
