@@ -23,6 +23,7 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
+          set -euo pipefail
           COMMIT="${{ github.event.head_commit.id }}"
 
           PR_NUM=$(gh pr list --search "$COMMIT" --state merged \
@@ -42,14 +43,14 @@ jobs:
             '^\.github/workflows/' \
             'docker-compose.*\.yml$' \
             '^hooks/'; do
-            match=$(echo "$CHANGED" | grep -E "$pattern" | head -1)
+            match=$(echo "$CHANGED" | grep -E "$pattern" | head -1 || true)
             if [ -n "$match" ]; then
               VIOLATION="$match"
               break
             fi
           done
 
-          COUNT=$(echo "$CHANGED" | grep -c '.' || echo 0)
+          COUNT=$(echo "$CHANGED" | grep -c '.' || echo "0")
           if [ "$COUNT" -ge 4 ] && [ -z "$VIOLATION" ]; then
             VIOLATION="$COUNT files changed directly"
           fi
@@ -57,7 +58,7 @@ jobs:
           if [ -n "$VIOLATION" ]; then
             MSG="⚠️ Direct push to master: $VIOLATION (commit ${COMMIT:0:7})"
             echo "::warning::$MSG"
-            if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+            if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
               curl -sf -X POST \
                 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                 --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \

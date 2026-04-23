@@ -179,3 +179,14 @@ jobs:
             -R "${{ github.repository }}" --body "$BODY"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload PR metadata for downstream workflows
+        if: steps.pr.outputs.skip != 'true'
+        run: |
+          echo '{"pr_number": "${{ steps.pr.outputs.pr_num }}", "branch": "${{ steps.pr.outputs.branch }}"}' > /tmp/pr-meta.json
+      - uses: actions/upload-artifact@v4
+        if: steps.pr.outputs.skip != 'true'
+        with:
+          name: gpt-review-pr-meta
+          path: /tmp/pr-meta.json
+          retention-days: 1
