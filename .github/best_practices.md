@@ -122,6 +122,22 @@ uses: qodo-ai/pr-agent@v0.32
 
 ---
 
+### Guard all env vars under set -u
+
+When using `set -euo pipefail`, guard optional environment variables:
+
+**Bad:**
+```bash
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+```
+
+**Good:**
+```bash
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+```
+
+---
+
 ## Python (Mission Control)
 
 ### Health endpoints must return 503 when unhealthy
