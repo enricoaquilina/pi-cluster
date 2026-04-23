@@ -12,8 +12,8 @@ on:
       - 'playbooks/**'
       - 'templates/**'
       - '.github/**'
-      - '*.py'
-      - '*.sh'
+      - '**/*.py'
+      - '**/*.sh'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
