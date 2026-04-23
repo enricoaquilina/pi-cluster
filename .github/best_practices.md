@@ -163,3 +163,4 @@ command: find /path ! -perm -g+s -exec chmod g+s {} +
 ```yaml
 command: find /path -not -perm -g+s -exec chmod g+s {} +
 ```
+# Pipeline verification test
