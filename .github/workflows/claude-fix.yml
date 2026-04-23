@@ -239,6 +239,15 @@ jobs:
       group: claude-fix-review-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
     steps:
+      - name: Download PR metadata from GPT-5.4 review
+        uses: actions/download-artifact@v4
+        with:
+          name: gpt-review-pr-meta
+          path: /tmp/pr-meta
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
       - name: Get PR and GPT-5.4 findings
         id: pr
         run: |
@@ -246,7 +255,14 @@ jobs:
           REPO="${{ github.repository }}"
 
           PR_NUMBER="${{ github.event.workflow_run.pull_requests[0].number }}"
-          # Fallback: pull_requests[] is empty for 2+ level workflow_run chains
+          # Fallback 1: artifact from GPT-5.4 review (reliable for 2+ level chains)
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
+            if [ -f /tmp/pr-meta/pr-meta.json ]; then
+              PR_NUMBER=$(jq -r '.pr_number // empty' /tmp/pr-meta/pr-meta.json 2>/dev/null || echo "")
+              echo "PR number from artifact: $PR_NUMBER"
+            fi
+          fi
+          # Fallback 2: head_sha lookup
           if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "" ]; then
             HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
             PR_NUMBER=$(gh pr list -R "$REPO" --state open \
