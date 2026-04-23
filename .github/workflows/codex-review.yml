@@ -21,6 +21,13 @@ jobs:
         id: pr
         run: |
           PR_NUM="${{ github.event.workflow_run.pull_requests[0].number }}"
+          # Fallback: pull_requests[] is empty for 2+ level workflow_run chains
+          if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "" ]; then
+            HEAD_SHA="${{ github.event.workflow_run.head_sha }}"
+            PR_NUM=$(gh pr list -R "${{ github.repository }}" --state all \
+              --json number,headRefOid --jq ".[] | select(.headRefOid | startswith(\"${HEAD_SHA:0:12}\")) | .number" \
+              2>/dev/null | head -1)
+          fi
           if [ -z "$PR_NUM" ] || [ "$PR_NUM" = "" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "No PR associated with this workflow run"
@@ -48,6 +55,7 @@ jobs:
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "title=$TITLE" >> "$GITHUB_OUTPUT"
           echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "$TITLE" > /tmp/pr-title.txt
           echo "$BODY_TEXT" > /tmp/pr-body.txt
           echo "Reviewing PR #$PR_NUM ($BRANCH → $BASE)"
         env:
@@ -73,10 +81,10 @@ jobs:
       - name: Build review payload
         if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.lines != '0'
         run: |
-          python3 - "${{ steps.pr.outputs.title }}" <<'PYEOF'
-          import json, sys
+          python3 - <<'PYEOF'
+          import json
 
-          title = sys.argv[1]
+          title = open("/tmp/pr-title.txt").read().strip()
           diff = open("/tmp/pr-diff.txt").read()
           pr_body = open("/tmp/pr-body.txt").read()[:2000]
 
