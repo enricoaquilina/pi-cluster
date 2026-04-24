@@ -137,6 +137,16 @@ except: pass
 " 2>/dev/null
 fi
 
+# --- Relevant skills (trigger-based matching) ---
+SKILL_LOADER="$HOME/pi-cluster/life-automation/skill_loader.py"
+if [ -n "$PROJECT_SLUG" ] && [ -f "$SKILL_LOADER" ]; then
+    SKILLS=$(/usr/bin/python3 "$SKILL_LOADER" "$PROJECT_SLUG" --max 3 2>/dev/null)
+    if [ -n "$SKILLS" ] && [ "$SKILLS" != "_No matching skills found._" ]; then
+        echo ""
+        echo "$SKILLS"
+    fi
+fi
+
 # --- Recent sessions (from FTS5 search) ---
 if [ -f "$SESSION_SEARCH" ]; then
     echo ""
@@ -151,4 +161,14 @@ try:
         print(f'- {ts} [{stype}] {summary}')
 except: pass
 " 2>/dev/null
+fi
+
+# --- Cross-platform activity (from episodic log) ---
+CROSS_PLATFORM="$LIFE_DIR/scripts/cross_platform_summary.py"
+if [ -f "$CROSS_PLATFORM" ]; then
+    XPLAT=$(/usr/bin/python3 "$CROSS_PLATFORM" --hours 24 --exclude-platform claude-code --max-lines 15 2>/dev/null)
+    if [ -n "$XPLAT" ]; then
+        echo ""
+        echo "$XPLAT"
+    fi
 fi

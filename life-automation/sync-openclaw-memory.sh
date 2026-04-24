@@ -431,6 +431,18 @@ find "$MEMORY_DIR" -name '*.md' -mtime +14 -not -name '.tmp.*' -delete 2>/dev/nu
 
 # --- Log success + update health state ---
 log "SYNCED daily=$daily_needs_update memory=$memory_needs_update canary=$canary_hash"
+
+# Log to episodic cross-platform log (best-effort, never block sync)
+if [ "$daily_needs_update" = "true" ] || [ "$memory_needs_update" = "true" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PYTHONPATH="$SCRIPT_DIR" /usr/bin/python3 -c "
+from episodic import log_event
+log_event('maxwell', 'daily_note_appended',
+          detail='Synced daily=${daily_needs_update} memory=${memory_needs_update}',
+          importance=3)
+" 2>/dev/null || true
+fi
+
 date +%s > "$SYNC_EPOCH_FILE" 2>/dev/null || true
 echo 0 > "$SYNC_FAIL_FILE" 2>/dev/null || true
 exit 0

@@ -159,10 +159,15 @@ json.loads(mod.strip_fences(open(sys.argv[1]).read()))
     exit 0
 fi
 
-log "Applying extraction..."
+log "Applying extraction (staging mode)..."
 export CONSOLIDATION_DATE="$TODAY"
-python3 "$LIFE_DIR/scripts/apply_extraction.py" < "$TMPFILE" \
+python3 "$LIFE_DIR/scripts/apply_extraction.py" --stage < "$TMPFILE" \
     | tee -a "$LOG_DIR/consolidate.log"
+
+# Auto-graduate qualifying candidates + regenerate review queue
+log "Auto-graduating qualifying candidates..."
+python3 "$LIFE_DIR/scripts/review.py" auto-graduate 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+python3 "$LIFE_DIR/scripts/review.py" queue 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
 # Log operation
 python3 "$LIFE_DIR/scripts/log_operation.py" "consolidate" "Extraction applied for $TODAY" 2>/dev/null || true
@@ -178,6 +183,10 @@ python3 "$LIFE_DIR/scripts/session_archive.py" 2>&1 | tee -a "$LOG_DIR/consolida
 # --- Skill deduplication check ---
 log "Checking for duplicate skills..."
 python3 "$LIFE_DIR/scripts/dedup_skills.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+# --- Skill auto-refresh (Phase 7) ---
+log "Checking skills for auto-refresh..."
+python3 "$LIFE_DIR/scripts/skill_refresh.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
 # --- Fact decay ---
 log "Running fact decay..."

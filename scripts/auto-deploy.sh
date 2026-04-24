@@ -44,6 +44,13 @@ ansible-playbook "$REPO_DIR/playbooks/openclaw-monitoring.yml" --quiet 2>&1 | wh
 log "Running monitoring stack playbook..."
 ansible-playbook "$REPO_DIR/playbooks/monitoring.yml" --quiet 2>&1 | while read -r line; do log "mon-stack: $line"; done
 
+# Deploy node scripts to slave nodes if changed
+CHANGED_FILES=$(git diff --name-only "$LOCAL..$REMOTE" 2>/dev/null)
+if echo "$CHANGED_FILES" | grep -qE '^scripts/openclaw-node-agent\.py|^playbooks/openclaw-nodes\.yml'; then
+    log "Running openclaw-nodes playbook (node-agent changed)..."
+    ansible-playbook "$REPO_DIR/playbooks/openclaw-nodes.yml" --quiet 2>&1 | while read -r line; do log "nodes: $line"; done
+fi
+
 # Sync heavy's clone and rebuild MC if needed (single SSH call)
 # Smart rebuild: only docker build when Dockerfile/requirements change,
 # skip pip when only app code changes (layer cache handles it),
