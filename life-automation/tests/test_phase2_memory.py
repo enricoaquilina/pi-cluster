@@ -71,7 +71,7 @@ class TestDailyContextInjection:
         assert result.returncode == 0
         assert "pi-cluster" in result.stdout
         assert "gym-tracker" in result.stdout
-        assert "Daily Note Summary" in result.stdout
+        assert "Today" in result.stdout
 
     def test_pending_items_injected(self, life_dir):
         """Daily note with Pending Items → shows in start hook output."""
@@ -93,7 +93,7 @@ class TestDailyContextInjection:
         """No daily note → no Daily Note Summary section, no crash."""
         result = _run_hook(life_dir)
         assert result.returncode == 0
-        assert "Daily Note Summary" not in result.stdout
+        assert "Active Projects" not in result.stdout
 
     def test_empty_daily_note(self, life_dir):
         """Empty daily note → no Active Projects shown."""

@@ -70,3 +70,30 @@ class TestAssemble:
         if slugs.exists():
             result = context_budget.assemble(cwd="/home/enrico/pi-cluster", budget=6000)
             assert "pi-cluster" in result.lower()
+
+    def test_review_queue_shows_items(self, life_dir):
+        import candidates
+        logs = life_dir / "logs"
+        logs.mkdir(exist_ok=True)
+        with patch.object(candidates, "LIFE_DIR", life_dir), \
+             patch.object(candidates, "CANDIDATES_PATH", logs / "candidates.jsonl"), \
+             patch.object(candidates, "REVIEW_QUEUE_PATH", life_dir / "REVIEW_QUEUE.md"):
+            candidates._counter = 0
+            candidates.stage_fact("pi-cluster", "project", "Chose X over Y", "decision", "2026-04-24")
+            candidates.stage_fact("pi-cluster", "project", "Normal event", "deployment", "2026-04-24")
+            result = context_budget.assemble(budget=6000)
+            assert "Review Queue" in result
+            assert "2 pending" in result
+            assert "1 need review" in result
+            assert "Chose X over Y" in result
+
+    def test_review_queue_hidden_when_empty(self, life_dir):
+        import candidates
+        import episodic
+        logs = life_dir / "logs"
+        logs.mkdir(exist_ok=True)
+        with patch.object(candidates, "LIFE_DIR", life_dir), \
+             patch.object(candidates, "CANDIDATES_PATH", logs / "candidates.jsonl"), \
+             patch.object(episodic, "LOGS_DIR", logs):
+            result = context_budget.assemble(budget=6000)
+            assert "Review Queue" not in result

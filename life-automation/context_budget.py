@@ -107,7 +107,10 @@ def assemble(cwd: str = "", budget: int = 6000) -> str:
         pending = pending_candidates()
         review = needs_review_candidates()
         if pending:
-            add("Review Queue", f"{len(pending)} pending candidates ({len(review)} need review)")
+            lines = [f"{len(pending)} pending ({len(review)} need review)"]
+            for c in review[:3]:
+                lines.append(f"- **[{c.get('entity','')}]** {c.get('fact','')[:70]} ({c.get('category','')})")
+            add("Review Queue", "\n".join(lines))
     except ImportError:
         pass
 
@@ -122,11 +125,13 @@ def assemble(cwd: str = "", budget: int = 6000) -> str:
                 add(f"Project: {project}", first_para)
 
         try:
-            from skill_loader import match_skills
+            from skill_loader import match_skills, bump_use_count
             skills = match_skills(project, max_results=3)
             if skills:
-                lines = "\n".join(f"- {s.get('name', '?')} ({s.get('_path', '')})" for s in skills)
-                add("Relevant Skills", lines)
+                skill_lines = "\n".join(f"- {s.get('name', '?')} ({s.get('_path', '')})" for s in skills)
+                if add("Relevant Skills", skill_lines):
+                    for s in skills:
+                        bump_use_count(s)
         except ImportError:
             pass
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Claude Code SessionStart hook — briefs on Maxwell activity.
+# Claude Code SessionStart hook — assembles ~/life/ context for session.
 # Output goes to stdout → injected into Claude Code context (max 10K chars).
 # Uses absolute paths for non-interactive shell safety.
 #
@@ -34,42 +34,26 @@ if [ -d "$LIFE_DIR/.git" ]; then
     life_git_pull "$LIFE_DIR" 2>/dev/null || true
 fi
 
+# --- Primary context assembly (tiered, budget-capped) ---
+CONTEXT_BUDGET="$HOME/pi-cluster/life-automation/context_budget.py"
+if [ -f "$CONTEXT_BUDGET" ]; then
+    /usr/bin/python3 "$CONTEXT_BUDGET" --cwd "$PWD" --budget 6000 2>/dev/null
+    exit 0
+fi
+
+# --- Fallback: legacy sections (if context_budget.py missing) ---
 TODAY=$(date '+%Y-%m-%d')
 YEAR=$(date '+%Y')
 MONTH=$(date '+%m')
 
 MAXWELL="$LIFE_DIR/Daily/$YEAR/$MONTH/maxwell-$TODAY.md"
-AGENT_RUNS="$LIFE_DIR/logs/agent-runs.json"
-
 echo "## Maxwell Activity"
 if [[ -f "$MAXWELL" ]]; then
-    # Print dispatch lines (skip YAML frontmatter)
     /usr/bin/sed -n '/^## /,$ p' "$MAXWELL" | head -20
 else
     echo "_No Maxwell dispatches today._"
 fi
 
-# Last 3 heartbeat actions
-if [[ -f "$AGENT_RUNS" ]]; then
-    echo ""
-    echo "## Recent Heartbeat"
-    /usr/bin/python3 -c "
-import json, sys
-try:
-    data = json.load(open(sys.argv[1]))
-    for entry in data[-3:]:
-        ts = entry.get('timestamp','')[:16]
-        for a in entry.get('actions', []):
-            title = a.get('title', '?')
-            action = a.get('action', '?')
-            persona = a.get('persona', '?')
-            print(f'- {ts}: {title} -> {action} ({persona})')
-except Exception:
-    print('_Could not read agent runs._')
-" "$AGENT_RUNS" 2>/dev/null || echo "_Could not read agent runs._"
-fi
-
-# --- Daily context (active projects + pending items) ---
 DAILY_NOTE="$LIFE_DIR/Daily/$YEAR/$MONTH/$TODAY.md"
 if [ -f "$DAILY_NOTE" ]; then
     echo ""
@@ -78,76 +62,7 @@ if [ -f "$DAILY_NOTE" ]; then
     /usr/bin/awk '/^## [^P]/ && p{p=0} /^## Pending Items/{p=1} p' "$DAILY_NOTE" 2>/dev/null | head -10
 fi
 
-# --- Project context (detect from working directory) ---
-# Phase 8B: segment-match resolution via config/project-slugs.json.
-# The pre-v3 substring match (`*/pi-cluster*`) misfired on paths like
-# `/tmp/not-pi-cluster-backup`. Instead we walk $PWD segments from the
-# deepest ancestor upward and return the first exact segment match.
 SESSION_SEARCH="$LIFE_DIR/scripts/session_search.py"
-SLUGS_CONFIG="$HOME/pi-cluster/life-automation/config/project-slugs.json"
-[ -f "$SLUGS_CONFIG" ] || SLUGS_CONFIG="$LIFE_DIR/scripts/config/project-slugs.json"
-PROJECT_SLUG=""
-if [ -f "$SLUGS_CONFIG" ]; then
-    PROJECT_SLUG=$(/usr/bin/python3 - "$PWD" "$SLUGS_CONFIG" <<'PY' 2>/dev/null
-import json, sys
-pwd = sys.argv[1]
-cfg_path = sys.argv[2]
-try:
-    cfg = json.load(open(cfg_path))
-    slugs = cfg.get("slugs", {})
-except Exception:
-    sys.exit(0)
-
-# Build segment → slug map (first segment wins if duplicate)
-seg_to_slug = {}
-for slug, data in slugs.items():
-    for seg in data.get("segments", [slug]):
-        seg_to_slug.setdefault(seg, slug)
-
-# Walk segments from the deepest to the shallowest; first match wins.
-parts = [p for p in pwd.split("/") if p]
-for seg in reversed(parts):
-    if seg in seg_to_slug:
-        print(seg_to_slug[seg])
-        break
-PY
-    )
-fi
-
-if [ -n "$PROJECT_SLUG" ] && [ -f "$SESSION_SEARCH" ]; then
-    echo ""
-    echo "## Project Context: $PROJECT_SLUG"
-    # Show entity summary first paragraph
-    PROJ_SUMMARY="$LIFE_DIR/Projects/$PROJECT_SLUG/summary.md"
-    if [ -f "$PROJ_SUMMARY" ]; then
-        /usr/bin/awk '/^---/{f++} f==2{p=1;next} p && /^$/{exit} p' "$PROJ_SUMMARY" 2>/dev/null | head -3
-    fi
-    # Show related sessions
-    echo ""
-    echo "### Related Sessions"
-    /usr/bin/python3 "$SESSION_SEARCH" --query "$PROJECT_SLUG" --recent 3 --json 2>/dev/null | /usr/bin/python3 -c "
-import sys, json
-try:
-    for d in json.load(sys.stdin):
-        ts = d.get('ts','')[:10]
-        stype = d.get('session_type','?')
-        summary = d.get('summary','')[:100]
-        print(f'- {ts} [{stype}] {summary}')
-except: pass
-" 2>/dev/null
-fi
-
-# --- Relevant skills (trigger-based matching) ---
-SKILL_LOADER="$HOME/pi-cluster/life-automation/skill_loader.py"
-if [ -n "$PROJECT_SLUG" ] && [ -f "$SKILL_LOADER" ]; then
-    SKILLS=$(/usr/bin/python3 "$SKILL_LOADER" "$PROJECT_SLUG" --max 3 --track 2>/dev/null)
-    if [ -n "$SKILLS" ] && [ "$SKILLS" != "_No matching skills found._" ]; then
-        echo ""
-        echo "$SKILLS"
-    fi
-fi
-
-# --- Recent sessions (from FTS5 search) ---
 if [ -f "$SESSION_SEARCH" ]; then
     echo ""
     echo "## Recent Sessions"
@@ -163,7 +78,6 @@ except: pass
 " 2>/dev/null
 fi
 
-# --- Cross-platform activity (from episodic log) ---
 CROSS_PLATFORM="$LIFE_DIR/scripts/cross_platform_summary.py"
 if [ -f "$CROSS_PLATFORM" ]; then
     XPLAT=$(/usr/bin/python3 "$CROSS_PLATFORM" --hours 24 --exclude-platform claude-code --max-lines 15 2>/dev/null)

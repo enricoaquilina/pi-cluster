@@ -62,7 +62,7 @@ def test_exact_segment_resolves_to_slug(tmp_path, minimal_life):
     cwd.mkdir(parents=True)
     r = _run_hook(cwd, minimal_life)
     assert r.returncode == 0
-    assert "Project Context: pi-cluster" in r.stdout
+    assert "Project: pi-cluster" in r.stdout
 
 
 def test_nested_pi_cluster_life_automation(tmp_path, minimal_life):
@@ -70,7 +70,7 @@ def test_nested_pi_cluster_life_automation(tmp_path, minimal_life):
     cwd.mkdir(parents=True)
     r = _run_hook(cwd, minimal_life)
     assert r.returncode == 0
-    assert "Project Context: pi-cluster" in r.stdout
+    assert "Project: pi-cluster" in r.stdout
 
 
 # ============================================================ false positives
@@ -87,7 +87,7 @@ def test_false_positive_substring_does_not_match(tmp_path, minimal_life, bad):
     cwd.mkdir(parents=True)
     r = _run_hook(cwd, minimal_life)
     assert r.returncode == 0
-    assert "Project Context:" not in r.stdout, (
+    assert "Project:" not in r.stdout, (
         f"{bad!r} should NOT trigger a project context section (pre-v3 regression)"
     )
 
@@ -100,7 +100,7 @@ def test_unrelated_cwd_no_context(tmp_path, minimal_life):
     cwd.mkdir()
     r = _run_hook(cwd, minimal_life)
     assert r.returncode == 0
-    assert "Project Context:" not in r.stdout
+    assert "Project:" not in r.stdout
 
 
 # ============================================================ exit-0 invariant
