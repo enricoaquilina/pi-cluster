@@ -152,3 +152,13 @@ try:
 except: pass
 " 2>/dev/null
 fi
+
+# --- Cross-platform activity (from episodic log) ---
+CROSS_PLATFORM="$LIFE_DIR/scripts/cross_platform_summary.py"
+if [ -f "$CROSS_PLATFORM" ]; then
+    XPLAT=$(/usr/bin/python3 "$CROSS_PLATFORM" --hours 24 --exclude-platform claude-code --max-lines 15 2>/dev/null)
+    if [ -n "$XPLAT" ]; then
+        echo ""
+        echo "$XPLAT"
+    fi
+fi
