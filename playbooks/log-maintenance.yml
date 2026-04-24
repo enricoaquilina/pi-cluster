@@ -75,7 +75,7 @@
     - name: Add smoke-test cron with proper log path
       ansible.builtin.cron:
         name: "system-smoke-test"
-        minute: "*/5"
+        minute: "*/15"
         job: "/usr/local/bin/system-smoke-test.sh --cron 2>&1 | head -50 >> /var/log/openclaw-smoke-test.log"
         user: enrico
 
