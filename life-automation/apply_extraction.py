@@ -24,6 +24,12 @@ try:
 except ImportError:
     _log_event = None
 
+try:
+    from candidates import stage_fact as _stage_fact, check_supersedes_candidates
+except ImportError:
+    _stage_fact = None
+    check_supersedes_candidates = None
+
 PLATFORM = os.environ.get("LIFE_PLATFORM", "nightly-consolidate")
 
 # Cron safety: force UTF-8 regardless of locale (cron often has POSIX/C locale)
@@ -33,6 +39,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="repla
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 TODAY = os.environ.get("CONSOLIDATION_DATE", str(date.today()))
 DRY_RUN = "--dry-run" in sys.argv
+STAGE_MODE = "--stage" in sys.argv or os.environ.get("LIFE_STAGE_MODE") == "1"
 
 TYPE_TO_DIR = {
     "person": "People",
@@ -186,14 +193,40 @@ def apply(data: dict) -> tuple[int, int, int]:
         if not items_path.exists():
             print(f"[apply] Skip fact — entity not found: {fu['entity']}", file=sys.stderr)
             continue
-        # Validate category
         category = fu.get("category", "event")
         if category not in VALID_CATEGORIES:
             print(f"[apply] WARNING: unknown category '{category}' — defaulting to 'event'", file=sys.stderr)
             category = "event"
+
+        if STAGE_MODE and _stage_fact and not DRY_RUN:
+            items = safe_load_json(items_path)
+            if reinforce_fact(items, fu["fact"]):
+                items_path.write_text(json.dumps(items, indent=2), encoding="utf-8")
+                print(f"[apply] Reinforced fact: {fu['fact'][:60]}...", file=sys.stderr)
+                continue
+            contradicts = any(
+                _similar(item.get("fact", ""), fu.get("supersedes", ""))
+                for item in items if fu.get("supersedes") and item.get("confidence") != "superseded"
+            )
+            _stage_fact(
+                fu["entity"], fu["entity_type"], fu["fact"], category, fu["date"],
+                source=f"daily/{TODAY}", extracted_by=PLATFORM,
+                supersedes=fu.get("supersedes"),
+                contradicts_existing=contradicts,
+            )
+            print(f"[apply] Staged → {fu['entity']}: {fu['fact'][:60]}...")
+            if _log_event:
+                try:
+                    _log_event(PLATFORM, "candidate_staged", entity=fu["entity"],
+                               detail=fu["fact"][:200], importance=4,
+                               source_file=str(items_path.relative_to(LIFE_DIR)))
+                except Exception:
+                    pass
+            updated += 1
+            continue
+
         if not DRY_RUN:
             items = safe_load_json(items_path)
-            # Handle supersedes — mark old fact before checking reinforcement
             if fu.get("supersedes"):
                 for old_item in items:
                     if _similar(old_item.get("fact", ""), fu["supersedes"]):
@@ -202,8 +235,6 @@ def apply(data: dict) -> tuple[int, int, int]:
                         old_item["confidence"] = "superseded"
                         print(f"[apply] SUPERSEDED: '{old_item['fact'][:50]}...' → '{fu['fact'][:50]}...'", file=sys.stderr)
                         break
-            # Confidence scoring: reinforce existing facts instead of adding duplicates
-            # Runs for both normal and supersede facts — ensures idempotency on re-run
             if reinforce_fact(items, fu["fact"]):
                 items_path.write_text(json.dumps(items, indent=2), encoding="utf-8")
                 print(f"[apply] Reinforced fact: {fu['fact'][:60]}...", file=sys.stderr)
