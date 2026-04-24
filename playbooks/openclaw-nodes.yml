@@ -40,6 +40,14 @@
           Run: sudo npm install -g openclaw@{{ openclaw_version }}
       when: openclaw_installed_ver.stdout != openclaw_version
 
+    - name: Deploy node stats agent script
+      ansible.builtin.copy:
+        src: ../scripts/openclaw-node-agent.py
+        dest: "{{ openclaw_agent_script | default(openclaw_workspace + '/scripts/openclaw-node-agent.py') }}"
+        owner: enrico
+        group: enrico
+        mode: "0644"
+
     - name: Deploy openclaw node systemd service
       ansible.builtin.template:
         src: ../templates/openclaw-node.service.j2
