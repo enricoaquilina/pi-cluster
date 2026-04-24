@@ -11,6 +11,27 @@ CACHE_FILE = "/tmp/openclaw-node-stats.json"
 MC_API = os.environ.get("MC_API_URL", "http://192.168.0.5:8000/api")
 MC_KEY = os.environ.get("MC_API_KEY", "")
 
+HARDWARE_OVERRIDES = {
+    "heavy": "NiPoGi P2 16GB AMD Ryzen 3",
+}
+
+
+def _hardware_label(node):
+    """Derive short hardware label from node stats."""
+    mc_name = node.get("mc_name", node["name"])
+    if mc_name in HARDWARE_OVERRIDES:
+        return HARDWARE_OVERRIDES[mc_name]
+    model = node.get("hardware_model", "")
+    ram_gb = round(node.get("ram_total_mb", 0) / 1024)
+    if "Raspberry Pi" in model:
+        # "Raspberry Pi 5 Model B Rev 1.0" → "Pi 5"
+        parts = model.split()
+        pi_ver = f"Pi {parts[2]}" if len(parts) > 2 else "Pi"
+        return f"{pi_ver} {ram_gb}GB"
+    if model:
+        return f"{model} {ram_gb}GB"
+    return ""
+
 
 def main():
     try:
@@ -26,7 +47,8 @@ def main():
             continue
 
         mc_name = n.get("mc_name", n["name"])
-        payload = json.dumps({
+        hw = _hardware_label(n)
+        node_payload = {
             "name": mc_name,
             "hostname": n["host"],
             "framework": "OpenClaw",
@@ -58,7 +80,10 @@ def main():
                 "nvme_unsafe_shutdowns": n.get("nvme_unsafe_shutdowns"),
                 "disk_write_mb_s": n.get("disk_write_mb_s"),
             }.items() if v is not None},
-        }).encode()
+        }
+        if hw:
+            node_payload["hardware"] = hw
+        payload = json.dumps(node_payload).encode()
 
         pushed = False
         last_error = None

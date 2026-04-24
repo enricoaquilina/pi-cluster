@@ -55,6 +55,15 @@ def collect_stats():
     # Architecture
     stats["arch"] = os.uname().machine
 
+    # Hardware model
+    for model_path in ["/proc/device-tree/model", "/sys/class/dmi/id/board_name"]:
+        try:
+            with open(model_path) as f:
+                stats["hardware_model"] = f.read().strip().rstrip("\x00")
+                break
+        except FileNotFoundError:
+            continue
+
     # Disk
     st = os.statvfs("/")
     disk_total = st.f_blocks * st.f_frsize // (1024 * 1024)
