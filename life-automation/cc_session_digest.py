@@ -23,6 +23,11 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
+try:
+    from episodic import log_event as _log_event
+except ImportError:
+    _log_event = None
+
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 CLAUDE_PROJECTS = Path(os.environ.get(
     "CLAUDE_PROJECTS_DIR",
@@ -290,6 +295,14 @@ def _append_digest(digest: dict, digest_path: Path) -> None:
     finally:
         fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
+
+    if _log_event:
+        try:
+            _log_event("claude-code", "session_ended",
+                       detail=digest.get("summary", "")[:200], importance=4,
+                       run_id=digest.get("session_id", ""))
+        except Exception:
+            pass
 
     # Index into FTS5 for cross-session search (non-critical)
     try:

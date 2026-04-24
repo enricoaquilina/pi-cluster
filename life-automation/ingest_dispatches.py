@@ -19,6 +19,11 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+try:
+    from episodic import log_event as _log_event
+except ImportError:
+    _log_event = None
+
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 TODAY = os.environ.get("CONSOLIDATION_DATE", str(date.today()))
 DRY_RUN = "--dry-run" in sys.argv
@@ -183,7 +188,15 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"maxwell-{TODAY}.md"
     out_path.write_text(content, encoding="utf-8")
-    print(f"[ingest] Wrote {out_path} ({len(dispatches) if dispatches else 0} dispatches, {len(heartbeat)} heartbeat actions)")
+    dispatch_count = len(dispatches) if dispatches else 0
+    print(f"[ingest] Wrote {out_path} ({dispatch_count} dispatches, {len(heartbeat)} heartbeat actions)")
+    if _log_event and dispatch_count > 0:
+        try:
+            _log_event("maxwell", "dispatch_ingested",
+                       detail=f"{dispatch_count} dispatches, {len(heartbeat)} heartbeat actions",
+                       importance=4, source_file=f"Daily/{parts[0]}/{parts[1]}/maxwell-{TODAY}.md")
+        except Exception:
+            pass
 
     # Index into FTS5 for unified search (non-critical, force=True for upsert)
     try:

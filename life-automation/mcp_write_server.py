@@ -19,6 +19,11 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
+try:
+    from episodic import log_event as _log_event
+except ImportError:
+    _log_event = None
+
 LIFE_DIR = Path(os.environ.get("LIFE_DIR", Path.home() / "life"))
 TODAY = str(date.today())
 
@@ -101,12 +106,13 @@ def _find_entity(slug: str) -> Path | None:
 
 
 @mcp.tool()
-def append_daily_note(content: str, section: str) -> str:
+def append_daily_note(content: str, section: str, platform: str = "mcp-client") -> str:
     """Append content to today's daily note under a specific section.
 
     Args:
         content: Text to append (markdown)
         section: Section header (e.g., "What We Worked On", "Pending Items", "New Facts")
+        platform: Which agent harness is calling (e.g., "claude-code", "hermes", "cursor")
     """
     if section not in VALID_SECTIONS:
         return f"Error: invalid section '{section}'. Valid: {', '.join(sorted(VALID_SECTIONS))}"
@@ -138,19 +144,27 @@ def append_daily_note(content: str, section: str) -> str:
             text = text.rstrip() + f"\n\n{header}\n{entry}"
 
         note_path.write_text(text, encoding="utf-8")
+        if _log_event:
+            try:
+                _log_event(platform, "daily_note_appended", entity="",
+                           detail=f"{section}: {content[:100]}", importance=3,
+                           source_file=f"Daily/{'/'.join(TODAY.split('-')[:2])}/{TODAY}.md")
+            except Exception:
+                pass
         return f"Appended to {section} in {note_path.name}"
     finally:
         _release_lock(fd)
 
 
 @mcp.tool()
-def create_entity(entity_type: str, slug: str, display_name: str) -> str:
+def create_entity(entity_type: str, slug: str, display_name: str, platform: str = "mcp-client") -> str:
     """Create a new entity (person, project, or company) in the knowledge base.
 
     Args:
         entity_type: One of "person", "project", "company"
         slug: URL-friendly name (lowercase-hyphens, e.g., "john-doe")
         display_name: Human-readable name (e.g., "John Doe")
+        platform: Which agent harness is calling (e.g., "claude-code", "hermes", "cursor")
     """
     if entity_type not in TYPE_TO_DIR:
         return f"Error: invalid type '{entity_type}'. Valid: {', '.join(TYPE_TO_DIR.keys())}"
@@ -187,19 +201,27 @@ def create_entity(entity_type: str, slug: str, display_name: str) -> str:
         (entity_dir / "summary.md").write_text(summary, encoding="utf-8")
         (entity_dir / "items.json").write_text("[]", encoding="utf-8")
 
+        if _log_event:
+            try:
+                _log_event(platform, "entity_created", entity=slug,
+                           detail=f"Created {entity_type}/{slug} ({display_name})", importance=6,
+                           source_file=f"{parent}/{slug}/items.json")
+            except Exception:
+                pass
         return f"Created {parent}/{slug}/ with summary.md and items.json"
     finally:
         _release_lock(fd)
 
 
 @mcp.tool()
-def add_fact(entity_slug: str, fact: str, category: str) -> str:
+def add_fact(entity_slug: str, fact: str, category: str, platform: str = "mcp-client") -> str:
     """Add a fact to an existing entity's items.json.
 
     Args:
         entity_slug: Entity slug (e.g., "pi-cluster")
         fact: One-sentence fact to record
         category: One of: deployment, decision, configuration, lesson, preference, event, pending
+        platform: Which agent harness is calling (e.g., "claude-code", "hermes", "cursor")
     """
     if category not in VALID_CATEGORIES:
         return f"Error: invalid category '{category}'. Valid: {', '.join(sorted(VALID_CATEGORIES))}"
@@ -232,6 +254,13 @@ def add_fact(entity_slug: str, fact: str, category: str) -> str:
         })
 
         items_path.write_text(json.dumps(items, indent=2, ensure_ascii=False), encoding="utf-8")
+        if _log_event:
+            try:
+                _log_event(platform, "fact_added", entity=entity_slug,
+                           detail=fact[:200], importance=5,
+                           source_file=f"{entity_dir.parent.name}/{entity_slug}/items.json")
+            except Exception:
+                pass
         return f"Added fact to {entity_dir.parent.name}/{entity_slug} ({len(items)} total facts)"
     finally:
         _release_lock(fd)

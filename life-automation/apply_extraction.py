@@ -19,6 +19,13 @@ import sys
 from datetime import date
 from pathlib import Path
 
+try:
+    from episodic import log_event as _log_event
+except ImportError:
+    _log_event = None
+
+PLATFORM = os.environ.get("LIFE_PLATFORM", "nightly-consolidate")
+
 # Cron safety: force UTF-8 regardless of locale (cron often has POSIX/C locale)
 sys.stdin = io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="replace")
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -163,6 +170,13 @@ def apply(data: dict) -> tuple[int, int, int]:
                 )
                 (d / "items.json").write_text("[]", encoding="utf-8")
             print(f"[apply] {'(dry) ' if DRY_RUN else ''}Created: {e['type']}/{e['name']}")
+            if _log_event and not DRY_RUN:
+                try:
+                    _log_event(PLATFORM, "entity_created", entity=e["name"],
+                               detail=f"Created {e['type']}/{e['name']}", importance=6,
+                               source_file=f"{TYPE_TO_DIR[e['type']]}/{e['name']}/items.json")
+                except Exception:
+                    pass
             created += 1
 
     for fu in data.get("fact_updates", []):
@@ -193,6 +207,13 @@ def apply(data: dict) -> tuple[int, int, int]:
             if reinforce_fact(items, fu["fact"]):
                 items_path.write_text(json.dumps(items, indent=2), encoding="utf-8")
                 print(f"[apply] Reinforced fact: {fu['fact'][:60]}...", file=sys.stderr)
+                if _log_event:
+                    try:
+                        _log_event(PLATFORM, "fact_reinforced", entity=fu["entity"],
+                                   detail=fu["fact"][:200], importance=3,
+                                   source_file=str(items_path.relative_to(LIFE_DIR)))
+                    except Exception:
+                        pass
                 continue
             new_entry = {
                 "date": fu["date"],
@@ -207,6 +228,13 @@ def apply(data: dict) -> tuple[int, int, int]:
             items.append(new_entry)
             items_path.write_text(json.dumps(items, indent=2), encoding="utf-8")
         print(f"[apply] {'(dry) ' if DRY_RUN else ''}Fact → {fu['entity']}: {fu['fact'][:60]}...")
+        if _log_event and not DRY_RUN:
+            try:
+                _log_event(PLATFORM, "fact_added", entity=fu["entity"],
+                           detail=fu["fact"][:200], importance=5,
+                           source_file=str(items_path.relative_to(LIFE_DIR)))
+            except Exception:
+                pass
         updated += 1
 
     # Cross-reference propagation: if a fact mentions another known entity,
@@ -257,6 +285,13 @@ def apply(data: dict) -> tuple[int, int, int]:
                 )
                 skill_path.write_text(skill_content, encoding="utf-8")
             print(f"[apply] {'(dry) ' if DRY_RUN else ''}Skill → {sk['name']}")
+            if _log_event and not DRY_RUN:
+                try:
+                    _log_event(PLATFORM, "skill_created", entity=sk["name"],
+                               detail=sk.get("display", sk["name"]), importance=4,
+                               source_file=f"Resources/skills/{sk['name']}.md")
+                except Exception:
+                    pass
             created += 1
 
     tacit_dir = LIFE_DIR / "Areas" / "about-me"
@@ -267,6 +302,13 @@ def apply(data: dict) -> tuple[int, int, int]:
                 with target.open("a", encoding="utf-8") as f:
                     f.write(f"\n## {TODAY} (auto-extracted)\n{tk['entry']}\n")
             print(f"[apply] {'(dry) ' if DRY_RUN else ''}Tacit → {tk['file']}.md")
+            if _log_event and not DRY_RUN:
+                try:
+                    _log_event(PLATFORM, "tacit_knowledge_appended", entity=tk["file"],
+                               detail=tk["entry"][:200], importance=4,
+                               source_file=f"Areas/about-me/{tk['file']}.md")
+                except Exception:
+                    pass
             appended += 1
 
     # Layer 6: Entity relationships
@@ -303,6 +345,13 @@ def apply(data: dict) -> tuple[int, int, int]:
                     "last_seen": TODAY,
                 })
             rel_path.write_text(json.dumps(existing_rels, indent=2), encoding="utf-8")
+        if _log_event and not DRY_RUN:
+            try:
+                _log_event(PLATFORM, "relationship_added", entity=rel["from"],
+                           detail=f"{rel['from']} --{relation}--> {rel['to']}", importance=4,
+                           source_file="relationships.json")
+            except Exception:
+                pass
         print(f"[apply] {'(dry) ' if DRY_RUN else ''}Rel → {rel['from']} --{relation}--> {rel['to']}")
 
     note = daily_note_path()
