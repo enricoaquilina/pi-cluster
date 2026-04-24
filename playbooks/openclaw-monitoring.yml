@@ -64,7 +64,7 @@
     - name: Deploy auto-deploy cron (pull + apply configs)
       ansible.builtin.cron:
         name: "auto-deploy"
-        minute: "*/5"
+        minute: "*/15"
         user: enrico
         job: "/home/enrico/homelab/scripts/auto-deploy.sh"
         cron_file: openclaw-auto-deploy
@@ -239,10 +239,10 @@
       no_log: true
       when: inventory_hostname == "master"
 
-    - name: Deploy resource monitor cron (every 5 min)
+    - name: Deploy resource monitor cron (every 15 min)
       ansible.builtin.cron:
         name: "resource monitor"
-        minute: "*/5"
+        minute: "*/15"
         user: enrico
         job: "/usr/local/bin/resource-monitor.sh"
         cron_file: openclaw-resource-monitor

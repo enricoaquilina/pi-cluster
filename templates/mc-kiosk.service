@@ -13,6 +13,8 @@ ExecStart=/bin/bash -c '\
     --no-first-run --disable-infobars --disable-session-crashed-bubble \
     --disable-translate --disable-features=TranslateUI \
     --disable-component-update --disable-background-networking \
+    --disable-gpu --disable-gpu-compositing --disable-smooth-scrolling \
+    --enable-low-end-device-mode \
     --password-store=basic & \
   sleep 3; \
   chromium --app=http://localhost:3001 \
@@ -21,6 +23,8 @@ ExecStart=/bin/bash -c '\
     --no-first-run --disable-infobars --disable-session-crashed-bubble \
     --disable-translate --disable-features=TranslateUI \
     --disable-component-update --disable-background-networking \
+    --disable-gpu --disable-gpu-compositing --disable-smooth-scrolling \
+    --enable-low-end-device-mode \
     --password-store=basic & \
   wait'
 Restart=always
