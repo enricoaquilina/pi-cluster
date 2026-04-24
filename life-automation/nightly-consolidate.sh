@@ -88,7 +88,17 @@ for pattern in ['Projects/*/items.json', 'People/*/items.json', 'Companies/*/ite
         for item in items:
             if item.get('date', '') >= cutoff and item.get('confidence') not in ('archived', 'stale', 'superseded'):
                 print(f'- [{entity}] {item[\"fact\"]}')
-" "$LIFE_DIR" 2>/dev/null | head -30 || true)
+# Include pending candidates so LLM can detect contradictions
+cand_path = life / 'logs' / 'candidates.jsonl'
+if cand_path.exists():
+    for line in cand_path.read_text().splitlines():
+        try:
+            c = json.loads(line)
+            if c.get('status') == 'pending':
+                print(f'- [CANDIDATE] [{c.get(\"entity\",\"?\")}] {c[\"fact\"]}')
+        except (json.JSONDecodeError, KeyError):
+            pass
+" "$LIFE_DIR" 2>/dev/null | head -40 || true)
 
 # Prompt with few-shot examples (reduces hallucination and format errors)
 PROMPT="You are a knowledge consolidation assistant. Analyze the daily note below and output ONLY valid JSON. No markdown, no code fences, no explanation text.

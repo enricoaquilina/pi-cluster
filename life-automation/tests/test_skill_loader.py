@@ -83,3 +83,31 @@ class TestMatchSkills:
         _write_skill(skills_dir, "maxwell", "Maxwell Sync Runbook", content="sync openclaw memory gateway")
         results = skill_loader.match_skills("maxwell sync")
         assert len(results) == 1
+
+
+class TestBumpUseCount:
+    def test_increments_use_count(self, skills_dir):
+        _write_skill(skills_dir, "deploy", "Deploy", triggers=["deploy"])
+        (skills_dir / "deploy.md").write_text(
+            "---\ntype: skill\nname: Deploy\ncreated: 2026-04-24\n"
+            "triggers: [deploy]\nuse_count: 0\n---\n\n## Steps\n1. Deploy\n"
+        )
+        results = skill_loader.match_skills("deploy")
+        skill_loader.bump_use_count(results[0])
+        text = (skills_dir / "deploy.md").read_text()
+        assert "use_count: 1" in text
+
+    def test_increments_multiple_times(self, skills_dir):
+        (skills_dir / "deploy.md").write_text(
+            "---\ntype: skill\nname: Deploy\ncreated: 2026-04-24\n"
+            "triggers: [deploy]\nuse_count: 5\n---\n\n## Steps\n1. Deploy\n"
+        )
+        results = skill_loader.match_skills("deploy")
+        skill_loader.bump_use_count(results[0])
+        text = (skills_dir / "deploy.md").read_text()
+        assert "use_count: 6" in text
+
+    def test_no_use_count_field_noop(self, skills_dir):
+        _write_skill(skills_dir, "simple", "Simple", triggers=["simple"])
+        results = skill_loader.match_skills("simple")
+        skill_loader.bump_use_count(results[0])  # should not crash

@@ -140,7 +140,7 @@ fi
 # --- Relevant skills (trigger-based matching) ---
 SKILL_LOADER="$HOME/pi-cluster/life-automation/skill_loader.py"
 if [ -n "$PROJECT_SLUG" ] && [ -f "$SKILL_LOADER" ]; then
-    SKILLS=$(/usr/bin/python3 "$SKILL_LOADER" "$PROJECT_SLUG" --max 3 2>/dev/null)
+    SKILLS=$(/usr/bin/python3 "$SKILL_LOADER" "$PROJECT_SLUG" --max 3 --track 2>/dev/null)
     if [ -n "$SKILLS" ] && [ "$SKILLS" != "_No matching skills found._" ]; then
         echo ""
         echo "$SKILLS"

@@ -87,6 +87,33 @@ def match_skills(query: str, skills: list[dict] | None = None, max_results: int 
     return [s[1] for s in scored[:max_results]]
 
 
+def bump_use_count(skill: dict) -> None:
+    """Increment use_count in skill frontmatter on disk."""
+    rel_path = skill.get("_path", "")
+    if not rel_path:
+        return
+    path = LIFE_DIR / rel_path
+    if not path.exists():
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if "use_count:" not in text:
+        return
+
+    import re
+    def _inc(m):
+        return f"use_count: {int(m.group(1)) + 1}"
+
+    updated = re.sub(r"use_count:\s*(\d+)", _inc, text, count=1)
+    if updated != text:
+        try:
+            path.write_text(updated, encoding="utf-8")
+        except OSError:
+            pass
+
+
 def format_skill(skill: dict) -> str:
     name = skill.get("name", skill.get("_path", "?"))
     path = skill.get("_path", "")
@@ -99,6 +126,7 @@ def main():
     parser.add_argument("--project", help="Match by project name")
     parser.add_argument("--list", action="store_true", help="List all skills")
     parser.add_argument("--max", type=int, default=5)
+    parser.add_argument("--track", action="store_true", help="Bump use_count for matched skills")
     args = parser.parse_args()
 
     if args.list:
@@ -119,6 +147,8 @@ def main():
         print("### Relevant Skills")
         for sk in results:
             print(format_skill(sk))
+            if args.track:
+                bump_use_count(sk)
     else:
         print("_No matching skills found._")
 
