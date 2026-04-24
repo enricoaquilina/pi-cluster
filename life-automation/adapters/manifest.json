@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "description": "Cross-platform adapter registry for ~/life/ second brain",
+  "adapters": {
+    "claude-code": {
+      "status": "active",
+      "tier": "mcp",
+      "description": "Claude Code CLI — hooks + MCP write server",
+      "setup": [
+        "claude mcp add life-write -s user -- python3 /home/enrico/pi-cluster/life-automation/mcp_write_server.py"
+      ],
+      "config_files": [
+        "~/.claude/settings.json"
+      ],
+      "hooks": [
+        "cc_start_hook.sh (SessionStart)",
+        "cc_session_digest.py (SessionEnd)"
+      ]
+    },
+    "openclaw": {
+      "status": "active",
+      "tier": "bridge",
+      "description": "OpenClaw Maxwell — NFS bridge via sync-openclaw-memory.sh",
+      "setup": [],
+      "config_files": [],
+      "hooks": [
+        "sync-openclaw-memory.sh (cron 15min)"
+      ],
+      "notes": "Reads ~/life/ via NFS mount. Writes via filtered daily note sync. Episodic logging added to sync script."
+    },
+    "hermes": {
+      "status": "future",
+      "tier": "mcp",
+      "description": "Hermes Agent — AGENTS.md + MCP when installed",
+      "setup": [],
+      "config_files": [
+        "AGENTS.md"
+      ]
+    },
+    "opencode": {
+      "status": "future",
+      "tier": "mcp",
+      "description": "OpenCode — for non-Anthropic models (GPT, Gemini)",
+      "setup": [],
+      "config_files": [
+        "AGENTS.md"
+      ]
+    }
+  }
+}
