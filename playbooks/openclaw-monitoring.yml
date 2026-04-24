@@ -34,6 +34,27 @@
         job: "cp /home/enrico/.openclaw/openclaw.json /home/enrico/.openclaw/openclaw.json.bak.$(date +\\%Y\\%m\\%d)"
         cron_file: openclaw-backup
 
+    - name: Remove old manual budget check entry
+      ansible.builtin.lineinfile:
+        path: /etc/cron.d/openclaw-budget
+        regexp: '^\d.*127\.0\.0\.1.*budget/check'
+        state: absent
+      become: true
+
+    - name: Remove old manual budget digest entry
+      ansible.builtin.lineinfile:
+        path: /etc/cron.d/openclaw-budget
+        regexp: '^\d.*127\.0\.0\.1.*budget/digest'
+        state: absent
+      become: true
+
+    - name: Remove old budget comment lines
+      ansible.builtin.lineinfile:
+        path: /etc/cron.d/openclaw-budget
+        regexp: '^#\s*(Budget check|Daily digest)'
+        state: absent
+      become: true
+
     - name: Deploy budget check cron (every 6 hours)
       ansible.builtin.cron:
         name: "openclaw budget check"
@@ -60,6 +81,13 @@
         user: enrico
         job: "/home/enrico/homelab/scripts/openclaw-version-check.sh --upgrade >> /var/log/openclaw-version.log 2>&1"
         cron_file: openclaw-version
+
+    - name: Remove old manual auto-deploy cron entry
+      ansible.builtin.lineinfile:
+        path: /etc/cron.d/openclaw-auto-deploy
+        regexp: '^\*/5.*auto-deploy\.sh.*>>'
+        state: absent
+      become: true
 
     - name: Deploy auto-deploy cron (pull + apply configs)
       ansible.builtin.cron:
@@ -89,6 +117,36 @@
           sudo find /mnt/external/openclaw/workspace -maxdepth 0
           ! -perm -g+s -exec chmod g+ws {} + 2>/dev/null
         cron_file: openclaw-workspace
+
+    - name: Remove old manual cluster-health-check from user crontab
+      ansible.builtin.lineinfile:
+        path: /var/spool/cron/crontabs/enrico
+        regexp: 'cluster-health-check'
+        state: absent
+      become: true
+
+    - name: Deploy cluster health check cron (every 15 min)
+      ansible.builtin.cron:
+        name: "cluster health check"
+        minute: "*/15"
+        user: enrico
+        job: "/usr/local/bin/cluster-health-check.sh"
+        cron_file: openclaw-cluster-health-check
+
+    - name: Remove old manual memory-watchdog from user crontab
+      ansible.builtin.lineinfile:
+        path: /var/spool/cron/crontabs/enrico
+        regexp: 'memory-watchdog'
+        state: absent
+      become: true
+
+    - name: Deploy memory watchdog cron (every 15 min)
+      ansible.builtin.cron:
+        name: "memory watchdog"
+        minute: "*/15"
+        user: enrico
+        job: "/mnt/external/scripts/memory-watchdog.sh"
+        cron_file: openclaw-memory-watchdog
 
     - name: Deploy stats collector service
       ansible.builtin.template:
