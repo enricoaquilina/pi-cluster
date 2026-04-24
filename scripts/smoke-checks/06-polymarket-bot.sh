@@ -27,7 +27,7 @@ check_polymarket_bot() {
         check_service "polymarket-bot" "down" "No copybot process running"
         return
     fi
-    local data_file="/mnt/external/polymarket-bot/data/control.json"
+    local data_file="/mnt/external/polymarket-bot/data/positions.json"
     if [ -f "$data_file" ]; then
         local age_s=$(( $(date +%s) - $(stat -c %Y "$data_file") ))
         if [ "$age_s" -gt 3600 ]; then
