@@ -233,6 +233,75 @@ class TestReviewQueue:
         assert candidates.REVIEW_QUEUE_PATH.exists()
 
 
+class TestJsonOutput:
+    """review.py --json flag for API integration."""
+
+    def test_list_json_output(self, life_dir):
+        _make_entity(life_dir, "pi-cluster")
+        candidates.stage_fact("pi-cluster", "project", "Deployed v2", "deployment", "2026-04-24")
+        candidates.stage_fact("pi-cluster", "project", "Chose Postgres", "decision", "2026-04-24")
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"), "list", "--json"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert len(data) == 2
+        assert all("id" in c for c in data)
+
+    def test_list_json_empty(self, life_dir):
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"), "list", "--json"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 0
+        assert json.loads(result.stdout) == []
+
+    def test_graduate_json_output(self, life_dir):
+        _make_entity(life_dir, "pi-cluster")
+        c = candidates.stage_fact("pi-cluster", "project", "Deployed v2", "deployment", "2026-04-24")
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"),
+             "graduate", c["id"], "approved", "--json"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["status"] == "graduated"
+        assert data["id"] == c["id"]
+
+    def test_reject_json_output(self, life_dir):
+        c = candidates.stage_fact("pi-cluster", "project", "Wrong fact", "event", "2026-04-24")
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"),
+             "reject", c["id"], "inaccurate", "--json"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 0
+        data = json.loads(result.stdout)
+        assert data["status"] == "rejected"
+
+    def test_graduate_nonexistent_json(self, life_dir):
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"),
+             "graduate", "cand-999", "--json"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 1
+        data = json.loads(result.stdout)
+        assert data["status"] == "error"
+
+
 class TestNotifyCommand:
     """review.py notify — Telegram-formatted review summary."""
 

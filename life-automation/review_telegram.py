@@ -104,6 +104,12 @@ def send_candidate(c: dict, *, dry_run: bool = False) -> int | None:
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
         "parse_mode": "HTML",
+        "reply_markup": {
+            "inline_keyboard": [[
+                {"text": "✅ Graduate", "callback_data": f"grad:{cid}"},
+                {"text": "❌ Reject", "callback_data": f"rej:{cid}"},
+            ]]
+        },
     })
     if result and result.get("ok"):
         msg_id = result["result"]["message_id"]

@@ -80,6 +80,24 @@ class TestSendCandidate:
         assert "Auto-graduates in" in payload["text"]
         assert "reject" in payload["text"]
 
+    def test_sends_inline_keyboard_buttons(self, review_life, staged_decision):
+        sent_payloads = []
+
+        def fake_api(method, payload, **kw):
+            sent_payloads.append(payload)
+            return {"ok": True, "result": {"message_id": 42}}
+
+        with patch.object(rt, "_tg_api", fake_api), \
+             patch.object(rt, "TELEGRAM_TOKEN", "fake"), \
+             patch.object(rt, "TELEGRAM_CHAT_ID", "123"):
+            rt.send_candidate(staged_decision)
+
+        markup = sent_payloads[0]["reply_markup"]
+        buttons = markup["inline_keyboard"][0]
+        assert len(buttons) == 2
+        assert buttons[0]["callback_data"].startswith("grad:cand-")
+        assert buttons[1]["callback_data"].startswith("rej:cand-")
+
     def test_returns_none_on_api_failure(self, review_life, staged_decision):
         def failing_api(method, payload, **kw):
             return {"ok": False}
