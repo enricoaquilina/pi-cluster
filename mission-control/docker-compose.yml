@@ -44,7 +44,8 @@ services:
     volumes:
       - /home/enrico/.openclaw:/openclaw:ro
       - /mnt/external/polymarket-bot/data:/polybot-data:ro
-      - /home/enrico/life:/life:ro
+      - /home/enrico/life:/life
+      - /home/enrico/pi-cluster/life-automation:/home/enrico/pi-cluster/life-automation:ro
       - /home/enrico/.cache/qmd:/qmd-cache:ro
       - huggingface-cache:/root/.cache/huggingface
     ports:

@@ -22,8 +22,8 @@ class ReviewAction(BaseModel):
     @field_validator("id")
     @classmethod
     def validate_candidate_id(cls, v: str) -> str:
-        if not re.match(r"^cand-\d+$", v):
-            raise ValueError("id must match cand-<number>")
+        if not re.match(r"^cand-[\w-]+$", v):
+            raise ValueError("id must match cand-<identifier>")
         return v
 
 router = APIRouter()
