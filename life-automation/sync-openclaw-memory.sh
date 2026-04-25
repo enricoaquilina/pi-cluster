@@ -13,7 +13,15 @@ set -euo pipefail
 
 # --- Configuration (overridable via env for testing) ---
 LIFE_DIR="${LIFE_DIR:-$HOME/life}"
-WORKSPACE_DIR="${WORKSPACE_DIR:-/mnt/external/openclaw/workspace}"
+# Auto-detect: heavy node has workspace at /mnt/data (local), others at /mnt/external (NFS)
+if [ -z "${WORKSPACE_DIR:-}" ]; then
+    if [ -d "/mnt/data/openclaw/workspace" ]; then
+        WORKSPACE_DIR="/mnt/data/openclaw/workspace"
+        SYNC_SKIP_MOUNT_CHECK="${SYNC_SKIP_MOUNT_CHECK:-1}"
+    else
+        WORKSPACE_DIR="/mnt/external/openclaw/workspace"
+    fi
+fi
 MEMORY_DIR="${MEMORY_DIR:-$WORKSPACE_DIR/memory}"
 MEMORY_MD="${MEMORY_MD:-$WORKSPACE_DIR/MEMORY.md}"
 LOCK_FILE="${LOCK_FILE:-$LIFE_DIR/logs/openclaw-sync.lock}"
