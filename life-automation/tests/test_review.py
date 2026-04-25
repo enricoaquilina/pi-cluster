@@ -88,9 +88,47 @@ class TestAutoGraduatable:
         candidates.stage_fact("pi-cluster", "project", "Deployed app", "deployment", "2026-04-24")
         assert len(candidates.auto_graduatable()) == 1
 
-    def test_review_categories_excluded(self, life_dir):
+    def test_review_categories_excluded_when_fresh(self, life_dir):
         candidates.stage_fact("pi-cluster", "project", "Chose X over Y", "decision", "2026-04-24")
         assert len(candidates.auto_graduatable()) == 0
+
+    def test_review_category_auto_graduates_after_7_days(self, life_dir):
+        """Decisions/lessons auto-graduate after AUTO_GRADUATE_DAYS (silence = approval)."""
+        from datetime import datetime, timezone, timedelta
+        c = candidates.stage_fact("pi-cluster", "project", "Important decision", "decision", "2026-04-24")
+        # Age the candidate past the threshold
+        old_created = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+        all_cands = candidates._load_all()
+        for entry in all_cands:
+            if entry["id"] == c["id"]:
+                entry["created"] = old_created
+        candidates._save_all(all_cands)
+        assert len(candidates.auto_graduatable()) == 1
+        assert candidates.auto_graduatable()[0]["id"] == c["id"]
+
+    def test_review_category_not_graduated_before_threshold(self, life_dir):
+        """Decisions younger than AUTO_GRADUATE_DAYS stay in review."""
+        from datetime import datetime, timezone, timedelta
+        c = candidates.stage_fact("pi-cluster", "project", "Recent decision", "decision", "2026-04-24")
+        recent_created = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        all_cands = candidates._load_all()
+        for entry in all_cands:
+            if entry["id"] == c["id"]:
+                entry["created"] = recent_created
+        candidates._save_all(all_cands)
+        assert len(candidates.auto_graduatable()) == 0
+
+    def test_lesson_category_auto_graduates_after_threshold(self, life_dir):
+        """Lessons also auto-graduate after the time threshold."""
+        from datetime import datetime, timezone, timedelta
+        c = candidates.stage_fact("pi-cluster", "project", "Old lesson", "lesson", "2026-04-15")
+        old_created = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        all_cands = candidates._load_all()
+        for entry in all_cands:
+            if entry["id"] == c["id"]:
+                entry["created"] = old_created
+        candidates._save_all(all_cands)
+        assert len(candidates.auto_graduatable()) == 1
 
     def test_mention_threshold_graduates(self, life_dir):
         candidates.stage_fact("pi-cluster", "project", "Unknown category fact", "unknown_cat", "2026-04-24")

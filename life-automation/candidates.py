@@ -149,10 +149,22 @@ def needs_review_candidates() -> list[dict]:
     return [c for c in pending_candidates() if c.get("needs_review")]
 
 
+AUTO_GRADUATE_DAYS = 7
+
+
 def auto_graduatable() -> list[dict]:
     result = []
+    today = date.today()
     for c in pending_candidates():
         if c.get("needs_review"):
+            # Time-based: auto-graduate after AUTO_GRADUATE_DAYS if not rejected
+            try:
+                created = datetime.fromisoformat(c["created"]).date()
+            except (KeyError, ValueError):
+                continue
+            age_days = (today - created).days
+            if age_days >= AUTO_GRADUATE_DAYS:
+                result.append(c)
             continue
         if c.get("mentions", 1) >= 2:
             result.append(c)

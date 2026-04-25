@@ -184,8 +184,8 @@ log "Auto-graduating qualifying candidates..."
 python3 "$LIFE_DIR/scripts/review.py" auto-graduate 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 python3 "$LIFE_DIR/scripts/review.py" queue 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 
-# Send interactive review to Telegram (inline keyboard: Graduate/Reject per candidate)
-python3 "$LIFE_DIR/scripts/review_telegram.py" --send-only 2>&1 | tee -a "$LOG_DIR/consolidate.log" || true
+# Notify via Telegram if items need human review (auto-graduates after 7 days if not rejected)
+python3 "$LIFE_DIR/scripts/review_telegram.py" 2>&1 | tee -a "$LOG_DIR/consolidate.log" || true
 
 # Log operation
 python3 "$LIFE_DIR/scripts/log_operation.py" "consolidate" "Extraction applied for $TODAY" 2>/dev/null || true

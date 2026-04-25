@@ -84,17 +84,7 @@ if [ -f "$SYNC_EPOCH_FILE" ]; then
     fi
 fi
 
-# 7. Check for Telegram review responses (if pending)
-REVIEW_PENDING="$LIFE_DIR/logs/review-telegram-pending.json"
-if [[ -f "$REVIEW_PENDING" ]] && [[ -s "$REVIEW_PENDING" ]]; then
-    ENV_CLUSTER="$HOME/pi-cluster/scripts/.env.cluster"
-    # shellcheck source=/dev/null
-    [[ -f "$ENV_CLUSTER" ]] && { set -a; source "$ENV_CLUSTER"; set +a; }
-    python3 "$LIFE_DIR/scripts/review_telegram.py" --check --timeout 10 2>&1 \
-        | tee -a "$LOG_DIR/consolidate.log" || true
-fi
-
-# 8. Log memory read patterns from gateway
+# 7. Log memory read patterns from gateway
 MEMLOG_STATE="$LOG_DIR/.memory-reads-since"
 MEMLOG_FILE="$LOG_DIR/memory-reads.log"
 LAST_PARSE=$(cat "$MEMLOG_STATE" 2>/dev/null || echo "1h")
