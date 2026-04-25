@@ -71,6 +71,35 @@ def cmd_queue(args):
     print(f"Review queue written to {candidates.REVIEW_QUEUE_PATH}")
 
 
+def cmd_notify(args):
+    """Print Telegram-formatted review summary. Exit 0 if items need review, 1 if empty."""
+    review = candidates.needs_review_candidates()
+    pending = candidates.pending_candidates()
+    auto = [c for c in pending if not c.get("needs_review")]
+
+    if not review and not auto:
+        sys.exit(1)
+
+    lines = ["📋 <b>Nightly Review Queue</b>", ""]
+
+    if review:
+        lines.append(f"🔍 <b>{len(review)} need human review:</b>")
+        for c in review[:5]:
+            cat = c.get("category", "?")
+            lines.append(f"  • [{c['entity']}] {c['fact'][:60]} <i>({cat})</i>")
+        if len(review) > 5:
+            lines.append(f"  … and {len(review) - 5} more")
+        lines.append("")
+
+    if auto:
+        lines.append(f"✅ {len(auto)} auto-graduatable (will process next run)")
+        lines.append("")
+
+    lines.append(f"Total: {len(pending)} pending")
+    lines.append("Review: <code>python3 ~/life/scripts/review.py list</code>")
+    print("\n".join(lines))
+
+
 def main():
     parser = argparse.ArgumentParser(description="Review staged fact candidates")
     sub = parser.add_subparsers(dest="command")
@@ -87,6 +116,7 @@ def main():
 
     sub.add_parser("auto-graduate", help="Batch graduate qualifying candidates")
     sub.add_parser("queue", help="Regenerate REVIEW_QUEUE.md")
+    sub.add_parser("notify", help="Print Telegram-formatted review summary")
 
     args = parser.parse_args()
     if not args.command:
@@ -99,6 +129,7 @@ def main():
         "reject": cmd_reject,
         "auto-graduate": cmd_auto_graduate,
         "queue": cmd_queue,
+        "notify": cmd_notify,
     }[args.command](args)
 
 

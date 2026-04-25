@@ -4,6 +4,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/life-automation-lib.sh"
 
+# Load Telegram credentials for review queue notifications
+ENV_CLUSTER="$HOME/pi-cluster/scripts/.env.cluster"
+# shellcheck source=/dev/null
+[[ -f "$ENV_CLUSTER" ]] && source "$ENV_CLUSTER"
+
 life_init_env
 TAG="consolidate"
 log() { life_log "$TAG" "$*"; }
@@ -178,6 +183,11 @@ python3 "$LIFE_DIR/scripts/apply_extraction.py" --stage < "$TMPFILE" \
 log "Auto-graduating qualifying candidates..."
 python3 "$LIFE_DIR/scripts/review.py" auto-graduate 2>&1 | tee -a "$LOG_DIR/consolidate.log"
 python3 "$LIFE_DIR/scripts/review.py" queue 2>&1 | tee -a "$LOG_DIR/consolidate.log"
+
+# Notify via Telegram if items need human review
+REVIEW_MSG=$(python3 "$LIFE_DIR/scripts/review.py" notify 2>/dev/null) && {
+    life_notify_telegram "$REVIEW_MSG" || log "WARNING: Telegram review notification failed"
+} || true
 
 # Log operation
 python3 "$LIFE_DIR/scripts/log_operation.py" "consolidate" "Extraction applied for $TODAY" 2>/dev/null || true

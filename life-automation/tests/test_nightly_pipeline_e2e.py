@@ -310,6 +310,47 @@ class TestReviewQueue:
         assert rejected[0]["status"] == "rejected"
 
 
+    def test_notify_with_review_items(self, pipeline_life: Path):
+        """Notify outputs Telegram-formatted HTML when items need review."""
+        run_apply(pipeline_life, REALISTIC_PAYLOAD, stage=True)
+        result = run_review(pipeline_life, "notify")
+        assert result.returncode == 0
+        assert "Nightly Review Queue" in result.stdout
+        assert "need human review" in result.stdout
+        assert "gadget" in result.stdout
+
+    def test_notify_empty_exits_nonzero(self, pipeline_life: Path):
+        """Notify exits 1 when no pending candidates — shell skips Telegram."""
+        result = run_review(pipeline_life, "notify")
+        assert result.returncode == 1
+        assert result.stdout.strip() == ""
+
+    def test_notify_auto_only_still_sends(self, pipeline_life: Path):
+        """Notify sends even with only auto-graduatable items (no review needed)."""
+        payload = {
+            "new_entities": [],
+            "fact_updates": [
+                {
+                    "entity_type": "project",
+                    "entity": "gadget",
+                    "date": "2026-04-24",
+                    "fact": "Deployed v4 with new config",
+                    "category": "deployment",
+                    "temporal": False,
+                },
+            ],
+            "tacit_knowledge": [],
+            "skills": [],
+            "relationships": [],
+            "summary": "Deploy only.",
+        }
+        run_apply(pipeline_life, payload, stage=True)
+        result = run_review(pipeline_life, "notify")
+        assert result.returncode == 0
+        assert "auto-graduatable" in result.stdout
+        assert "need human review" not in result.stdout
+
+
 class TestSupersedes:
     """Contradiction detection and supersedes handling."""
 

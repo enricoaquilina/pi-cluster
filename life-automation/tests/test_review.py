@@ -193,3 +193,46 @@ class TestReviewQueue:
         candidates.stage_fact("pi-cluster", "project", "Something", "event", "2026-04-24")
         candidates.write_review_queue()
         assert candidates.REVIEW_QUEUE_PATH.exists()
+
+
+class TestNotifyCommand:
+    """review.py notify — Telegram-formatted review summary."""
+
+    def test_notify_with_review_items(self, life_dir):
+        candidates.stage_fact("pi-cluster", "project", "Chose X", "decision", "2026-04-24")
+        candidates.stage_fact("pi-cluster", "project", "Deploy v2", "deployment", "2026-04-24")
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"), "notify"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 0
+        assert "Nightly Review Queue" in result.stdout
+        assert "1 need human review" in result.stdout
+        assert "Chose X" in result.stdout
+        assert "1 auto-graduatable" in result.stdout
+
+    def test_notify_empty_exits_nonzero(self, life_dir):
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"), "notify"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 1
+        assert result.stdout.strip() == ""
+
+    def test_notify_truncates_long_list(self, life_dir):
+        for i in range(8):
+            candidates.stage_fact(
+                "pi-cluster", "project", f"Decision number {i}", "decision", "2026-04-24"
+            )
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).parent.parent / "review.py"), "notify"],
+            capture_output=True, text=True,
+            env={**__import__("os").environ, "LIFE_DIR": str(life_dir)},
+        )
+        assert result.returncode == 0
+        assert "and 3 more" in result.stdout
