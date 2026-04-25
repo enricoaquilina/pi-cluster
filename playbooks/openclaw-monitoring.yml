@@ -391,6 +391,16 @@
         job: "{{ heavy_repo_dir }}/scripts/disk-health-monitor.sh"
         cron_file: openclaw-disk-health
 
+    # ── Life Automation: Nightly Consolidation ───────────────────────────────
+    - name: Deploy nightly-consolidate cron (2am daily)
+      ansible.builtin.cron:
+        name: "nightly life consolidation"
+        minute: "0"
+        hour: "2"
+        user: enrico
+        job: "{{ heavy_repo_dir }}/life-automation/nightly-consolidate.sh"
+        cron_file: openclaw-nightly-consolidate
+
     # ── noatime (biggest free write reduction) ─────��──────────────────────────
     - name: Set noatime on root filesystem
       ansible.posix.mount:
