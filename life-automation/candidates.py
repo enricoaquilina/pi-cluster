@@ -30,6 +30,17 @@ _counter = 0
 
 def _next_id() -> str:
     global _counter
+    if _counter == 0:
+        # Resume from highest existing ID to avoid collisions across process restarts
+        today_prefix = f"cand-{date.today().isoformat()}-"
+        for entry in _load_all():
+            eid = entry.get("id", "")
+            if eid.startswith(today_prefix):
+                try:
+                    num = int(eid[len(today_prefix):])
+                    _counter = max(_counter, num)
+                except ValueError:
+                    pass
     _counter += 1
     return f"cand-{date.today().isoformat()}-{_counter:03d}"
 
@@ -80,6 +91,7 @@ def stage_fact(
     extracted_by: str = "nightly-consolidate",
     supersedes: str | None = None,
     contradicts_existing: bool = False,
+    temporal: bool = False,
 ) -> dict:
     """Stage a fact as candidate. Deduplicates against pending candidates.
 
@@ -112,7 +124,7 @@ def stage_fact(
         "date": fact_date,
         "status": "pending",
         "confidence": "single",
-        "temporal": False,
+        "temporal": temporal,
         "source": source or f"daily/{fact_date}",
         "extracted_by": extracted_by,
         "created": datetime.now(timezone.utc).isoformat(),

@@ -90,7 +90,7 @@ while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
         --no-session-persistence \
         --permission-mode auto \
         --model "$MODEL" \
-        --append-system-prompt "Running unattended from systemd timer. Follow unattended mode rules: skip all interactive prompts, only do automated actions (carry forward, deadline alerts, changelog). Flag everything else for morning review in daily note." \
+        --append-system-prompt "Running unattended from systemd timer. You MUST write to the daily note — that is your primary job. Allowed actions: carry forward pending items, add deadline alerts, write changelog entries, update Active Projects section. All writes go to today's daily note at ~/life/Daily/. Do NOT create PRs, push code, send messages, or modify code files. If a task requires interactive input, flag it in the daily note for morning review instead of attempting it." \
         >> "$(life_log_file "$TAG")" 2>&1 || cmd_rc=$?
 
     if [[ "$cmd_rc" -eq 0 ]]; then

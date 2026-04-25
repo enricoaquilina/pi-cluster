@@ -40,8 +40,11 @@ class TestAssemble:
         empty = tmp_path / "empty"
         empty.mkdir()
         import episodic
+        import candidates as cand_mod
         with patch.object(context_budget, "LIFE_DIR", empty), \
-             patch.object(episodic, "LOGS_DIR", empty / "logs"):
+             patch.object(episodic, "LOGS_DIR", empty / "logs"), \
+             patch.object(cand_mod, "CANDIDATES_PATH", empty / "logs" / "candidates.jsonl"), \
+             patch.object(cand_mod, "LIFE_DIR", empty):
             result = context_budget.assemble(budget=6000)
             assert result == ""
 

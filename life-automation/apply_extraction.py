@@ -213,6 +213,7 @@ def apply(data: dict) -> tuple[int, int, int]:
                 source=f"daily/{TODAY}", extracted_by=PLATFORM,
                 supersedes=fu.get("supersedes"),
                 contradicts_existing=contradicts,
+                temporal=bool(fu.get("temporal", False)),
             )
             print(f"[apply] Staged → {fu['entity']}: {fu['fact'][:60]}...")
             if _log_event:
