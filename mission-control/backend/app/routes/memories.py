@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import time
@@ -9,8 +10,21 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, field_validator
 
 from ..config import LIFE_DIR, OPENCLAW_DIR, QMD_INDEX
+
+
+class ReviewAction(BaseModel):
+    id: str
+    rationale: str = ""
+
+    @field_validator("id")
+    @classmethod
+    def validate_candidate_id(cls, v: str) -> str:
+        if not re.match(r"^cand-\d+$", v):
+            raise ValueError("id must match cand-<number>")
+        return v
 
 router = APIRouter()
 
@@ -335,3 +349,75 @@ def life_graph(
         return data
     except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
         return {"edges": [], "total": 0, "error": str(e)}
+
+
+def _review_script_env() -> dict:
+    script_dir = str(LIFE_DIR / "scripts")
+    return {**os.environ, "LIFE_DIR": str(LIFE_DIR), "PYTHONPATH": script_dir}
+
+
+@router.get("/api/life/review")
+def life_review_list():
+    """List pending review candidates."""
+    script = LIFE_DIR / "scripts" / "review.py"
+    if not script.exists():
+        raise HTTPException(status_code=503, detail="Review script not available")
+    try:
+        result = subprocess.run(
+            ["python3", str(script), "list", "--json"],
+            capture_output=True, text=True, timeout=10,
+            env=_review_script_env(),
+        )
+        if result.returncode != 0:
+            return {"candidates": [], "error": result.stderr[:200]}
+        return {"candidates": json.loads(result.stdout)}
+    except (subprocess.TimeoutExpired, json.JSONDecodeError) as e:
+        return {"candidates": [], "error": str(e)}
+
+
+@router.post("/api/life/review/graduate")
+def life_review_graduate(body: ReviewAction):
+    """Graduate a review candidate."""
+    script = LIFE_DIR / "scripts" / "review.py"
+    if not script.exists():
+        raise HTTPException(status_code=503, detail="Review script not available")
+    cmd = ["python3", str(script), "graduate", body.id, "--json"]
+    if body.rationale:
+        cmd.insert(-1, body.rationale)
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=10,
+            env=_review_script_env(),
+        )
+        data = json.loads(result.stdout) if result.stdout.strip() else {}
+        if result.returncode != 0:
+            raise HTTPException(status_code=404, detail=data.get("message", "Candidate not found"))
+        return data
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail=result.stdout[:200] + result.stderr[:200])
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Review script timed out")
+
+
+@router.post("/api/life/review/reject")
+def life_review_reject(body: ReviewAction):
+    """Reject a review candidate."""
+    script = LIFE_DIR / "scripts" / "review.py"
+    if not script.exists():
+        raise HTTPException(status_code=503, detail="Review script not available")
+    cmd = ["python3", str(script), "reject", body.id, "--json"]
+    if body.rationale:
+        cmd.insert(-1, body.rationale)
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=10,
+            env=_review_script_env(),
+        )
+        data = json.loads(result.stdout) if result.stdout.strip() else {}
+        if result.returncode != 0:
+            raise HTTPException(status_code=404, detail=data.get("message", "Candidate not found"))
+        return data
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail=result.stdout[:200] + result.stderr[:200])
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Review script timed out")

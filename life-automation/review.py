@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """CLI for reviewing staged fact candidates in ~/life/."""
 import argparse
+import json
 import sys
 
 import candidates
@@ -8,6 +9,9 @@ import candidates
 
 def cmd_list(args):
     pending = candidates.pending_candidates()
+    if getattr(args, "json", False):
+        print(json.dumps(pending))
+        return
     if not pending:
         print("No pending candidates.")
         return
@@ -32,20 +36,32 @@ def cmd_list(args):
 def cmd_graduate(args):
     result = candidates.graduate(args.candidate_id, rationale=args.rationale or "")
     if result:
-        print(f"Graduated: {result['id']} → {result['entity']}/items.json")
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "graduated", "id": result["id"], "entity": result["entity"], "fact": result["fact"]}))
+        else:
+            print(f"Graduated: {result['id']} → {result['entity']}/items.json")
         candidates.write_review_queue()
     else:
-        print(f"Not found or not pending: {args.candidate_id}", file=sys.stderr)
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "message": f"Not found or not pending: {args.candidate_id}"}))
+        else:
+            print(f"Not found or not pending: {args.candidate_id}", file=sys.stderr)
         sys.exit(1)
 
 
 def cmd_reject(args):
     result = candidates.reject(args.candidate_id, rationale=args.rationale or "")
     if result:
-        print(f"Rejected: {result['id']}")
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "rejected", "id": result["id"], "entity": result.get("entity", "")}))
+        else:
+            print(f"Rejected: {result['id']}")
         candidates.write_review_queue()
     else:
-        print(f"Not found or not pending: {args.candidate_id}", file=sys.stderr)
+        if getattr(args, "json", False):
+            print(json.dumps({"status": "error", "message": f"Not found or not pending: {args.candidate_id}"}))
+        else:
+            print(f"Not found or not pending: {args.candidate_id}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -104,15 +120,18 @@ def main():
     parser = argparse.ArgumentParser(description="Review staged fact candidates")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("list", help="Show pending candidates")
+    list_p = sub.add_parser("list", help="Show pending candidates")
+    list_p.add_argument("--json", action="store_true", help="Output JSON")
 
     grad = sub.add_parser("graduate", help="Promote candidate to items.json")
     grad.add_argument("candidate_id")
     grad.add_argument("rationale", nargs="?", default="")
+    grad.add_argument("--json", action="store_true", help="Output JSON")
 
     rej = sub.add_parser("reject", help="Reject a candidate")
     rej.add_argument("candidate_id")
     rej.add_argument("rationale", nargs="?", default="")
+    rej.add_argument("--json", action="store_true", help="Output JSON")
 
     sub.add_parser("auto-graduate", help="Batch graduate qualifying candidates")
     sub.add_parser("queue", help="Regenerate REVIEW_QUEUE.md")
