@@ -3,7 +3,7 @@ name: Enable Auto-Merge
 
 on:
   pull_request:
-    types: [reopened, synchronize]
+    types: [opened, reopened, synchronize]
 
 permissions:
   contents: write

@@ -20,6 +20,16 @@ TESTS=()
 _HARNESS_CI=${_HARNESS_CI:-false}
 _HARNESS_FIX_HINTS=${_HARNESS_FIX_HINTS:-false}
 
+skip_if_no_cluster() {
+    if [ "${CI:-false}" = "true" ] || [ ! -d "/mnt/data" ]; then
+        WARN=$((WARN + 1))
+        TESTS+=("SKIP  $1: no cluster hardware")
+        $_HARNESS_CI || echo "  SKIP  $1: no cluster hardware"
+        return 0
+    fi
+    return 1
+}
+
 pass() {
     PASS=$((PASS + 1))
     TESTS+=("PASS  $1")
