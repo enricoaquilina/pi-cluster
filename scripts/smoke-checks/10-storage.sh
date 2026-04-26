@@ -11,7 +11,7 @@ check_nfs_workspace() {
         ws="/mnt/external/openclaw/workspace"
     fi
 
-    if ! timeout 5 stat "$ws" >/dev/null 2>&1; then
+    if [ -z "$_NFS_OWNERSHIP_DATA" ] && ! timeout 5 stat "$ws" >/dev/null 2>&1; then
         check_service "nfs-workspace" "down" "workspace unresponsive or missing ($ws)"
         return
     fi
