@@ -223,7 +223,7 @@ def lint_entity(slug: str, facts: list[dict]) -> list[dict]:
             [CLAUDE_BIN, "-p", prompt,
              "--output-format", "text", "--no-session-persistence",
              "--model", "claude-haiku-4-5-20251001"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=120,
         )
         if result.returncode != 0:
             print(f"[llm-lint] ERROR: Claude failed for {slug}", file=sys.stderr)
