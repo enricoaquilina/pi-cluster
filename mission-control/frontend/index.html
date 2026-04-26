@@ -212,6 +212,7 @@
   .timeline-legend { font-size: 0.7rem; color: var(--muted); padding: 0.5rem 0; }
   .timeline-legend span { margin-right: 1rem; }
   .timeline-legend .legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: middle; }
+  .timeline-group-label { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary, var(--muted)); padding: 0.5rem 0 0.15rem; margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
   /* Services Incidents */
   .services-incidents { padding: 0 2rem 2rem; }
@@ -1217,13 +1218,13 @@ function renderServices(services, alerts) {
   grid.innerHTML = html;
 
   // Timeline
-  renderServicesTimeline(services);
+  renderServicesTimeline(services, svcMap);
 
   // Incidents
   renderServicesIncidents(alerts);
 }
 
-async function renderServicesTimeline(services) {
+async function renderServicesTimeline(services, svcMap) {
   const container = document.getElementById('services-timeline');
   // Fetch history for each service in parallel
   const BLOCKS = 48; // 48 half-hour blocks = 24h
@@ -1237,10 +1238,12 @@ async function renderServicesTimeline(services) {
     );
     const histories = await Promise.all(historyPromises);
 
-    let html = '<h3>Timeline (24h)</h3>';
-    services.forEach((s, i) => {
-      const name = SVC_DISPLAY[s.service] || s.service;
-      const history = histories[i] || [];
+    const histMap = {};
+    services.forEach((s, i) => { histMap[s.service] = histories[i] || []; });
+
+    function renderTimelineRow(svc) {
+      const name = SVC_DISPLAY[svc.service] || svc.service;
+      const history = histMap[svc.service] || [];
       let blocks = '';
       for (let b = 0; b < BLOCKS; b++) {
         const blockStart = now - (BLOCKS - b) * blockDuration;
@@ -1254,10 +1257,8 @@ async function renderServicesTimeline(services) {
         let tipStatusCls = 'tip-nodata';
         let tipDetails = [];
         if (inBlock.length > 0) {
-          // Use last check status — reflects current state, not worst-ever in window
           const lastCheck = inBlock.reduce((a, b) => new Date(a.checked_at) > new Date(b.checked_at) ? a : b);
           const lastStatus = lastCheck.status;
-          // Show mixed indicator if block had different statuses
           const hasDown = inBlock.some(h => h.status === 'down');
           const hasDegraded = inBlock.some(h => h.status === 'degraded');
           cls = lastStatus === 'down' ? 'down' : lastStatus === 'degraded' ? 'degraded' : 'up';
@@ -1275,11 +1276,25 @@ async function renderServicesTimeline(services) {
         const tipHtml = `<span class="timeline-tip"><span class="tip-time">${tipTime}</span> <span class="tip-status ${tipStatusCls}">${tipStatusText}</span>${tipDetails.length ? '<div class="tip-detail">' + tipDetails.join(' · ') + '</div>' : ''}</span>`;
         blocks += `<div class="timeline-block ${cls}">${tipHtml}</div>`;
       }
-      html += `<div class="timeline-row">
+      return `<div class="timeline-row">
         <span class="timeline-label">${esc(name)}</span>
         <div class="timeline-blocks">${blocks}</div>
       </div>`;
-    });
+    }
+
+    let html = '<h3>Timeline (24h)</h3>';
+    const tlGrouped = new Set();
+    for (const group of SVC_GROUPS) {
+      const groupSvcs = group.services.map(id => svcMap[id]).filter(Boolean);
+      if (!groupSvcs.length) continue;
+      html += `<div class="timeline-group-label">${esc(group.name)}</div>`;
+      groupSvcs.forEach(s => { html += renderTimelineRow(s); tlGrouped.add(s.service); });
+    }
+    const tlUngrouped = services.filter(s => !tlGrouped.has(s.service));
+    if (tlUngrouped.length) {
+      html += `<div class="timeline-group-label">Other</div>`;
+      tlUngrouped.forEach(s => { html += renderTimelineRow(s); });
+    }
     html += `<div class="timeline-legend">
       <span><span class="legend-dot" style="background:var(--green)"></span>Up</span>
       <span><span class="legend-dot" style="background:var(--yellow)"></span>Degraded</span>

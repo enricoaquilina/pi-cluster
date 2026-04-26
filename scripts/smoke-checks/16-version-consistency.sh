@@ -6,7 +6,9 @@ _VERSION_DATA=""
 
 _fetch_version_data() {
     [ -n "$_VERSION_DATA" ] && return
-    local vars_file="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/../../vars/openclaw-nodes.yml"
+    local check_dir
+    check_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local vars_file="$check_dir/../../vars/openclaw-nodes.yml"
     local pinned
     pinned=$(grep '^openclaw_version:' "$vars_file" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')
     if [ -z "$pinned" ]; then

@@ -84,7 +84,7 @@ _fetch_systemd_layer_data() {
 
     for host in heavy master slave0 slave1; do
         local output
-        local find_cmd="find ~/.config/systemd/user/ -maxdepth 1 -type f -regextype posix-extended -iregex '.*(${LAYER_FORBIDDEN_PATTERNS}).*' ! -iregex '.*(${LAYER_ALLOWED_USER}).*' -printf '%f\n' 2>/dev/null"
+        local find_cmd="find ~/.config/systemd/user/ -maxdepth 1 -type f -regextype posix-extended -iregex '.*(${LAYER_FORBIDDEN_PATTERNS}).*' ! -iregex '.*(${LAYER_ALLOWED_USER}).*' ! -name '*.disabled' -printf '%f\n' 2>/dev/null"
         if [ "$host" = "heavy" ]; then
             output=$(eval "$find_cmd")
         else
