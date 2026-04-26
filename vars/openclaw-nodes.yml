@@ -1,6 +1,6 @@
 # OpenClaw distributed agent cluster variables
 
-# OpenClaw version pin (heavy+master upgraded to 2026.4.24, slave0+slave1 still on 2026.3.24)
+# OpenClaw version pin (upgraded 2026-04-26, all 4 nodes at 2026.4.24)
 # Note: CLI binary still broken (use node dist/index.js), Python on control needs bash -c wrapper
 openclaw_version: "2026.4.24"
 
