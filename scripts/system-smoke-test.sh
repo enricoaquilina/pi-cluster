@@ -60,6 +60,11 @@ _fetch_watchdog_status
 check_watchdog_cluster
 check_watchdog_ssh
 check_orphan_services
+check_systemd_layer_audit
+_fetch_service_inventory
+check_service_inventory
+_fetch_version_data
+check_version_consistency
 
 # ── Output: Interactive Mode ──────────────────────────────────────────────────
 
@@ -67,7 +72,7 @@ if [[ "$MODE" == "interactive" ]]; then
     echo ""
     printf "${BOLD}%-25s %-10s %-8s %s${NC}\n" "SERVICE" "STATUS" "MS" "ERROR"
     echo "────────────────────────────────────────────────────────────────"
-    for svc in openclaw-gateway openclaw-gateway-memory openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-master openclaw-slave0 openclaw-slave1 openclaw-heavy router-api spreadbot polymarket-bot pihole-dns keepalived cloudflared docker-dns tailscale-dns nfs-workspace nfs-backup nvme-health nvme-write-rate life-sync node-stats-heavy node-stats-control node-stats-build node-stats-light watchdog-cluster watchdog-ssh orphan-services; do
+    for svc in openclaw-gateway openclaw-gateway-memory openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-master openclaw-slave0 openclaw-slave1 openclaw-heavy router-api spreadbot polymarket-bot pihole-dns keepalived cloudflared docker-dns tailscale-dns nfs-workspace nfs-backup nvme-health nvme-write-rate life-sync node-stats-heavy node-stats-control node-stats-build node-stats-light watchdog-cluster watchdog-ssh orphan-services systemd-layer-audit service-inventory version-consistency; do
         status="${RESULTS[$svc]:-unknown}"
         ms="${RESPONSE_MS[$svc]:-}"
         err="${ERRORS[$svc]:-}"
