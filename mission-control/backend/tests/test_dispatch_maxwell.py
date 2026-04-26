@@ -165,8 +165,14 @@ async def test_maxwell_dispatch_preserves_persona_casing(client, auth_headers, f
     assert "PER_PERSONA_SENTINEL=abc123" in sp
 
 
-async def test_non_maxwell_persona_unchanged(client, auth_headers, fake_vault_env):
-    """Existing personas (Archie, Pixel, ...) still use their static system prompts."""
+async def test_non_maxwell_persona_gets_vault_prompt(client, auth_headers, fake_vault_env):
+    """All personas now get vault-grounded prompts with per-persona segment selection."""
+    openclaw_workspace = fake_vault_env.parent / ".openclaw" / "workspace"
+    (openclaw_workspace / "Archie").mkdir(parents=True, exist_ok=True)
+    (openclaw_workspace / "Archie" / "IDENTITY.md").write_text(
+        "# Archie\nBackend developer. Focus on APIs, databases, server architecture.\n"
+    )
+
     captured = {}
 
     async def fake_chat(prompt, system_prompt, timeout, model=None):
@@ -174,7 +180,8 @@ async def test_non_maxwell_persona_unchanged(client, auth_headers, fake_vault_en
         captured["prompt"] = prompt
         return "ok"
 
-    with patch("app.routes.dispatch._is_gateway_reachable", new=AsyncMock(return_value=True)), \
+    with _freeze_today(date(2026, 4, 9)), \
+         patch("app.routes.dispatch._is_gateway_reachable", new=AsyncMock(return_value=True)), \
          patch("app.routes.dispatch._openclaw_chat", side_effect=fake_chat):
         await client.post(
             "/api/dispatch",
@@ -183,7 +190,13 @@ async def test_non_maxwell_persona_unchanged(client, auth_headers, fake_vault_en
         )
 
     sp = captured.get("system_prompt", "")
+    # Vault grounding present
+    assert "~/life/" in sp
+    # Per-persona identity loaded
     assert "Archie" in sp
-    assert "backend developer" in sp
-    # Unchanged personas are not wrapped in untrusted tags either — that's Maxwell-only.
-    assert captured.get("prompt") == "write a fastapi endpoint"
+    # Rules segment included (Archie gets ["grounding", "identity", "rules", "daily_note"])
+    assert "No secrets in chat" in sp
+    # Daily note content included
+    assert "pi-cluster: hardening the watchdog" in sp
+    # All vault-aware personas get untrusted wrapping
+    assert "<untrusted_user_message>" in captured.get("prompt", "")

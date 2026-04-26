@@ -294,3 +294,86 @@ def test_refuses_to_read_outside_allow_list(fake_vault, tmp_path):
 
     assert "SUPER_SECRET_API_KEY" not in text
     assert "sk-attack" not in text
+
+
+# ── Per-persona segment selection ────────────────────────────────────────────
+
+
+def test_maxwell_gets_all_segments(fake_vault):
+    """Maxwell receives every segment type."""
+    from app.maxwell_prompt import build_system_prompt, PERSONA_SEGMENTS
+
+    with _freeze_today(date(2026, 4, 9)):
+        segments = build_system_prompt(persona="Maxwell")
+
+    roles = [s.role for s in segments]
+    assert roles == ["grounding", "identity", "profile", "rules",
+                     "workflow", "daily_note", "inventory"]
+    assert len(segments) == len(PERSONA_SEGMENTS["Maxwell"])
+
+
+def test_archie_gets_engineering_segments(fake_vault):
+    """Engineering personas get grounding, identity, rules, daily_note."""
+    from app.maxwell_prompt import build_system_prompt
+
+    workspace = fake_vault["openclaw"]
+    (workspace / "Archie").mkdir(parents=True, exist_ok=True)
+    (workspace / "Archie" / "IDENTITY.md").write_text("# Archie\nBackend dev.\n")
+
+    with _freeze_today(date(2026, 4, 9)):
+        segments = build_system_prompt(persona="Archie")
+
+    roles = [s.role for s in segments]
+    assert roles == ["grounding", "identity", "rules", "daily_note"]
+    # No profile, workflow, or inventory
+    assert "profile" not in roles
+    assert "inventory" not in roles
+
+
+def test_flux_gets_minimal_segments(fake_vault):
+    """Design personas get only grounding + identity."""
+    from app.maxwell_prompt import build_system_prompt
+
+    with _freeze_today(date(2026, 4, 9)):
+        segments = build_system_prompt(persona="Flux")
+
+    roles = [s.role for s in segments]
+    assert roles == ["grounding", "identity"]
+
+
+def test_unknown_persona_gets_default_segments(fake_vault):
+    """Unknown personas fall back to DEFAULT_SEGMENTS."""
+    from app.maxwell_prompt import build_system_prompt, DEFAULT_SEGMENTS
+
+    with _freeze_today(date(2026, 4, 9)):
+        segments = build_system_prompt(persona="UnknownBot")
+
+    roles = [s.role for s in segments]
+    assert roles == DEFAULT_SEGMENTS
+
+
+def test_per_persona_identity_loaded(fake_vault):
+    """Per-persona IDENTITY.md under workspace/<Persona>/ is loaded."""
+    from app.maxwell_prompt import build_system_prompt
+
+    workspace = fake_vault["openclaw"]
+    (workspace / "Archie").mkdir(parents=True, exist_ok=True)
+    (workspace / "Archie" / "IDENTITY.md").write_text(
+        "# Archie\nARCHIE_IDENTITY_MARKER=found\n"
+    )
+
+    with _freeze_today(date(2026, 4, 9)):
+        text = _joined(build_system_prompt(persona="Archie"))
+
+    assert "ARCHIE_IDENTITY_MARKER=found" in text
+
+
+def test_persona_without_identity_falls_back_to_root(fake_vault):
+    """Persona with no dedicated IDENTITY.md falls back to root workspace."""
+    from app.maxwell_prompt import build_system_prompt
+
+    with _freeze_today(date(2026, 4, 9)):
+        text = _joined(build_system_prompt(persona="Flux"))
+
+    # Falls back to workspace/IDENTITY.md (the Maxwell one from fake_vault)
+    assert "Detail-oriented" in text

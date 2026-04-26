@@ -340,27 +340,50 @@ def _inventory_segment() -> PromptSegment:
     return PromptSegment(role="inventory", content=content, cache_hint="daily")
 
 
+# ── Per-persona segment selection ────────────────────────────────────────────
+
+PERSONA_SEGMENTS: dict[str, list[str]] = {
+    "Maxwell":   ["grounding", "identity", "profile", "rules", "workflow", "daily_note", "inventory"],
+    "Archie":    ["grounding", "identity", "rules", "daily_note"],
+    "Pixel":     ["grounding", "identity", "rules", "daily_note"],
+    "Harbor":    ["grounding", "identity", "rules", "daily_note"],
+    "Sentinel":  ["grounding", "identity", "rules", "daily_note", "inventory"],
+    "Docsworth": ["grounding", "identity", "profile"],
+    "Stratton":  ["grounding", "identity", "profile"],
+    "Quill":     ["grounding", "identity", "profile"],
+    "Flux":      ["grounding", "identity"],
+    "Chroma":    ["grounding", "identity"],
+    "Sigil":     ["grounding", "identity"],
+    "Scout":     ["grounding", "identity", "daily_note"],
+    "Ledger":    ["grounding", "identity", "daily_note"],
+}
+DEFAULT_SEGMENTS = ["grounding", "identity", "rules"]
+
+
 # ── Public entry point ───────────────────────────────────────────────────────
 
 def build_system_prompt(
     user_id: str = "enrico",
     persona: str = "maxwell",
 ) -> List[PromptSegment]:
-    """Build Maxwell's system prompt as a list of segments.
+    """Build a persona's system prompt as a list of segments.
 
-    Callers concatenate the segments (e.g., ``prompt_to_string``) before
-    passing to the LLM. Segment granularity is preserved so future provider-
-    native caching can mark the stable-prefix segments cacheable.
+    Segment selection is per-persona via PERSONA_SEGMENTS. Maxwell gets the
+    full vault; lightweight personas get only grounding + identity.
     """
-    return [
-        _grounding_segment(),
-        _identity_segment(persona),
-        _profile_segment(user_id),
-        _rules_segment(),
-        _workflow_segment(),
-        _daily_note_segment(),
-        _inventory_segment(),
-    ]
+    segment_names = PERSONA_SEGMENTS.get(persona, DEFAULT_SEGMENTS)
+
+    builders: dict[str, callable] = {
+        "grounding": _grounding_segment,
+        "identity": lambda: _identity_segment(persona),
+        "profile": lambda: _profile_segment(user_id),
+        "rules": _rules_segment,
+        "workflow": _workflow_segment,
+        "daily_note": _daily_note_segment,
+        "inventory": _inventory_segment,
+    }
+
+    return [builders[name]() for name in segment_names if name in builders]
 
 
 def prompt_to_string(segments: Iterable[PromptSegment]) -> str:

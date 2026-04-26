@@ -37,9 +37,9 @@ from ..trading_helpers import TEAM_ROSTER
 
 logger = logging.getLogger("mission-control")
 
-# Personas whose system prompt is built dynamically at request time from the
-# ~/life/ vault. Extend this set when new vault-aware personas are added.
-DYNAMIC_SYSTEM_PROMPT_PERSONAS = {"Maxwell"}
+# Personas that still use the static system prompt from PERSONA_ROUTING.
+# All others get a vault-grounded dynamic prompt via build_system_prompt().
+STATIC_SYSTEM_PROMPT_PERSONAS: set[str] = set()
 
 # Default kill-file path; the operator can touch/rm this without a restart.
 DEFAULT_KILL_FILE = "/var/run/maxwell.disabled"
@@ -229,7 +229,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             )
 
         # Step 3: build system prompt + wrap user prompt
-        if req.persona in DYNAMIC_SYSTEM_PROMPT_PERSONAS:
+        if req.persona not in STATIC_SYSTEM_PROMPT_PERSONAS:
             system_prompt = prompt_to_string(build_system_prompt(persona=req.persona))
             chat_prompt = f"<untrusted_user_message>\n{req.prompt}\n</untrusted_user_message>"
         else:

@@ -33,24 +33,22 @@ OPENCLAW_GATEWAY = {
 DEFAULT_MODEL = "google/gemini-2.5-flash"
 
 PERSONA_ROUTING = {
-    # Orchestrator / meta (dynamic system prompt — see routes/dispatch.py)
-    "Maxwell":  ("orchestrator", "__dynamic__", "openai/gpt-5.5"),
-    # Engineering (coding-focused)
-    "Archie":   ("coder",     "You are Archie, a backend developer. Focus on APIs, databases, and server architecture.", "deepseek/deepseek-v4"),
-    "Pixel":    ("coder",     "You are Pixel, a frontend developer. Focus on UI, layouts, and client-side logic.", "qwen/qwen-3-27b"),
-    "Harbor":   ("coder",     "You are Harbor, a DevOps engineer. Focus on Docker, CI/CD, and infrastructure.", "deepseek/deepseek-v4"),
-    "Sentinel": ("architect", "You are Sentinel, a security engineer. Focus on threat assessment, hardening, and audit.", "openai/gpt-5.5"),
-    # Content (cost-optimized)
-    "Docsworth": ("assistant", "You are Docsworth, a technical writer. Focus on docs, READMEs, and guides.", "qwen/qwen-3-27b"),
-    "Stratton":  ("assistant", "You are Stratton, a content strategist. Focus on content planning, SEO, and audience.", "zhipu-ai/glm-5.1"),
-    "Quill":     ("assistant", "You are Quill, a copywriter. Focus on marketing copy and product descriptions.", "qwen/qwen-3-27b"),
-    # Design
-    "Flux":   ("assistant", "You are Flux, a UI/UX designer. Focus on user flows, wireframes, and interactions.", "zhipu-ai/glm-5.1"),
-    "Chroma": ("assistant", "You are Chroma, a visual designer. Focus on color, typography, and visual systems.", "moonshot/kimi-k2.6"),
-    "Sigil":  ("assistant", "You are Sigil, a brand designer. Focus on identity, logos, and style guides.", "zhipu-ai/glm-5.1"),
-    # Research
-    "Scout":  ("assistant", "You are Scout, a research analyst. Focus on market research and competitive analysis.", "moonshot/kimi-k2.6"),
-    "Ledger": ("assistant", "You are Ledger, a data analyst. Focus on metrics, dashboards, and reporting.", "deepseek/deepseek-v4"),
+    # All personas now get vault-grounded dynamic prompts built by
+    # maxwell_prompt.build_system_prompt() with per-persona segment selection.
+    # The "__dynamic__" placeholder is never sent to the LLM.
+    "Maxwell":   ("orchestrator", "__dynamic__", "openai/gpt-5.5"),
+    "Archie":    ("coder",        "__dynamic__", "deepseek/deepseek-v4"),
+    "Pixel":     ("coder",        "__dynamic__", "qwen/qwen-3-27b"),
+    "Harbor":    ("coder",        "__dynamic__", "deepseek/deepseek-v4"),
+    "Sentinel":  ("architect",    "__dynamic__", "openai/gpt-5.5"),
+    "Docsworth": ("assistant",    "__dynamic__", "qwen/qwen-3-27b"),
+    "Stratton":  ("assistant",    "__dynamic__", "zhipu-ai/glm-5.1"),
+    "Quill":     ("assistant",    "__dynamic__", "qwen/qwen-3-27b"),
+    "Flux":      ("assistant",    "__dynamic__", "zhipu-ai/glm-5.1"),
+    "Chroma":    ("assistant",    "__dynamic__", "moonshot/kimi-k2.6"),
+    "Sigil":     ("assistant",    "__dynamic__", "zhipu-ai/glm-5.1"),
+    "Scout":     ("assistant",    "__dynamic__", "moonshot/kimi-k2.6"),
+    "Ledger":    ("assistant",    "__dynamic__", "deepseek/deepseek-v4"),
 }
 
 # ── Rate Limiter ─────────────────────────────────────────────────────────────
