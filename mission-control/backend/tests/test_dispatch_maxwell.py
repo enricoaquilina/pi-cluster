@@ -58,7 +58,7 @@ async def test_maxwell_dispatch_injects_rich_system_prompt(client, auth_headers,
     """The system_prompt passed to _openclaw_chat includes vault content + grounding."""
     captured = {}
 
-    async def fake_chat(prompt, system_prompt, timeout):
+    async def fake_chat(prompt, system_prompt, timeout, model=None):
         captured["prompt"] = prompt
         captured["system_prompt"] = system_prompt
         return "ok"
@@ -89,7 +89,7 @@ async def test_maxwell_dispatch_wraps_user_prompt_as_untrusted(client, auth_head
     """The user prompt is wrapped in <untrusted_user_message> before being sent."""
     captured = {}
 
-    async def fake_chat(prompt, system_prompt, timeout):
+    async def fake_chat(prompt, system_prompt, timeout, model=None):
         captured["prompt"] = prompt
         return "ok"
 
@@ -146,7 +146,7 @@ async def test_maxwell_dispatch_preserves_persona_casing(client, auth_headers, f
 
     captured = {}
 
-    async def fake_chat(prompt, system_prompt, timeout):
+    async def fake_chat(prompt, system_prompt, timeout, model=None):
         captured["system_prompt"] = system_prompt
         return "ok"
 
@@ -169,7 +169,7 @@ async def test_non_maxwell_persona_unchanged(client, auth_headers, fake_vault_en
     """Existing personas (Archie, Pixel, ...) still use their static system prompts."""
     captured = {}
 
-    async def fake_chat(prompt, system_prompt, timeout):
+    async def fake_chat(prompt, system_prompt, timeout, model=None):
         captured["system_prompt"] = system_prompt
         captured["prompt"] = prompt
         return "ok"

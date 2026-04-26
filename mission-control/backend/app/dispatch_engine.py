@@ -23,32 +23,34 @@ OPENCLAW_GATEWAY = {
     "token": OPENCLAW_GATEWAY_TOKEN,
 }
 
-# Map personas -> (delegate, system_prompt)
+# Map personas -> (delegate, system_prompt, model)
 # Node assignment removed — the gateway handles routing to slave0/slave1
 #
 # "Maxwell" is registered here so the dispatch endpoint accepts it, but its
 # actual system prompt is built dynamically at request time by
 # app.maxwell_prompt.build_system_prompt() — it reads hard-rules, daily note,
 # vault inventory, etc. The placeholder string below is never sent to the LLM.
+DEFAULT_MODEL = "google/gemini-2.5-flash"
+
 PERSONA_ROUTING = {
     # Orchestrator / meta (dynamic system prompt — see routes/dispatch.py)
-    "Maxwell":  ("orchestrator", "__dynamic__"),
+    "Maxwell":  ("orchestrator", "__dynamic__", "openai/gpt-5.5"),
     # Engineering (coding-focused)
-    "Archie":   ("coder",     "You are Archie, a backend developer. Focus on APIs, databases, and server architecture."),
-    "Pixel":    ("coder",     "You are Pixel, a frontend developer. Focus on UI, layouts, and client-side logic."),
-    "Harbor":   ("coder",     "You are Harbor, a DevOps engineer. Focus on Docker, CI/CD, and infrastructure."),
-    "Sentinel": ("architect", "You are Sentinel, a security engineer. Focus on threat assessment, hardening, and audit."),
+    "Archie":   ("coder",     "You are Archie, a backend developer. Focus on APIs, databases, and server architecture.", "deepseek/deepseek-v4"),
+    "Pixel":    ("coder",     "You are Pixel, a frontend developer. Focus on UI, layouts, and client-side logic.", "qwen/qwen-3-27b"),
+    "Harbor":   ("coder",     "You are Harbor, a DevOps engineer. Focus on Docker, CI/CD, and infrastructure.", "deepseek/deepseek-v4"),
+    "Sentinel": ("architect", "You are Sentinel, a security engineer. Focus on threat assessment, hardening, and audit.", "openai/gpt-5.5"),
     # Content (cost-optimized)
-    "Docsworth": ("assistant", "You are Docsworth, a technical writer. Focus on docs, READMEs, and guides."),
-    "Stratton":  ("assistant", "You are Stratton, a content strategist. Focus on content planning, SEO, and audience."),
-    "Quill":     ("assistant", "You are Quill, a copywriter. Focus on marketing copy and product descriptions."),
+    "Docsworth": ("assistant", "You are Docsworth, a technical writer. Focus on docs, READMEs, and guides.", "qwen/qwen-3-27b"),
+    "Stratton":  ("assistant", "You are Stratton, a content strategist. Focus on content planning, SEO, and audience.", "zhipu-ai/glm-5.1"),
+    "Quill":     ("assistant", "You are Quill, a copywriter. Focus on marketing copy and product descriptions.", "qwen/qwen-3-27b"),
     # Design
-    "Flux":   ("assistant", "You are Flux, a UI/UX designer. Focus on user flows, wireframes, and interactions."),
-    "Chroma": ("assistant", "You are Chroma, a visual designer. Focus on color, typography, and visual systems."),
-    "Sigil":  ("assistant", "You are Sigil, a brand designer. Focus on identity, logos, and style guides."),
+    "Flux":   ("assistant", "You are Flux, a UI/UX designer. Focus on user flows, wireframes, and interactions.", "zhipu-ai/glm-5.1"),
+    "Chroma": ("assistant", "You are Chroma, a visual designer. Focus on color, typography, and visual systems.", "moonshot/kimi-k2.6"),
+    "Sigil":  ("assistant", "You are Sigil, a brand designer. Focus on identity, logos, and style guides.", "zhipu-ai/glm-5.1"),
     # Research
-    "Scout":  ("assistant", "You are Scout, a research analyst. Focus on market research and competitive analysis."),
-    "Ledger": ("assistant", "You are Ledger, a data analyst. Focus on metrics, dashboards, and reporting."),
+    "Scout":  ("assistant", "You are Scout, a research analyst. Focus on market research and competitive analysis.", "moonshot/kimi-k2.6"),
+    "Ledger": ("assistant", "You are Ledger, a data analyst. Focus on metrics, dashboards, and reporting.", "deepseek/deepseek-v4"),
 }
 
 # ── Rate Limiter ─────────────────────────────────────────────────────────────
@@ -122,44 +124,56 @@ hourly_limiter = HourlyRateLimiter()
 persona_limiter = PerPersonaRateLimiter()
 
 
-async def _openclaw_chat(prompt: str, system_prompt: str, timeout: int) -> str:
+async def _openclaw_chat(prompt: str, system_prompt: str, timeout: int,
+                         model: str | None = None) -> str:
     """Send a prompt via OpenRouter API (HTTP) and return the response.
-    Uses the same models as the OpenClaw gateway's fallback chain."""
+
+    Falls back to DEFAULT_MODEL if the requested model returns a 404."""
     from urllib.request import Request, urlopen
-    from urllib.error import URLError
+    from urllib.error import URLError, HTTPError
 
     api_key = os.environ.get("OPENROUTER_API_KEY", "")
     if not api_key:
         raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY not configured")
 
-    model = "google/gemini-2.5-flash"
+    model = model or DEFAULT_MODEL
     messages = []
     if system_prompt:
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    body = json.dumps({
-        "model": model,
-        "messages": messages,
-        "max_tokens": 4096,
-    }).encode()
-
-    req = Request(
-        "https://openrouter.ai/api/v1/chat/completions",
-        data=body,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-    )
+    def _build_request(m: str) -> Request:
+        body = json.dumps({
+            "model": m,
+            "messages": messages,
+            "max_tokens": 4096,
+        }).encode()
+        return Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+        )
 
     try:
-        resp = await asyncio.to_thread(urlopen, req, timeout=timeout)
+        try:
+            resp = await asyncio.to_thread(urlopen, _build_request(model), timeout=timeout)
+        except HTTPError as e:
+            if e.code == 404 and model != DEFAULT_MODEL:
+                logger.warning("dispatch: model %s returned 404, falling back to %s",
+                               model, DEFAULT_MODEL)
+                resp = await asyncio.to_thread(urlopen, _build_request(DEFAULT_MODEL), timeout=timeout)
+            else:
+                raise
         data = json.loads(resp.read().decode())
         choices = data.get("choices", [])
         if not choices:
             raise HTTPException(status_code=502, detail="No response from model")
         return choices[0].get("message", {}).get("content", "")
+    except HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"OpenRouter API error: {e}")
     except URLError as e:
         raise HTTPException(status_code=502, detail=f"OpenRouter API error: {e}")
     except asyncio.TimeoutError:

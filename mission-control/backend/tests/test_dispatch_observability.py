@@ -178,7 +178,7 @@ async def test_transient_502_retries_and_succeeds(client, auth_headers, fake_vau
     from fastapi import HTTPException
     calls = {"n": 0}
 
-    async def flaky(prompt, system_prompt, timeout):
+    async def flaky(prompt, system_prompt, timeout, model=None):
         calls["n"] += 1
         if calls["n"] == 1:
             raise HTTPException(status_code=502, detail="bad gateway")
@@ -204,7 +204,7 @@ async def test_400_is_not_retried(client, auth_headers, fake_vault_and_logs):
     from fastapi import HTTPException
     calls = {"n": 0}
 
-    async def fails(prompt, system_prompt, timeout):
+    async def fails(prompt, system_prompt, timeout, model=None):
         calls["n"] += 1
         raise HTTPException(status_code=400, detail="bad request")
 
@@ -225,7 +225,7 @@ async def test_400_is_not_retried(client, auth_headers, fake_vault_and_logs):
 # ── Dead letter ──────────────────────────────────────────────────────────────
 
 async def test_unhandled_exception_writes_dead_letter(client, auth_headers, fake_vault_and_logs):
-    async def boom(prompt, system_prompt, timeout):
+    async def boom(prompt, system_prompt, timeout, model=None):
         raise RuntimeError("completely unexpected")
 
     with _freeze_today(date(2026, 4, 9)), \

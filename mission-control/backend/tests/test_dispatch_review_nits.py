@@ -155,7 +155,7 @@ async def test_dead_letter_swallows_type_error_from_serializer(
     clean HTTPException(500). The dead-letter failure must not mask the
     original RuntimeError."""
 
-    async def boom(prompt, system_prompt, timeout):
+    async def boom(prompt, system_prompt, timeout, model=None):
         raise RuntimeError("original dispatch error")
 
     real_dumps = json.dumps
