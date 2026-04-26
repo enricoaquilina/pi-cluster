@@ -5,11 +5,16 @@
 
 set -uo pipefail
 
-CACHE_FILE="/tmp/openclaw-node-stats.json"
-STATE_FILE="/tmp/openclaw-watchdog-state.json"
-SCRIPT_DIR="/home/enrico/homelab/scripts"
-GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
-LOG_FILE="/var/log/openclaw-watchdog.log"
+if [ "$(hostname)" != "heavy" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) Cluster watchdog only runs on heavy. Exiting." >&2
+    exit 0
+fi
+
+CACHE_FILE="${CACHE_FILE:-/tmp/openclaw-node-stats.json}"
+STATE_FILE="${STATE_FILE:-/tmp/openclaw-watchdog-state.json}"
+SCRIPT_DIR="${SCRIPT_DIR:-/home/enrico/pi-cluster/scripts}"
+GATEWAY_CONTAINER="${GATEWAY_CONTAINER:-openclaw-openclaw-gateway-1}"
+LOG_FILE="${LOG_FILE:-/tmp/openclaw-watchdog.log}"
 
 # shellcheck source=scripts/.env.cluster
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
@@ -78,7 +83,7 @@ if isinstance(data, list):
     nodes = data
 else:
     nodes = data.get('nodes', [])
-status = {n['name']: n.get('metadata', {}).get('connected', False) for n in nodes}
+status = {n['name']: n.get('connected', False) or n.get('metadata', {}).get('connected', False) for n in nodes}
 for name in '${EXPECTED_NODES[*]}'.split():
     print(name, 'true' if status.get(name) else 'false')
 " 2>/dev/null)
