@@ -51,6 +51,15 @@ check_nfs_backup
 check_nvme_health
 check_nvme_write_rate
 check_life_sync
+_fetch_node_staleness
+check_node_stats_heavy
+check_node_stats_control
+check_node_stats_build
+check_node_stats_light
+_fetch_watchdog_status
+check_watchdog_cluster
+check_watchdog_ssh
+check_orphan_services
 
 # ── Output: Interactive Mode ──────────────────────────────────────────────────
 
@@ -58,7 +67,7 @@ if [[ "$MODE" == "interactive" ]]; then
     echo ""
     printf "${BOLD}%-25s %-10s %-8s %s${NC}\n" "SERVICE" "STATUS" "MS" "ERROR"
     echo "────────────────────────────────────────────────────────────────"
-    for svc in openclaw-gateway openclaw-gateway-memory openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-master openclaw-slave0 openclaw-slave1 openclaw-heavy router-api spreadbot polymarket-bot pihole-dns keepalived cloudflared docker-dns tailscale-dns nfs-workspace nfs-backup nvme-health nvme-write-rate life-sync; do
+    for svc in openclaw-gateway openclaw-gateway-memory openclaw-telegram openclaw-whatsapp mission-control-api postgresql mongodb n8n-production n8n-staging openclaw-master openclaw-slave0 openclaw-slave1 openclaw-heavy router-api spreadbot polymarket-bot pihole-dns keepalived cloudflared docker-dns tailscale-dns nfs-workspace nfs-backup nvme-health nvme-write-rate life-sync node-stats-heavy node-stats-control node-stats-build node-stats-light watchdog-cluster watchdog-ssh orphan-services; do
         status="${RESULTS[$svc]:-unknown}"
         ms="${RESPONSE_MS[$svc]:-}"
         err="${ERRORS[$svc]:-}"

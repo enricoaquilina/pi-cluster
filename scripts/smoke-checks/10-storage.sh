@@ -1,6 +1,8 @@
 #!/bin/bash
 # Checks: NFS workspace accessibility + NFS backup timer health
 
+_NFS_OWNERSHIP_DATA=""
+
 check_nfs_workspace() {
     local ws
     if [ "$(hostname)" = "heavy" ]; then
@@ -14,14 +16,30 @@ check_nfs_workspace() {
         return
     fi
 
-    local root_count
-    root_count=$(find "$ws" -maxdepth 2 -user root 2>/dev/null | wc -l)
-    if [ "${root_count:-0}" -gt 0 ]; then
-        check_service "nfs-workspace" "degraded" "${root_count} root-owned files in workspace"
+    if [ -z "$_NFS_OWNERSHIP_DATA" ]; then
+        _NFS_OWNERSHIP_DATA=$(timeout 10 find "$ws" -maxdepth 3 \
+            -user root \
+            ! -path "*/node_modules/*" \
+            ! -path "*/.git/*" \
+            -printf '%T@ %p\n' 2>/dev/null | sort -rn)
+        [ -z "$_NFS_OWNERSHIP_DATA" ] && _NFS_OWNERSHIP_DATA="clean"
+    fi
+
+    if [ "$_NFS_OWNERSHIP_DATA" = "clean" ]; then
+        check_service "nfs-workspace" "up"
         return
     fi
 
-    check_service "nfs-workspace" "up"
+    local root_count newest_file
+    root_count=$(echo "$_NFS_OWNERSHIP_DATA" | wc -l)
+    newest_file=$(echo "$_NFS_OWNERSHIP_DATA" | head -1 | cut -d' ' -f2-)
+    newest_file="${newest_file#"$ws"/}"
+
+    if [ "${root_count:-0}" -gt 10 ]; then
+        check_service "nfs-workspace" "down" "${root_count}+ root-owned files (newest: ${newest_file})"
+    else
+        check_service "nfs-workspace" "degraded" "${root_count} root-owned files (newest: ${newest_file})"
+    fi
 }
 
 check_nfs_backup() {
