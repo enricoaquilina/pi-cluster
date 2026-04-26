@@ -6,7 +6,7 @@
 #   15-orphan-services.sh — orphan/layer-audit/inventory
 #   16-version-consistency.sh — version drift detection
 #
-# 34 test cases covering all status combinations.
+# 40 test cases covering all status combinations.
 
 set -uo pipefail
 
@@ -375,6 +375,69 @@ slave1 openclaw-node active"
         fail "F4: UP when activating" "got: ${RESULTS[service-inventory]:-unset}"
 }
 
+run_f5() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node deactivating
+heavy openclaw-router-api active
+master openclaw-node active
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "down" ] && \
+        pass "F5: DOWN when service deactivating" || \
+        fail "F5: DOWN when deactivating" "got: ${RESULTS[service-inventory]:-unset}"
+}
+
+run_f6() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node failed
+heavy openclaw-router-api active
+master openclaw-node active
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "down" ] && \
+        pass "F6: DOWN when service failed" || \
+        fail "F6: DOWN when failed" "got: ${RESULTS[service-inventory]:-unset}"
+}
+
+run_f7() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node activatingunknown
+heavy openclaw-router-api active
+master openclaw-node active
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "down" ] && \
+        pass "F7: DOWN when garbled status (activatingunknown)" || \
+        fail "F7: DOWN for garbled status" "got: ${RESULTS[service-inventory]:-unset}"
+    echo "${ERRORS[service-inventory]:-}" | grep -q "activatingunknown" && \
+        pass "F7: error shows garbled status string" || \
+        fail "F7: error shows garbled status" "got: ${ERRORS[service-inventory]:-unset}"
+}
+
+run_f8() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node reloading
+heavy openclaw-router-api active
+master openclaw-node active
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "up" ] && \
+        pass "F8: UP when service reloading (transient)" || \
+        fail "F8: UP when reloading" "got: ${RESULTS[service-inventory]:-unset}"
+}
+
 # ═══════════ Check G: Version Consistency ═══════════
 
 run_g1() {
@@ -441,7 +504,7 @@ run_b1; run_b2; run_b3; run_b4
 run_c1; run_c2; run_c3
 run_d1; run_d2; run_d3; run_d4
 run_e1; run_e2; run_e3
-run_f1; run_f2; run_f3; run_f4
+run_f1; run_f2; run_f3; run_f4; run_f5; run_f6; run_f7; run_f8
 run_g1; run_g2; run_g3; run_g4
 
 test_summary

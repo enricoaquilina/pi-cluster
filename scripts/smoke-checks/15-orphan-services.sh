@@ -205,7 +205,7 @@ check_service_inventory() {
         status=$(echo "$line" | awk '{print $3}')
 
         case "$status" in
-            active|activating) ;;
+            active|activating|reloading) ;;
             ssh_failed)
                 ssh_fails+="${host}:${svc} "
                 all_active=false

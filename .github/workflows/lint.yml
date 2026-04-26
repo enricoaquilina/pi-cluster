@@ -216,7 +216,7 @@ jobs:
       - name: Test harness self-test
         run: bash tests/test_harness.sh
 
-      - name: Smoke check unit tests (34 tests)
+      - name: Smoke check unit tests (40 tests)
         run: bash tests/test_smoke_quick_wins.sh
 
       - name: Cluster watchdog tests (12 tests)
