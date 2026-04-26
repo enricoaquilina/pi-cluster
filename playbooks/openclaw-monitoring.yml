@@ -82,6 +82,37 @@
         job: "/home/enrico/homelab/scripts/openclaw-version-check.sh --upgrade >> /var/log/openclaw-version.log 2>&1"
         cron_file: openclaw-version
 
+    - name: Deploy heartbeat runner script
+      ansible.builtin.copy:
+        src: ../scripts/heartbeat-runner.py
+        dest: /home/enrico/homelab/scripts/heartbeat-runner.py
+        mode: "0755"
+        owner: enrico
+        group: enrico
+
+    - name: Deploy heartbeat wrapper script
+      ansible.builtin.copy:
+        src: ../scripts/maxwell-heartbeat.sh
+        dest: /usr/local/bin/maxwell-heartbeat.sh
+        mode: "0755"
+        owner: root
+        group: enrico
+
+    - name: Remove old heartbeat cron from user crontab
+      ansible.builtin.lineinfile:
+        path: /var/spool/cron/crontabs/enrico
+        regexp: 'maxwell-heartbeat'
+        state: absent
+      become: true
+
+    - name: Deploy heartbeat cron (hourly at :07)
+      ansible.builtin.cron:
+        name: "maxwell heartbeat"
+        minute: "7"
+        user: enrico
+        job: "/usr/local/bin/maxwell-heartbeat.sh"
+        cron_file: openclaw-heartbeat
+
     - name: Remove old manual auto-deploy cron entry
       ansible.builtin.lineinfile:
         path: /etc/cron.d/openclaw-auto-deploy
