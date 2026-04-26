@@ -211,24 +211,7 @@ jobs:
               || echo "::warning::PR comment failed for PR #${PR_NUM}"
           fi
 
-      - name: Enable auto-merge after review fixes
-        if: success() && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_NUM="${{ steps.pr.outputs.number }}"
-          echo "Enabling auto-merge for PR #${PR_NUM} (after review fix pass)..."
-          gh pr merge "$PR_NUM" \
-            -R "${{ github.repository }}" \
-            --squash --auto --delete-branch \
-            || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
-
-      - name: Skip auto-merge for feat PRs
-        if: success() && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
-        run: |
-          echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review GPT-5.4 findings before merging manually."
-
-  # ── Auto: fix GPT-5.4 deep review findings ────────────────────────────────
+  # ── Auto: fix GPT-5.4 deep review findings ──────────────────��─────────────
   claude-fix-on-gpt-review:
     name: Claude Fix (GPT-5.4 review)
     if: |
@@ -428,24 +411,6 @@ jobs:
               || echo "::warning::Telegram notification failed"
           fi
 
-      - name: Enable auto-merge after GPT-5.4 fixes
-        if: success() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && !startsWith(steps.pr.outputs.title, 'feat')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          PR_NUM="${{ steps.pr.outputs.number }}"
-          echo "Enabling auto-merge for PR #${PR_NUM} (after GPT-5.4 fix pass)..."
-          gh pr merge "$PR_NUM" \
-            -R "${{ github.repository }}" \
-            --squash --auto --delete-branch \
-            || echo "::warning::Could not enable auto-merge for PR #${PR_NUM}"
-
-      - name: Skip auto-merge for feat PRs
-        if: success() && steps.pr.outputs.should_fix == 'true' && steps.pr.outputs.number != '' && startsWith(steps.pr.outputs.title, 'feat')
-        run: |
-          echo "::notice::PR #${{ steps.pr.outputs.number }} is a feat PR — skipping auto-merge. Review remaining GPT-5.4 findings before merging manually."
-
   # ── Auto: fix CI failures ───────────────────────────────────────────────────
   claude-fix-on-ci-failure:
     name: Claude Fix (CI failure)
@@ -500,6 +465,13 @@ jobs:
             gh pr comment "$PR_NUMBER" -R "$REPO" \
               --body "CI failure appears transient (network/rate-limit). Re-running." 2>/dev/null || true
             gh run rerun "$RUN_ID" -R "$REPO" --failed 2>/dev/null || true
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Skip infrastructure failures the agent cannot fix
+          if echo "$FAILED_LOG" | grep -qiE "docker.*(pull|push)|OOM|killed.*signal|disk space|timeout-minutes|rate limit"; then
+            echo "::warning::Infrastructure failure — not fixable by code changes"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

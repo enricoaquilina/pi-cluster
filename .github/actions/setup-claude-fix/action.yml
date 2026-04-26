@@ -11,7 +11,7 @@ inputs:
   claude_args:
     description: 'Additional Claude CLI args'
     required: false
-    default: '--model claude-sonnet-4-20250514 --max-turns 30'
+    default: '--model claude-sonnet-4-20250514 --max-turns 10'
   bot_app_id:
     description: 'GitHub App ID'
     required: true
@@ -51,3 +51,4 @@ runs:
         github_token: ${{ steps.app-token.outputs.token }}
         prompt: ${{ inputs.prompt }}
         claude_args: ${{ inputs.claude_args }}
+      continue-on-error: true
