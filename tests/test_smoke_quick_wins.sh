@@ -360,6 +360,21 @@ slave1 openclaw-node active"
         fail "F3: DEGRADED when SSH failed" "got: ${RESULTS[service-inventory]:-unset}"
 }
 
+run_f4() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node activating
+heavy openclaw-router-api active
+master openclaw-node active
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "up" ] && \
+        pass "F4: UP when service activating (transient startup)" || \
+        fail "F4: UP when activating" "got: ${RESULTS[service-inventory]:-unset}"
+}
+
 # ═══════════ Check G: Version Consistency ═══════════
 
 run_g1() {
@@ -426,7 +441,7 @@ run_b1; run_b2; run_b3; run_b4
 run_c1; run_c2; run_c3
 run_d1; run_d2; run_d3; run_d4
 run_e1; run_e2; run_e3
-run_f1; run_f2; run_f3
+run_f1; run_f2; run_f3; run_f4
 run_g1; run_g2; run_g3; run_g4
 
 test_summary

@@ -167,9 +167,10 @@ _fetch_service_inventory() {
         for svc in $expected; do
             local status
             if [ "$host" = "heavy" ]; then
-                status=$(systemctl is-active "$svc" 2>/dev/null || echo "unknown")
+                status=$(systemctl is-active "$svc" 2>/dev/null) || true
+                [ -z "$status" ] && status="unknown"
             else
-                status=$(timed_ssh 5 "$host" "systemctl is-active $svc 2>/dev/null || echo unknown" 2>/dev/null)
+                status=$(timed_ssh 5 "$host" "systemctl is-active $svc 2>/dev/null" 2>/dev/null)
                 local rc=$?
                 if [ "$rc" -eq 124 ] || [ "$rc" -eq 255 ]; then
                     result+="${host} ${svc} ssh_failed"$'\n'
@@ -177,6 +178,7 @@ _fetch_service_inventory() {
                 fi
             fi
             status=$(echo "$status" | tr -d '[:space:]')
+            [ -z "$status" ] && status="unknown"
             result+="${host} ${svc} ${status}"$'\n'
         done
     done
@@ -203,7 +205,7 @@ check_service_inventory() {
         status=$(echo "$line" | awk '{print $3}')
 
         case "$status" in
-            active) ;;
+            active|activating) ;;
             ssh_failed)
                 ssh_fails+="${host}:${svc} "
                 all_active=false
