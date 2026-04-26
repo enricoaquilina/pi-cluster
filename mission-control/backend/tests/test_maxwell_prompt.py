@@ -87,7 +87,7 @@ def test_accepts_user_id_and_persona_parameters(fake_vault):
         # Default call
         segments_default = build_system_prompt()
         # Explicit call
-        segments_explicit = build_system_prompt(user_id="enrico", persona="maxwell")
+        segments_explicit = build_system_prompt(user_id="enrico", persona="Maxwell")
 
     assert segments_default == segments_explicit
 
