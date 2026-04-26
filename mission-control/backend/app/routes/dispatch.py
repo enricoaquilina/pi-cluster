@@ -37,9 +37,9 @@ from ..trading_helpers import TEAM_ROSTER
 
 logger = logging.getLogger("mission-control")
 
-# Personas whose system prompt is built dynamically at request time from the
-# ~/life/ vault. Extend this set when new vault-aware personas are added.
-DYNAMIC_SYSTEM_PROMPT_PERSONAS = {"Maxwell"}
+# Personas that still use the static system prompt from PERSONA_ROUTING.
+# All others get a vault-grounded dynamic prompt via build_system_prompt().
+STATIC_SYSTEM_PROMPT_PERSONAS: set[str] = set()
 
 # Default kill-file path; the operator can touch/rm this without a restart.
 DEFAULT_KILL_FILE = "/var/run/maxwell.disabled"
@@ -177,7 +177,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
                 detail=f"Unknown persona '{req.persona}'. Available: {available}",
             )
 
-        delegate, static_system_prompt = route
+        delegate, static_system_prompt, persona_model = route
 
         # Step 2: degradation short-circuits
         level = _current_degradation()
@@ -229,7 +229,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             )
 
         # Step 3: build system prompt + wrap user prompt
-        if req.persona in DYNAMIC_SYSTEM_PROMPT_PERSONAS:
+        if req.persona not in STATIC_SYSTEM_PROMPT_PERSONAS:
             system_prompt = prompt_to_string(build_system_prompt(persona=req.persona))
             chat_prompt = f"<untrusted_user_message>\n{req.prompt}\n</untrusted_user_message>"
         else:
@@ -270,7 +270,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
         start = datetime.now(timezone.utc)
         try:
             async def _call():
-                return await _openclaw_chat(chat_prompt, system_prompt, req.timeout)
+                return await _openclaw_chat(chat_prompt, system_prompt, req.timeout, model=persona_model)
 
             response = await call_with_retry_and_breaker(_call)
         except CircuitBreakerOpen:
@@ -311,7 +311,8 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
         elapsed_ms = int((datetime.now(timezone.utc) - start).total_seconds() * 1000)
         # Redact prompt before logging to prevent leaked keys in dispatch_log DB
         redacted_prompt = redact_reply(req.prompt[:500]) if req.prompt else ""
-        _log_dispatch(req.persona, "gateway", delegate, False, redacted_prompt, response, elapsed_ms)
+        _log_dispatch(req.persona, "gateway", delegate, False, redacted_prompt, response, elapsed_ms,
+                      model=persona_model)
 
         # Step 7: success event
         _emit_event(
@@ -332,6 +333,7 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
             elapsed_ms=elapsed_ms,
             fallback=False,
             original_node=None,
+            model=persona_model,
         )
 
     except HTTPException:
@@ -360,13 +362,13 @@ async def dispatch_task(req: DispatchRequest, _=Depends(verify_api_key), __=Depe
 def list_personas():
     """List available personas and their routing info."""
     result = {}
-    for persona, (delegate, _) in PERSONA_ROUTING.items():
+    for persona, (delegate, _, model) in PERSONA_ROUTING.items():
         team = "unknown"
         for t in TEAM_ROSTER["teams"]:
             if any(m["name"] == persona for m in t["members"]):
                 team = t["name"]
                 break
-        result[persona] = {"node": "gateway", "delegate": delegate, "team": team}
+        result[persona] = {"node": "gateway", "delegate": delegate, "team": team, "model": model}
     return result
 
 

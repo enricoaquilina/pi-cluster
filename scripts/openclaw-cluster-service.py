@@ -614,12 +614,17 @@ MODEL_COSTS = {
     "openrouter/anthropic/claude-sonnet-4.6": {"input": 3.00, "output": 15.00},
     "openrouter/anthropic/claude-opus-4.6": {"input": 5.00, "output": 25.00},
     "openrouter/openai/gpt-5.4": {"input": 2.50, "output": 15.00},
+    "openrouter/openai/gpt-5.5": {"input": 3.00, "output": 15.00},
     "openrouter/z-ai/glm-5": {"input": 0.72, "output": 2.30},
+    "openrouter/zhipu-ai/glm-5.1": {"input": 0.72, "output": 2.30},
     "openrouter/qwen/qwen3.5-plus-02-15": {"input": 0.26, "output": 1.56},
+    "openrouter/qwen/qwen-3-27b": {"input": 0.20, "output": 0.60},
     "openrouter/minimax/minimax-m2.7": {"input": 0.30, "output": 1.20},
     "openrouter/google/gemini-2.5-flash": {"input": 0.30, "output": 2.50},
     "openrouter/google/gemini-2.5-flash-lite": {"input": 0.10, "output": 0.40},
     "openrouter/deepseek/deepseek-v3.2": {"input": 0.26, "output": 0.38},
+    "openrouter/deepseek/deepseek-v4": {"input": 0.30, "output": 0.90},
+    "openrouter/moonshot/kimi-k2.6": {"input": 0.25, "output": 0.75},
 }
 
 

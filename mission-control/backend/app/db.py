@@ -161,6 +161,24 @@ MIGRATIONS = [
     EXCEPTION WHEN duplicate_column THEN NULL;
     END $$;
     """,
+    # v3: PRD planning documents
+    """
+    CREATE TABLE IF NOT EXISTS prd (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        task_id TEXT,
+        slug TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        feedback TEXT,
+        telegram_message_id BIGINT,
+        model TEXT NOT NULL DEFAULT 'google/gemini-2.5-flash',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_prd_slug ON prd(slug);
+    CREATE INDEX IF NOT EXISTS idx_prd_status ON prd(status);
+    """,
 ]
 
 

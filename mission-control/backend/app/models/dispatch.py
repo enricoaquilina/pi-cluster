@@ -19,6 +19,7 @@ class DispatchResponse(BaseModel):
     elapsed_ms: int
     fallback: bool = False
     original_node: Optional[str] = None
+    model: Optional[str] = None
 
 
 class DispatchLogEntry(BaseModel):
