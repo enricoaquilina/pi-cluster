@@ -7,7 +7,7 @@
 #   bash scripts/openclaw-version-check.sh          # Check only
 #   bash scripts/openclaw-version-check.sh --upgrade # Check and upgrade if safe
 #
-# Designed to run as a weekly cron job on master.
+# Designed to run as a weekly cron job on master. Upgrades all 4 nodes.
 
 set -uo pipefail
 
@@ -20,7 +20,7 @@ if [ -z "$PINNED_VERSION" ]; then
     echo "ERROR: Cannot read openclaw_version from vars/openclaw-nodes.yml"
     exit 1
 fi
-NODES=("slave0" "slave1" "heavy")
+NODES=("master" "slave0" "slave1" "heavy")
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 
 # shellcheck source=scripts/.env.cluster
@@ -33,7 +33,11 @@ echo "Pinned: $PINNED_VERSION"
 
 # Check current versions
 for host in "${NODES[@]}"; do
-    ver=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "openclaw --version 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+'" 2>/dev/null || echo "unreachable")
+    if [ "$host" = "$(hostname -s)" ]; then
+        ver=$(openclaw --version 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
+    else
+        ver=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" "openclaw --version 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+'" 2>/dev/null || echo "unreachable")
+    fi
     echo "$host: $ver"
 done
 
@@ -78,9 +82,15 @@ if echo "$test_result" | grep -q "VERSION_TEST_OK"; then
     echo ""
     echo "Upgrading remaining nodes..."
 
-    # Upgrade the rest
-    for host in slave0 heavy; do
-        ssh "$host" "sudo bash -c 'rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$latest'" 2>/dev/null | tail -1
+    # Upgrade remaining nodes (master runs locally, others via SSH)
+    for host in master slave0 heavy; do
+        if [ "$host" = "$(hostname -s)" ]; then
+            sudo bash -c "rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$latest" 2>/dev/null | tail -1
+            sudo systemctl restart openclaw-node 2>/dev/null || true
+        else
+            ssh "$host" "sudo bash -c 'rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$latest'" 2>/dev/null | tail -1
+            ssh "$host" "sudo systemctl restart openclaw-node" 2>/dev/null || true
+        fi
         echo "$host: upgraded"
     done
 
@@ -99,8 +109,13 @@ else
     echo "FAIL: SYSTEM_RUN_DENIED bug still present in $latest"
     echo "Rolling back $test_node to $PINNED_VERSION..."
 
-    ssh "$test_node" "sudo bash -c 'rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$PINNED_VERSION'" 2>/dev/null | tail -1
-    ssh "$test_node" "sudo systemctl restart openclaw-node" 2>/dev/null
+    if [ "$test_node" = "$(hostname -s)" ]; then
+        sudo bash -c "rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$PINNED_VERSION" 2>/dev/null | tail -1
+        sudo systemctl restart openclaw-node 2>/dev/null
+    else
+        ssh "$test_node" "sudo bash -c 'rm -rf /usr/lib/node_modules/openclaw && npm install -g openclaw@$PINNED_VERSION'" 2>/dev/null | tail -1
+        ssh "$test_node" "sudo systemctl restart openclaw-node" 2>/dev/null
+    fi
     bash "$SCRIPT_DIR/openclaw-pair-nodes.sh" > /dev/null 2>&1
 
     echo "Rolled back. Staying on $PINNED_VERSION."
