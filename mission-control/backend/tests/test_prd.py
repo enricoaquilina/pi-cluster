@@ -1,5 +1,8 @@
-"""PRD lifecycle tests — CRUD, status transitions, edge cases."""
+"""PRD lifecycle tests -- CRUD, status transitions, PATCH, edge cases."""
 
+import os
+
+import psycopg2
 import pytest
 
 
@@ -17,8 +20,6 @@ PRD_PAYLOAD = {
 def _cleanup_prd():
     """Remove test PRDs after each test."""
     yield
-    import os
-    import psycopg2
     try:
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         with conn.cursor() as cur:
@@ -162,6 +163,53 @@ async def test_slug_validation(client, auth_headers):
     for payload in bad_payloads:
         resp = await client.post("/api/prd", headers=auth_headers, json=payload)
         assert resp.status_code == 422, f"Expected 422 for slug={payload['slug']}"
+
+
+async def test_patch_telegram_message_id(client, auth_headers):
+    await client.post("/api/prd", headers=auth_headers, json=PRD_PAYLOAD)
+
+    resp = await client.patch(
+        f"/api/prd/{PRD_SLUG}",
+        headers=auth_headers,
+        json={"telegram_message_id": 98765},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["telegram_message_id"] == 98765
+
+    resp = await client.get(f"/api/prd/{PRD_SLUG}", headers=auth_headers)
+    assert resp.json()["telegram_message_id"] == 98765
+
+
+async def test_patch_content(client, auth_headers):
+    await client.post("/api/prd", headers=auth_headers, json=PRD_PAYLOAD)
+
+    resp = await client.patch(
+        f"/api/prd/{PRD_SLUG}",
+        headers=auth_headers,
+        json={"content": "# Updated PRD\n\nNew content."},
+    )
+    assert resp.status_code == 200
+    assert "Updated PRD" in resp.json()["content"]
+
+
+async def test_patch_nonexistent_returns_404(client, auth_headers):
+    resp = await client.patch(
+        "/api/prd/nonexistent-slug",
+        headers=auth_headers,
+        json={"title": "New Title"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_patch_empty_body_returns_400(client, auth_headers):
+    await client.post("/api/prd", headers=auth_headers, json=PRD_PAYLOAD)
+
+    resp = await client.patch(
+        f"/api/prd/{PRD_SLUG}",
+        headers=auth_headers,
+        json={},
+    )
+    assert resp.status_code == 400
 
 
 async def test_requires_api_key(client):

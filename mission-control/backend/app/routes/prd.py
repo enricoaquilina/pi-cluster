@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..auth import verify_api_key
 from ..db import get_db
 from ..event_bus import event_bus
-from ..models.prd import PrdCreate, PrdAction
+from ..models.prd import PrdCreate, PrdAction, PrdUpdate
 
 logger = logging.getLogger("mission-control")
 
@@ -89,6 +89,37 @@ def list_prds(
         )
         rows = [_row_to_response(r, _PRD_COLS) for r in cur.fetchall()]
     return {"items": rows, "total": total, "limit": limit, "offset": offset}
+
+
+@router.patch("/api/prd/{slug}")
+def update_prd(slug: str, body: PrdUpdate, conn=Depends(get_db), _=Depends(verify_api_key)):
+    """Update specific fields on a PRD."""
+    updates = {}
+    data = body.model_dump(exclude_unset=True)
+    for key, val in data.items():
+        if val is not None:
+            updates[key] = val
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    set_parts = []
+    values = []
+    for k, v in updates.items():
+        set_parts.append(f"{k} = %s")
+        values.append(v)
+    set_parts.append("updated_at = now()")
+    values.append(slug)
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""UPDATE prd SET {', '.join(set_parts)}
+                WHERE slug = %s RETURNING {_PRD_SELECT}""",
+            values,
+        )
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"PRD '{slug}' not found")
+    conn.commit()
+    event_bus.publish("prd")
+    return _row_to_response(row, _PRD_COLS)
 
 
 @router.post("/api/prd/{slug}/approve")

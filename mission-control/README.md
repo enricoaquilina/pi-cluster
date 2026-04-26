@@ -82,6 +82,7 @@ DB-backed planning documents for the heartbeat-runner → Telegram approval flow
 - `POST /api/prd` — create/upsert PRD (re-create resets to pending)
 - `GET /api/prd/{slug}` — get PRD by slug
 - `GET /api/prd?status=pending` — list PRDs with optional status filter
+- `PATCH /api/prd/{slug}` — update PRD fields (title, content, telegram_message_id)
 - `POST /api/prd/{slug}/approve` — approve pending PRD
 - `POST /api/prd/{slug}/reject` — reject with optional feedback
 

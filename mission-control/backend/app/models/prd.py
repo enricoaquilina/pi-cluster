@@ -17,6 +17,12 @@ class PrdAction(BaseModel):
     feedback: Optional[str] = None
 
 
+class PrdUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    telegram_message_id: Optional[int] = None
+
+
 class PrdResponse(BaseModel):
     slug: str
     title: str
