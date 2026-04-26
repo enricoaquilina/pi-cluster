@@ -371,7 +371,8 @@ def build_system_prompt(
     Segment selection is per-persona via PERSONA_SEGMENTS. Maxwell gets the
     full vault; lightweight personas get only grounding + identity.
     """
-    segment_names = PERSONA_SEGMENTS.get(persona, DEFAULT_SEGMENTS)
+    key = persona.title() if persona else persona
+    segment_names = PERSONA_SEGMENTS.get(key, DEFAULT_SEGMENTS)
 
     builders: dict[str, callable] = {
         "grounding": _grounding_segment,

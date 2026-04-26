@@ -68,7 +68,7 @@ def test_returns_list_of_segments(fake_vault):
     from app.maxwell_prompt import build_system_prompt, PromptSegment
 
     with _freeze_today(date(2026, 4, 9)):
-        segments = build_system_prompt(user_id="enrico", persona="maxwell")
+        segments = build_system_prompt(user_id="enrico", persona="Maxwell")
 
     assert isinstance(segments, list)
     assert len(segments) >= 1
