@@ -213,6 +213,18 @@ jobs:
       - name: CI config quality tests
         run: bash tests/test_ci_config.sh
 
+      - name: Test harness self-test
+        run: bash tests/test_harness.sh
+
+      - name: Smoke check unit tests (34 tests)
+        run: bash tests/test_smoke_quick_wins.sh
+
+      - name: Cluster watchdog tests (12 tests)
+        run: bash tests/test_cluster_watchdog.sh
+
+      - name: Node check tests (10 tests)
+        run: bash tests/test_smoke_node_check.sh
+
   gitleaks:
     name: Credential Scan
     runs-on: ubuntu-latest
