@@ -14,8 +14,12 @@ set -uo pipefail
 UPGRADE_MODE=false
 [ "${1:-}" = "--upgrade" ] && UPGRADE_MODE=true
 
-PINNED_VERSION="2026.3.11"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PINNED_VERSION=$(grep '^openclaw_version:' "$SCRIPT_DIR/../vars/openclaw-nodes.yml" 2>/dev/null | sed 's/.*"\(.*\)".*/\1/')
+if [ -z "$PINNED_VERSION" ]; then
+    echo "ERROR: Cannot read openclaw_version from vars/openclaw-nodes.yml"
+    exit 1
+fi
 NODES=("slave0" "slave1" "heavy")
 GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 
