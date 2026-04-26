@@ -3,9 +3,10 @@
 #   13-node-staleness.sh — push_ts freshness detection
 #   14-watchdogs.sh — watchdog timer health
 #   10-storage.sh — NFS ownership guard (enhanced)
-#   15-orphan-services.sh — orphan service detection
+#   15-orphan-services.sh — orphan/layer-audit/inventory
+#   16-version-consistency.sh — version drift detection
 #
-# 16 test cases covering all status combinations.
+# 34 test cases covering all status combinations.
 
 set -uo pipefail
 
@@ -32,6 +33,7 @@ source "$REPO_DIR/scripts/smoke-checks/10-storage.sh"
 source "$REPO_DIR/scripts/smoke-checks/13-node-staleness.sh"
 source "$REPO_DIR/scripts/smoke-checks/14-watchdogs.sh"
 source "$REPO_DIR/scripts/smoke-checks/15-orphan-services.sh"
+source "$REPO_DIR/scripts/smoke-checks/16-version-consistency.sh"
 
 _reset() {
     RESULTS=()
@@ -41,6 +43,9 @@ _reset() {
     _WATCHDOG_STATUS=""
     _NFS_OWNERSHIP_DATA=""
     _ORPHAN_SERVICE_DATA=""
+    _SYSTEMD_LAYER_DATA=""
+    _SERVICE_INVENTORY_DATA=""
+    _VERSION_DATA=""
 }
 
 # ═══════════ Check A: Node Stats Staleness ═══════════
@@ -266,9 +271,162 @@ slave0 running spreadbot.service"
         fail "D4: DOWN with multiple orphans" "got: ${RESULTS[orphan-services]:-unset}"
 }
 
+# ═══════════ Check E: Systemd Layer Audit ═══════════
+
+run_e1() {
+    _reset
+    _SYSTEMD_LAYER_DATA="clean"
+
+    check_systemd_layer_audit
+
+    [ "${RESULTS[systemd-layer-audit]}" = "up" ] && \
+        pass "E1: UP when no forbidden user-level services" || \
+        fail "E1: UP when clean" "got: ${RESULTS[systemd-layer-audit]:-unset}"
+}
+
+run_e2() {
+    _reset
+    _SYSTEMD_LAYER_DATA="master found polybot.service"
+
+    check_systemd_layer_audit
+
+    [ "${RESULTS[systemd-layer-audit]}" = "degraded" ] && \
+        pass "E2: DEGRADED when user-level polybot found" || \
+        fail "E2: DEGRADED with user-level service" "got: ${RESULTS[systemd-layer-audit]:-unset}"
+    echo "${ERRORS[systemd-layer-audit]:-}" | grep -q "master" && \
+        pass "E2: error mentions master" || \
+        fail "E2: error mentions master" "got: ${ERRORS[systemd-layer-audit]:-unset}"
+}
+
+run_e3() {
+    _reset
+    _SYSTEMD_LAYER_DATA="master ssh_unreachable -
+slave0 ssh_unreachable -"
+
+    check_systemd_layer_audit
+
+    [ "${RESULTS[systemd-layer-audit]}" = "degraded" ] && \
+        pass "E3: DEGRADED when SSH unreachable" || \
+        fail "E3: DEGRADED when SSH unreachable" "got: ${RESULTS[systemd-layer-audit]:-unset}"
+}
+
+# ═══════════ Check F: Service Inventory ═══════════
+
+run_f1() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node active
+heavy openclaw-router-api active
+master openclaw-node active
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "up" ] && \
+        pass "F1: UP when all expected services active" || \
+        fail "F1: UP when all active" "got: ${RESULTS[service-inventory]:-unset}"
+}
+
+run_f2() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node active
+heavy openclaw-router-api active
+master openclaw-node inactive
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "down" ] && \
+        pass "F2: DOWN when master openclaw-node inactive" || \
+        fail "F2: DOWN when missing service" "got: ${RESULTS[service-inventory]:-unset}"
+    echo "${ERRORS[service-inventory]:-}" | grep -q "master" && \
+        pass "F2: error mentions master" || \
+        fail "F2: error mentions master" "got: ${ERRORS[service-inventory]:-unset}"
+}
+
+run_f3() {
+    _reset
+    _SERVICE_INVENTORY_DATA="heavy openclaw-node active
+heavy openclaw-router-api active
+master openclaw-node ssh_failed
+slave0 openclaw-node active
+slave1 openclaw-node active"
+
+    check_service_inventory
+
+    [ "${RESULTS[service-inventory]}" = "degraded" ] && \
+        pass "F3: DEGRADED when SSH failed" || \
+        fail "F3: DEGRADED when SSH failed" "got: ${RESULTS[service-inventory]:-unset}"
+}
+
+# ═══════════ Check G: Version Consistency ═══════════
+
+run_g1() {
+    _reset
+    _VERSION_DATA="pinned 2026.3.24
+heavy 2026.3.24 ok
+master 2026.3.24 ok
+slave0 2026.3.24 ok
+slave1 2026.3.24 ok"
+
+    check_version_consistency
+
+    [ "${RESULTS[version-consistency]}" = "up" ] && \
+        pass "G1: UP when all versions match pin" || \
+        fail "G1: UP when versions match" "got: ${RESULTS[version-consistency]:-unset}"
+}
+
+run_g2() {
+    _reset
+    _VERSION_DATA="pinned 2026.3.24
+heavy 2026.3.23 ok
+master 2026.3.24 ok
+slave0 2026.3.24 ok
+slave1 2026.3.24 ok"
+
+    check_version_consistency
+
+    [ "${RESULTS[version-consistency]}" = "degraded" ] && \
+        pass "G2: DEGRADED when heavy version drifted" || \
+        fail "G2: DEGRADED with version mismatch" "got: ${RESULTS[version-consistency]:-unset}"
+    echo "${ERRORS[version-consistency]:-}" | grep -q "heavy" && \
+        pass "G2: error mentions heavy" || \
+        fail "G2: error mentions heavy" "got: ${ERRORS[version-consistency]:-unset}"
+}
+
+run_g3() {
+    _reset
+    _VERSION_DATA="pinned 2026.3.24
+heavy 2026.3.24 ok
+master 2026.3.24 ok
+slave0 ssh_failed -
+slave1 2026.3.24 ok"
+
+    check_version_consistency
+
+    [ "${RESULTS[version-consistency]}" = "degraded" ] && \
+        pass "G3: DEGRADED when SSH failed to slave0" || \
+        fail "G3: DEGRADED when SSH failed" "got: ${RESULTS[version-consistency]:-unset}"
+}
+
+run_g4() {
+    _reset
+    _VERSION_DATA="no_pin"
+
+    check_version_consistency
+
+    [ "${RESULTS[version-consistency]}" = "degraded" ] && \
+        pass "G4: DEGRADED when pinned version unreadable" || \
+        fail "G4: DEGRADED when no pin" "got: ${RESULTS[version-consistency]:-unset}"
+}
+
 run_a1; run_a2; run_a3; run_a4; run_a5
 run_b1; run_b2; run_b3; run_b4
 run_c1; run_c2; run_c3
 run_d1; run_d2; run_d3; run_d4
+run_e1; run_e2; run_e3
+run_f1; run_f2; run_f3
+run_g1; run_g2; run_g3; run_g4
 
 test_summary

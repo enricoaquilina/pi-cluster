@@ -175,6 +175,10 @@
   .svc-dot.up { background: var(--green); }
   .svc-dot.degraded { background: var(--yellow); }
   .svc-dot.down { background: var(--red); }
+  .svc-dot.unknown { background: var(--muted); }
+  .svc-group-header { grid-column: 1 / -1; font-size: 0.85rem; font-weight: 600; color: var(--text-secondary, var(--muted)); padding: 0.75rem 0 0.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+  .svc-group-header:first-child { margin-top: 0; }
+  .svc-group-header .svc-dot { width: 8px; height: 8px; }
   .svc-uptime { font-size: 1.1rem; font-weight: 700; }
   .svc-details { font-size: 0.8rem; color: var(--muted); line-height: 1.6; }
   .svc-uptime-bar { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; margin: 0.4rem 0; }
@@ -1091,7 +1095,39 @@ const SVC_DISPLAY = {
   'cloudflared': 'Cloudflare Tunnel',
   'docker-dns': 'Docker DNS',
   'tailscale-dns': 'Tailscale DNS Guard',
+  'openclaw-master': 'OpenClaw master',
+  'openclaw-slave0': 'OpenClaw slave0',
+  'openclaw-slave1': 'OpenClaw slave1',
+  'openclaw-heavy': 'OpenClaw heavy',
+  'router-api': 'Router API',
+  'node-stats-heavy': 'Node Stats: heavy',
+  'node-stats-control': 'Node Stats: control',
+  'node-stats-build': 'Node Stats: build',
+  'node-stats-light': 'Node Stats: light',
+  'watchdog-cluster': 'Cluster Watchdog',
+  'watchdog-ssh': 'SSH Watchdog',
+  'orphan-services': 'Orphan Services',
+  'nfs-workspace': 'NFS Workspace',
+  'nfs-backup': 'NFS Backup',
+  'nvme-health': 'NVMe Health',
+  'nvme-write-rate': 'NVMe Write Rate',
+  'life-sync': 'Life Sync',
+  'keepalived': 'Keepalived HA',
+  'spreadbot': 'Spreadbot',
+  'systemd-layer-audit': 'Systemd Layer Audit',
+  'service-inventory': 'Service Inventory',
+  'version-consistency': 'Version Consistency',
 };
+
+const SVC_GROUPS = [
+  { name: 'OpenClaw', services: ['openclaw-gateway', 'openclaw-gateway-memory', 'openclaw-telegram', 'openclaw-whatsapp', 'router-api', 'openclaw-master', 'openclaw-slave0', 'openclaw-slave1', 'openclaw-heavy'] },
+  { name: 'Cluster Stats', services: ['node-stats-heavy', 'node-stats-control', 'node-stats-build', 'node-stats-light'] },
+  { name: 'Health Monitors', services: ['watchdog-cluster', 'watchdog-ssh', 'orphan-services', 'systemd-layer-audit', 'service-inventory', 'version-consistency', 'mission-control-api'] },
+  { name: 'Databases', services: ['postgresql', 'mongodb'] },
+  { name: 'Automation', services: ['n8n-production', 'n8n-staging', 'polymarket-bot', 'spreadbot'] },
+  { name: 'Network', services: ['cloudflared', 'keepalived', 'pihole-dns', 'docker-dns', 'tailscale-dns'] },
+  { name: 'Storage', services: ['nfs-workspace', 'nfs-backup', 'nvme-health', 'nvme-write-rate', 'life-sync'] },
+];
 
 async function loadServices() {
   try {
@@ -1134,7 +1170,10 @@ function renderServices(services, alerts) {
     return;
   }
 
-  grid.innerHTML = services.map(s => {
+  const svcMap = {};
+  services.forEach(s => { svcMap[s.service] = s; });
+
+  function renderCard(s) {
     const name = SVC_DISPLAY[s.service] || s.service;
     const status = s.current_status || 'unknown';
     const uptime24 = s.uptime_24h != null ? s.uptime_24h.toFixed(1) : '--';
@@ -1155,7 +1194,27 @@ function renderServices(services, alerts) {
         Last check: ${lastCheck}${ms ? ' &middot; ' + ms : ''}
       </div>
     </div>`;
-  }).join('');
+  }
+
+  const grouped = new Set();
+  let html = '';
+  for (const group of SVC_GROUPS) {
+    const groupSvcs = group.services.map(id => svcMap[id]).filter(Boolean);
+    if (!groupSvcs.length) continue;
+    const hasDown = groupSvcs.some(s => s.current_status === 'down');
+    const hasDegraded = groupSvcs.some(s => s.current_status === 'degraded');
+    const dotClass = hasDown ? 'down' : hasDegraded ? 'degraded' : 'up';
+    html += `<div class="svc-group-header"><span class="svc-dot ${dotClass}"></span>${esc(group.name)}</div>`;
+    groupSvcs.sort((a, b) => (order[a.current_status] ?? 3) - (order[b.current_status] ?? 3));
+    html += groupSvcs.map(renderCard).join('');
+    groupSvcs.forEach(s => grouped.add(s.service));
+  }
+  const ungrouped = services.filter(s => !grouped.has(s.service));
+  if (ungrouped.length) {
+    html += `<div class="svc-group-header"><span class="svc-dot unknown"></span>Other</div>`;
+    html += ungrouped.map(renderCard).join('');
+  }
+  grid.innerHTML = html;
 
   // Timeline
   renderServicesTimeline(services);
