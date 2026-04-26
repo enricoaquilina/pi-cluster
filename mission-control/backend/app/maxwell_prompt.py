@@ -364,7 +364,7 @@ DEFAULT_SEGMENTS = ["grounding", "identity", "rules"]
 
 def build_system_prompt(
     user_id: str = "enrico",
-    persona: str = "maxwell",
+    persona: str = "Maxwell",
 ) -> List[PromptSegment]:
     """Build a persona's system prompt as a list of segments.
 
