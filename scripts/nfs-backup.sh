@@ -6,7 +6,11 @@ LOG="/tmp/nfs-backup-$(date +%Y%m%d).log"
 # Pre-rsync: dump databases so rsync picks up fresh copies
 mkdir -p /mnt/data/mongodb-dump-latest
 rm -rf /mnt/data/mongodb-dump-latest/*
-# Dump instagram_db excluding GridFS binary chunks (9G+), then remaining DBs
+# instagram_db.posts has 16MB/doc images field (3G total) but mongodump has no
+# field-level exclusion. Kept because: --gzip compresses base64 ~80%, rsync
+# delta-transfer means near-zero after first sync (posts rarely change).
+# Excluded: fs.chunks (GridFS 9G binary blobs).
+# Dump instagram_db excluding GridFS binary chunks, then remaining DBs
 docker exec mongodb sh -c '
     mongodump --quiet --gzip --db=instagram_db --excludeCollection=fs.chunks --out /data/dump-staging/ &&
     for db in $(mongosh --quiet --eval "db.adminCommand({listDatabases:1}).databases.map(d=>d.name).filter(n=>n!==\"instagram_db\"&&n!==\"local\"&&n!==\"config\").join(\"\n\")"); do
@@ -60,4 +64,7 @@ fi
 
 ssh master "touch /mnt/external/.last-backup" 2>/dev/null
 logger -t nfs-backup "Backup completed successfully"
+
+find /tmp -name "nfs-backup-*.log" -mtime +7 -delete 2>/dev/null
+
 exit 0
