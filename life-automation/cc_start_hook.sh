@@ -9,6 +9,7 @@ set +e
 trap 'exit 0' EXIT
 
 LIFE_DIR="${LIFE_DIR:-$HOME/life}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Verify critical system files match git HEAD (detect uncommitted tampering)
 if [ -d "$LIFE_DIR/.git" ]; then
@@ -27,7 +28,7 @@ fi
 # Pull latest ~/life from git (sync from other nodes/sessions)
 if [ -d "$LIFE_DIR/.git" ]; then
     # shellcheck source=/dev/null
-    for _lib in "$HOME/pi-cluster/life-automation/lib/life-git-sync.sh" \
+    for _lib in "$SCRIPT_DIR/lib/life-git-sync.sh" \
                 "$LIFE_DIR/scripts/lib/life-git-sync.sh"; do
         [ -f "$_lib" ] && { source "$_lib"; break; }
     done
@@ -35,7 +36,7 @@ if [ -d "$LIFE_DIR/.git" ]; then
 fi
 
 # --- Primary context assembly (tiered, budget-capped) ---
-CONTEXT_BUDGET="$HOME/work/pi-cluster/pi-cluster/life-automation/context_budget.py"
+CONTEXT_BUDGET="$SCRIPT_DIR/context_budget.py"
 if [ -f "$CONTEXT_BUDGET" ]; then
     /usr/bin/python3 "$CONTEXT_BUDGET" --cwd "$PWD" --budget 6000 2>/dev/null
     exit 0
