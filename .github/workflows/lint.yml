@@ -218,7 +218,7 @@ jobs:
       - name: Env validation tests (8 tests)
         run: bash tests/test_env_validate.sh
 
-      - name: Network + NFS smoke tests (11 tests)
+      - name: Network + NFS smoke tests (22 tests)
         run: bash tests/test_smoke_network.sh
 
   gitleaks:

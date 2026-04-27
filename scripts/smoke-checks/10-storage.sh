@@ -3,12 +3,23 @@
 
 check_nfs_mount() {
     if [ "$(hostname)" = "heavy" ]; then
-        if showmount -e localhost 2>/dev/null | grep -q /mnt/data; then
-            check_service "nfs-server" "up"
-            check_service "nfs-mount" "up"
-        else
+        if ! showmount -e localhost 2>/dev/null | grep -q /mnt/data; then
             check_service "nfs-server" "down" "NFS not exporting /mnt/data"
             check_service "nfs-mount" "down" "NFS server not exporting"
+            return
+        fi
+        check_service "nfs-server" "up"
+
+        local unhealthy=""
+        for node in master slave0 slave1; do
+            local ok
+            ok=$(timed_ssh 5 "$node" "mountpoint -q /mnt/external && timeout 3 stat -t /mnt/external >/dev/null 2>&1 && echo ok" 2>/dev/null)
+            [[ "$ok" != "ok" ]] && unhealthy="${unhealthy}${node} "
+        done
+        if [[ -n "$unhealthy" ]]; then
+            check_service "nfs-mount" "degraded" "Unhealthy: ${unhealthy}"
+        else
+            check_service "nfs-mount" "up"
         fi
         return
     fi
@@ -16,7 +27,7 @@ check_nfs_mount() {
         check_service "nfs-mount" "down" "not mounted on $(hostname)"
         return
     fi
-    if ! timeout 5 stat /mnt/external >/dev/null 2>&1; then
+    if ! timeout 5 stat -t /mnt/external >/dev/null 2>&1; then
         check_service "nfs-mount" "down" "stale mount on $(hostname)"
         return
     fi
