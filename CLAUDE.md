@@ -32,4 +32,4 @@ Should match the PR diff size. If not, changes were lost in squash.
 
 ## Feature PRs
 
-Feature PRs (`feat:` prefix) do NOT get auto-merge. Review AI suggestions and claude-fix changes before merging manually. This prevents the fix-after-feat chain pattern.
+All PRs (including `feat:`) auto-merge when CI Gate + Review Gate + AI Security Verdict pass. GPT-5.4 blocks merge on critical findings (>=9/10). Post-deploy smoke test + rollback provides the safety net.
