@@ -22,6 +22,13 @@ source "$SCRIPT_DIR/smoke-checks/08-dns.sh"
 # shellcheck source=scripts/smoke-checks/17-heartbeat-canary.sh
 source "$SCRIPT_DIR/smoke-checks/17-heartbeat-canary.sh"
 
+declare -A SLOW_THRESHOLDS=(
+    [openclaw-gateway]=5000
+    [mission-control-api]=3000
+    [pihole-dns]=2000
+    [heartbeat-canary]=5000
+)
+
 check_openclaw_gateway
 check_mc_api
 check_postgres
@@ -45,8 +52,21 @@ for svc in "${CRITICAL_SVCS[@]}"; do
     esac
 done
 
+SLOW=()
+for svc in "${!SLOW_THRESHOLDS[@]}"; do
+    ms="${RESPONSE_MS[$svc]:-0}"
+    threshold="${SLOW_THRESHOLDS[$svc]}"
+    if [[ "$ms" -gt 0 && "$ms" -gt "$threshold" ]]; then
+        SLOW+=("$svc:${ms}ms>${threshold}ms")
+    fi
+done
+
 if [[ ${#FAILED[@]} -gt 0 ]]; then
     echo "DEPLOY_SMOKE_FAIL: ${FAILED[*]}"
+    exit 1
+fi
+if [[ ${#SLOW[@]} -gt 0 ]]; then
+    echo "DEPLOY_SMOKE_FAIL:slow: ${SLOW[*]}"
     exit 1
 fi
 echo "DEPLOY_SMOKE_OK"
