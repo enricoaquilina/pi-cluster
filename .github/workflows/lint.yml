@@ -230,16 +230,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  core-tests:
+    name: Core Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
+          cache-dependency-path: 'requirements*.txt'
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Run core tests
+        run: pytest tests/test_nvme_wear_log.py tests/test_memory_content.py -v --tb=short
+
   ci-gate:
     name: CI Gate
     if: always()
-    needs: [yaml-lint, ansible-lint, shellcheck, python-lint, script-smoke, gitleaks]
+    needs: [yaml-lint, ansible-lint, shellcheck, python-lint, script-smoke, gitleaks, core-tests]
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate CI results
         run: |
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "::error::One or more CI checks failed"
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "::error::One or more CI checks were cancelled"
             exit 1
           fi
           echo "All CI checks passed (or were skipped)"
