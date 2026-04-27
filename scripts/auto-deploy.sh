@@ -12,6 +12,8 @@ LOG_TAG="auto-deploy"
 source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 # shellcheck source=scripts/lib/deploy-rollback.sh
 source "$SCRIPT_DIR/lib/deploy-rollback.sh"
+# shellcheck source=scripts/lib/deploy-notify-pr.sh
+source "$SCRIPT_DIR/lib/deploy-notify-pr.sh" 2>/dev/null || deploy_notify_pr() { :; }
 
 log() { logger -t "$LOG_TAG" "$1"; }
 
@@ -24,8 +26,10 @@ if ! flock -n 9; then
     exit 0
 fi
 
+DEPLOY_START=$(date +%s)
+
 # Heartbeat for staleness detection (runs even on no-op)
-echo "$(date +%s)" > /tmp/auto-deploy-heartbeat
+echo "$DEPLOY_START" > /tmp/auto-deploy-heartbeat
 
 # Fetch latest from origin
 git fetch origin master --quiet 2>/dev/null || exit 0
@@ -149,9 +153,31 @@ if echo "$mc_result" | grep -q "NODES_REPAIRED"; then
     log "OpenClaw nodes re-paired on heavy"
 fi
 
+# Verify heavy containers after deploy sync
+if echo "$mc_result" | grep -qE "MC_REBUILT|PROXY_RESTARTED|NODES_REPAIRED"; then
+    sleep 5
+    heavy_health=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy \
+        "docker ps --filter health=unhealthy --format '{{.Names}}' 2>/dev/null" 2>/dev/null || echo "")
+    if [ -n "$heavy_health" ]; then
+        log "WARNING: unhealthy containers on heavy: $heavy_health"
+        send_telegram "⚠️ *Auto-Deploy*: unhealthy containers on heavy post-sync: \`$heavy_health\`"
+    fi
+fi
+
+deploy_log_metrics() {
+    local smoke_result="${1:-ok}" rolled_back="${2:-false}"
+    local duration=$(( $(date +%s) - DEPLOY_START ))
+    printf '{"ts":"%s","before":"%s","after":"%s","smoke":"%s","rollback":%s,"duration_s":%d}\n' \
+        "$(date -Iseconds)" "$LOCAL" "$(git rev-parse HEAD)" \
+        "$smoke_result" "$rolled_back" "$duration" \
+        >> /var/log/deploy-history.jsonl 2>/dev/null || true
+}
+
 # Post-deploy smoke check (critical services only, 90s timeout)
 log "Running post-deploy smoke check..."
 SMOKE_OUTPUT=$(timeout 90 bash "$SCRIPT_DIR/deploy-smoke.sh" 2>&1) || true
+
+FAILED_MSG=$(git log --format='%s' "$REMOTE" -1 2>/dev/null || echo "")
 
 if echo "$SMOKE_OUTPUT" | grep -q "DEPLOY_SMOKE_FAIL"; then
     FAILED_SVCS=$(echo "$SMOKE_OUTPUT" | grep "DEPLOY_SMOKE_FAIL" | cut -d: -f2-)
@@ -161,30 +187,43 @@ if echo "$SMOKE_OUTPUT" | grep -q "DEPLOY_SMOKE_FAIL"; then
         if deploy_rollback; then
             RECHECK=$(timeout 90 bash "$SCRIPT_DIR/deploy-smoke.sh" 2>&1) || true
             if echo "$RECHECK" | grep -q "DEPLOY_SMOKE_OK"; then
+                deploy_log_metrics "fail" "true"
                 send_telegram "🔄 *Auto-Deploy ROLLED BACK*
 $COMMITS
 Failed:$FAILED_SVCS
 Rolled back to deploy/stable — services recovered"
+                deploy_notify_pr "$FAILED_MSG" \
+                    "## ⚠️ Deploy Rollback\n\nThis PR caused a post-deploy smoke failure.\n\n**Failed services:**$FAILED_SVCS\n**Action:** Rolled back to deploy/stable — services recovered"
             else
+                deploy_log_metrics "fail" "true"
                 send_telegram "🚨 *Auto-Deploy ROLLBACK FAILED*
 $COMMITS
 Failed:$FAILED_SVCS
 Manual intervention needed"
+                deploy_notify_pr "$FAILED_MSG" \
+                    "## 🚨 Deploy Rollback FAILED\n\nThis PR caused a post-deploy smoke failure and rollback did not recover.\n\n**Failed services:**$FAILED_SVCS\n**Action:** Manual intervention needed"
             fi
         else
+            deploy_log_metrics "fail" "true"
             send_telegram "🚨 *Auto-Deploy ROLLBACK FAILED*
 $COMMITS
 Failed:$FAILED_SVCS
 Rollback command failed before recovery verification"
+            deploy_notify_pr "$FAILED_MSG" \
+                "## 🚨 Deploy Rollback FAILED\n\nThis PR caused a post-deploy smoke failure. Rollback command failed.\n\n**Failed services:**$FAILED_SVCS"
         fi
     else
+        deploy_log_metrics "fail" "false"
         send_telegram "🚨 *Auto-Deploy SMOKE FAIL (no rollback tag)*
 $COMMITS
 Failed:$FAILED_SVCS"
+        deploy_notify_pr "$FAILED_MSG" \
+            "## 🚨 Deploy Smoke Failure\n\nThis PR caused a post-deploy smoke failure. No rollback tag available.\n\n**Failed services:**$FAILED_SVCS"
     fi
 else
     log "Post-deploy smoke passed"
     deploy_mark_stable
+    deploy_log_metrics "ok" "false"
     send_telegram "🚀 *Auto-Deploy*
 $COMMITS"
 fi
