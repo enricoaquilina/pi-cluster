@@ -200,6 +200,24 @@ run_t7() {
     fi
 }
 
+# -- W13: Gateway healthy but all nodes disconnected → pair-nodes triggered --
+run_w13() {
+    _test_init
+    cat > "$CACHE_FILE" <<'JSON'
+{"nodes": [{"name": "build", "connected": false}, {"name": "light", "connected": false}, {"name": "heavy", "connected": false}]}
+JSON
+
+    "$WATCHDOG" >/dev/null 2>&1
+
+    if [ -f "$CALLS_DIR/pair-nodes.log" ] && grep -q "called" "$CALLS_DIR/pair-nodes.log"; then
+        pass "W13: all nodes disconnected + gateway healthy → pair-nodes triggered"
+    else
+        fail "W13: all nodes disconnected + gateway healthy → pair-nodes triggered" "pair-nodes not called"
+    fi
+
+    _test_cleanup
+}
+
 run_t1
 run_t2
 run_t3
@@ -207,5 +225,6 @@ run_t4
 run_t5
 run_t6
 run_t7
+run_w13
 
 test_summary

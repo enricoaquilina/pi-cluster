@@ -192,7 +192,7 @@ GW_SKIPPED_CONFIG=false
 # 0. Token drift check — gated by config validator; uses compose restart
 #    rather than --force-recreate unless drift persists.
 # ---------------------------------------------------------------------------
-if docker inspect openclaw-openclaw-gateway-1 --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+if docker inspect openclaw-openclaw-gateway-1 --format '{{range .Config.Env}}{{println .}}{{end}}' 2>&1 \
     | grep '^OPENCLAW_GATEWAY_TOKEN=' | cut -d= -f2 > /tmp/_gw_token; then
     EXPECTED=$(grep '^OPENCLAW_GATEWAY_TOKEN=' "$GW_DIR/.env" 2>/dev/null | cut -d= -f2)
     ACTUAL=$(cat /tmp/_gw_token)
@@ -305,8 +305,8 @@ fi
 # ---------------------------------------------------------------------------
 # 7. MC compose services (catch any that crashed)
 # ---------------------------------------------------------------------------
-if [ -d "$MC_DIR" ] && cd "$MC_DIR" 2>/dev/null; then
-    if ! docker compose ps --status running --format '{{.Name}}' 2>/dev/null | grep -q mission-control-db; then
+if [ -d "$MC_DIR" ] && cd "$MC_DIR" 2>&1; then
+    if ! docker compose ps --status running --format '{{.Name}}' 2>&1 | grep -q mission-control-db; then
         log "MC DB not running — starting compose"
         docker compose up -d 2>&1
         ISSUES=$((ISSUES + 1))

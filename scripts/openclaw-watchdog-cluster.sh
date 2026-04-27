@@ -18,6 +18,9 @@ LOG_FILE="${LOG_FILE:-/tmp/openclaw-watchdog.log}"
 
 # shellcheck source=scripts/.env.cluster
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/env-validate.sh
+source "$SCRIPT_DIR/lib/env-validate.sh"
+warn_env OPENCLAW_GATEWAY_TOKEN TELEGRAM_BOT_TOKEN
 # shellcheck source=scripts/lib/telegram.sh
 source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
 
@@ -60,10 +63,10 @@ fi
 
 # Step 2: Refresh stats cache
 if [ "$(hostname)" = "heavy" ]; then
-    bash "$SCRIPT_DIR/openclaw-stats-collector.sh" 2>/dev/null
+    bash "$SCRIPT_DIR/openclaw-stats-collector.sh" 2>>"$LOG_FILE"
 else
     # On non-heavy nodes, pull node status from MC API
-    curl -sf --max-time 10 http://192.168.0.5:8000/api/nodes > "$CACHE_FILE" 2>/dev/null
+    curl -sf --max-time 10 http://192.168.0.5:8000/api/nodes > "$CACHE_FILE" 2>>"$LOG_FILE"
 fi
 
 if [ ! -f "$CACHE_FILE" ]; then
@@ -86,7 +89,7 @@ else:
 status = {n['name']: n.get('connected', False) or n.get('metadata', {}).get('connected', False) for n in nodes}
 for name in '${EXPECTED_NODES[*]}'.split():
     print(name, 'true' if status.get(name) else 'false')
-" 2>/dev/null)
+" 2>>"$LOG_FILE")
 
 while read -r node_name is_connected; do
     if [ "$is_connected" = "true" ]; then
@@ -116,7 +119,7 @@ with open('$CACHE_FILE') as f:
 status = {n['name']: n.get('connected', False) for n in data.get('nodes', [])}
 for name in '${disconnected[*]}'.split():
     print(name, 'true' if status.get(name) else 'false')
-" 2>/dev/null)
+" 2>>"$LOG_FILE")
         while read -r node_name is_now; do
             [ "$is_now" != "true" ] && still_disconnected+=("$node_name")
         done <<< "$recheck"

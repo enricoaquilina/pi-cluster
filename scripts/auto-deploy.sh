@@ -25,8 +25,8 @@ REMOTE=$(git rev-parse origin/master)
 [ "$LOCAL" = "$REMOTE" ] && exit 0
 
 # Detect and recover from dirty working tree
-if ! git diff-index --quiet HEAD -- 2>/dev/null; then
-    dirty_files=$(git diff --name-only HEAD 2>/dev/null | head -5)
+if ! git diff-index --quiet HEAD --; then
+    dirty_files=$(git diff --name-only HEAD 2>&1 | head -5)
     log "WARNING: dirty working tree, stashing: $dirty_files"
     send_telegram "⚠️ *Auto-Deploy*: dirty tree detected, stashing
 \`$dirty_files\`"
@@ -59,7 +59,7 @@ log "Running monitoring stack playbook..."
 ansible-playbook "$REPO_DIR/playbooks/monitoring.yml" --quiet 2>&1 | while read -r line; do log "mon-stack: $line"; done
 
 # Deploy node scripts to slave nodes if changed
-CHANGED_FILES=$(git diff --name-only "$LOCAL..$REMOTE" 2>/dev/null)
+CHANGED_FILES=$(git diff --name-only "$LOCAL..$REMOTE" 2>&1)
 if echo "$CHANGED_FILES" | grep -qE '^scripts/openclaw-node-agent\.py|^playbooks/openclaw-nodes\.yml'; then
     log "Running openclaw-nodes playbook (node-agent changed)..."
     ansible-playbook "$REPO_DIR/playbooks/openclaw-nodes.yml" --quiet 2>&1 | while read -r line; do log "nodes: $line"; done

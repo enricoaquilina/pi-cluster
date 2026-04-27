@@ -84,7 +84,7 @@ sudo systemctl enable --now cloudflared 2>/dev/null || log "WARN: cloudflared st
 log "Re-pointing node services to master gateway..."
 if ansible-playbook /home/enrico/homelab/playbooks/openclaw-nodes.yml \
     -e "openclaw_gateway_host=192.168.0.22" \
-    --vault-password-file /home/enrico/homelab/secrets-vault-password 2>/dev/null; then
+    --vault-password-file /home/enrico/homelab/secrets-vault-password 2>&1 | while IFS= read -r l; do log "ansible: $l"; done; then
     log "Nodes re-pointed via Ansible"
 else
     log "WARN: Ansible repoint failed — falling back to sed"
@@ -100,7 +100,7 @@ else
             ssh -o ConnectTimeout=5 "$host" "sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service && sudo systemctl daemon-reload" 2>/dev/null || log "WARN: $host node repoint failed"
         fi
     done
-    sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service 2>/dev/null
+    sudo sed -i 's|--host [0-9.]*|--host 192.168.0.22|' /etc/systemd/system/openclaw-node.service
     sudo systemctl daemon-reload
 fi
 
