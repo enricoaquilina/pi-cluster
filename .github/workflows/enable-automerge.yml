@@ -12,7 +12,6 @@ permissions:
 jobs:
   enable:
     name: Enable auto-merge
-    if: ${{ !startsWith(github.event.pull_request.title, 'feat') }}
     runs-on: ubuntu-latest
     steps:
       - name: Enable squash auto-merge

@@ -10,6 +10,7 @@ permissions:
   actions: read
   contents: read
   pull-requests: write
+  statuses: write
 
 jobs:
   review:
@@ -177,6 +178,48 @@ jobs:
 
           gh pr comment "${{ steps.pr.outputs.pr_num }}" \
             -R "${{ github.repository }}" --body "$BODY"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse review verdict
+        if: steps.pr.outputs.skip != 'true' && steps.review.outputs.has_review == 'true'
+        id: verdict
+        run: |
+          CRITICAL=$(grep -cE '^\#\#\# \[(9|10)/10\]' /tmp/review-result.md 2>/dev/null || echo "0")
+          echo "critical_count=$CRITICAL" >> "$GITHUB_OUTPUT"
+          if [ "$CRITICAL" -gt 0 ]; then
+            echo "::warning::GPT-5.4 found $CRITICAL critical findings (>=9/10)"
+          fi
+
+      - name: Post merge verdict status
+        if: steps.pr.outputs.skip != 'true'
+        run: |
+          CRITICAL="${{ steps.verdict.outputs.critical_count }}"
+          CRITICAL="${CRITICAL:-0}"
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          if [ "$CRITICAL" -gt 0 ]; then
+            STATE="failure"
+            DESC="$CRITICAL critical findings (>=9/10) — must be addressed before merge"
+          else
+            STATE="success"
+            DESC="No critical findings"
+          fi
+          gh api "repos/${{ github.repository }}/statuses/$SHA" \
+            -f state="$STATE" \
+            -f description="$DESC" \
+            -f context="AI Security Verdict"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Post skip verdict
+        if: steps.pr.outputs.skip == 'true' || steps.review.outputs.has_review != 'true'
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          [ -z "$SHA" ] && exit 0
+          gh api "repos/${{ github.repository }}/statuses/$SHA" \
+            -f state="success" \
+            -f description="Review skipped (no code changes or API unavailable)" \
+            -f context="AI Security Verdict"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
