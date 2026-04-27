@@ -1,0 +1,13 @@
+# Require explicit approval for infra-critical paths.
+# These paths cannot auto-merge even when all CI gates pass.
+
+# CI/CD pipeline — changes here affect all PRs
+.github/workflows/ @enricoaquilina
+.github/actions/ @enricoaquilina
+
+# Secrets and security
+secrets/ @enricoaquilina
+.gitleaksignore @enricoaquilina
+
+# Docker infrastructure
+docker-compose*.yml @enricoaquilina
