@@ -36,9 +36,13 @@ CRITICAL_SVCS=(openclaw-gateway mission-control-api postgresql openclaw-master o
 FAILED=()
 for svc in "${CRITICAL_SVCS[@]}"; do
     status="${RESULTS[$svc]:-unknown}"
-    if [[ "$status" == "down" ]]; then
-        FAILED+=("$svc")
-    fi
+    case "$status" in
+        up)
+            ;;
+        *)
+            FAILED+=("$svc:$status")
+            ;;
+    esac
 done
 
 if [[ ${#FAILED[@]} -gt 0 ]]; then

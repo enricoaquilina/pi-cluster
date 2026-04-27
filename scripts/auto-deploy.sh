@@ -158,18 +158,24 @@ if echo "$SMOKE_OUTPUT" | grep -q "DEPLOY_SMOKE_FAIL"; then
     log "ERROR: Post-deploy smoke FAILED:$FAILED_SVCS"
 
     if deploy_can_rollback; then
-        deploy_rollback
-        RECHECK=$(timeout 90 bash "$SCRIPT_DIR/deploy-smoke.sh" 2>&1) || true
-        if echo "$RECHECK" | grep -q "DEPLOY_SMOKE_OK"; then
-            send_telegram "🔄 *Auto-Deploy ROLLED BACK*
+        if deploy_rollback; then
+            RECHECK=$(timeout 90 bash "$SCRIPT_DIR/deploy-smoke.sh" 2>&1) || true
+            if echo "$RECHECK" | grep -q "DEPLOY_SMOKE_OK"; then
+                send_telegram "🔄 *Auto-Deploy ROLLED BACK*
 $COMMITS
 Failed:$FAILED_SVCS
 Rolled back to deploy/stable — services recovered"
+            else
+                send_telegram "🚨 *Auto-Deploy ROLLBACK FAILED*
+$COMMITS
+Failed:$FAILED_SVCS
+Manual intervention needed"
+            fi
         else
             send_telegram "🚨 *Auto-Deploy ROLLBACK FAILED*
 $COMMITS
 Failed:$FAILED_SVCS
-Manual intervention needed"
+Rollback command failed before recovery verification"
         fi
     else
         send_telegram "🚨 *Auto-Deploy SMOKE FAIL (no rollback tag)*
