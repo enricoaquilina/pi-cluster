@@ -5,8 +5,10 @@ check_nfs_mount() {
     if [ "$(hostname)" = "heavy" ]; then
         if showmount -e localhost 2>/dev/null | grep -q /mnt/data; then
             check_service "nfs-server" "up"
+            check_service "nfs-mount" "up"
         else
             check_service "nfs-server" "down" "NFS not exporting /mnt/data"
+            check_service "nfs-mount" "down" "NFS server not exporting"
         fi
         return
     fi

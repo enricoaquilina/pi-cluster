@@ -33,8 +33,9 @@ check_keepalived() {
     fi
 
     local s0_has_vip s1_has_vip
-    s0_has_vip=$(timed_ssh 5 slave0 "ip -4 addr show eth0 | grep -c 192.168.0.53" 2>/dev/null || echo "0")
-    s1_has_vip=$(timed_ssh 5 slave1 "ip -4 addr show eth0 | grep -c 192.168.0.53" 2>/dev/null || echo "0")
+    s0_has_vip=$(timed_ssh 5 slave0 "ip -4 addr show eth0 | grep -c 192.168.0.53" 2>/dev/null | tr -d '[:space:]')
+    s1_has_vip=$(timed_ssh 5 slave1 "ip -4 addr show eth0 | grep -c 192.168.0.53" 2>/dev/null | tr -d '[:space:]')
+    : "${s0_has_vip:=0}" "${s1_has_vip:=0}"
 
     if [[ "$s0_has_vip" -gt 0 && "$s1_has_vip" -gt 0 ]]; then
         check_service "keepalived" "down" "SPLIT-BRAIN: VIP on both nodes"
