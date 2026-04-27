@@ -203,7 +203,7 @@ jobs:
       - name: Smoke check unit tests (41 tests)
         run: bash tests/test_smoke_quick_wins.sh
 
-      - name: Cluster watchdog tests (12 tests)
+      - name: Cluster watchdog tests (13 tests)
         run: bash tests/test_cluster_watchdog.sh
 
       - name: Node check tests (12 tests)
@@ -214,6 +214,9 @@ jobs:
 
       - name: Heartbeat canary tests (7 tests)
         run: bash tests/test_smoke_heartbeat_canary.sh
+
+      - name: Env validation tests (8 tests)
+        run: bash tests/test_env_validate.sh
 
   gitleaks:
     name: Credential Scan

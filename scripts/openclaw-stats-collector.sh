@@ -13,6 +13,9 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+# shellcheck source=scripts/lib/env-validate.sh
+source "$SCRIPT_DIR/lib/env-validate.sh"
+warn_env MC_API_KEY
 OPENCLAW_GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-}"
 
 # Update connection status — try gateway CLI first, fall back to healthcheck

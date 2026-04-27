@@ -53,7 +53,7 @@ showmount -e localhost | grep -q "/mnt/data" || log "WARN: Heavy NFS not exporti
 log "Re-pointing node services to heavy gateway..."
 if ssh -o ConnectTimeout=5 master "cd /home/enrico/homelab && ansible-playbook playbooks/openclaw-nodes.yml \
     -e 'openclaw_gateway_host=192.168.0.5' \
-    --vault-password-file secrets-vault-password" 2>/dev/null; then
+    --vault-password-file secrets-vault-password" 2>&1 | while IFS= read -r l; do log "ansible: $l"; done; then
     log "Nodes re-pointed via Ansible"
 else
     log "WARN: Ansible repoint failed — falling back to sed"
