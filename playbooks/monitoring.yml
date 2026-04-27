@@ -48,7 +48,7 @@
     - name: Start monitoring stack
       ansible.builtin.command: docker compose up -d --pull always
       args:
-        chdir: /home/enrico/homelab/monitoring
+        chdir: "{{ repo_dir }}/monitoring"
       environment:
         GRAFANA_ADMIN_PASSWORD: "{{ grafana_admin_password | default('changeme') }}"
       changed_when: true
@@ -60,6 +60,6 @@
     - name: Stop monitoring containers on heavy
       ansible.builtin.command: docker compose down --remove-orphans
       args:
-        chdir: /home/enrico/pi-cluster/monitoring
+        chdir: "{{ repo_dir }}/monitoring"
       changed_when: true
       ignore_errors: true

@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=enrico
-ExecStart=/home/enrico/homelab/openclaw/mcp-slave1/.venv/bin/python /home/enrico/homelab/openclaw/mcp-slave1/server.py
+ExecStart={{ repo_dir }}/openclaw/mcp-slave1/.venv/bin/python {{ repo_dir }}/openclaw/mcp-slave1/server.py
 Restart=always
 RestartSec=10
 Environment=HOME=/home/enrico
