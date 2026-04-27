@@ -180,7 +180,15 @@ else
   fail "CLAUDE.md missing"
 fi
 
-# Test 21: No YAML lines > 200 chars (ansible-lint enforces this)
+# Test 21: claude-fix.yml prompts instruct "Do NOT push"
+no_push_count=$(grep -c 'Do NOT push' .github/workflows/claude-fix.yml 2>/dev/null || echo "0")
+if [[ "$no_push_count" -ge 4 ]]; then
+  ok "claude-fix.yml prompts all say 'Do NOT push' (test gate enforced)"
+else
+  fail "claude-fix.yml missing 'Do NOT push' in prompts (found $no_push_count, expected 4)"
+fi
+
+# Test 22: No YAML lines > 200 chars (ansible-lint enforces this)
 long_lines=$(awk 'length > 200 {print FILENAME":"NR": "length" chars"}' .github/workflows/*.yml 2>/dev/null || true)
 if [[ -z "$long_lines" ]]; then
   ok "No workflow YAML lines exceed 200 chars"

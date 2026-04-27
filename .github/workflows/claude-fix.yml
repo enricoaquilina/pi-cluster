@@ -38,6 +38,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Capture base SHA
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-claude-fix
         with:
           branch: ${{ steps.pr.outputs.branch }}
@@ -62,7 +66,56 @@ jobs:
             Focus on: security fixes, Ansible best practices,
             shell script safety, and systemd service correctness.
             Do NOT make cosmetic-only changes.
-            Commit fixes with clear messages, then push: git push origin HEAD
+            Commit fixes with clear messages. Do NOT push — the pipeline will push after validation.
+
+      - name: Test before push
+        id: pre_push_test
+        run: |
+          set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
+          if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
+            echo "no_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "no_changes=false" >> "$GITHUB_OUTPUT"
+          failed=0
+          CHANGED_SCRIPTS=$(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
+          for f in $CHANGED_SCRIPTS; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>&1; then
+              echo "::error::Syntax error in $f"
+              failed=1
+            fi
+            if command -v shellcheck >/dev/null 2>&1; then
+              shellcheck -S warning "$f" 2>&1 || failed=1
+            fi
+          done
+          CHANGED_YAML=$(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
+          for f in $CHANGED_YAML; do
+            [ -f "$f" ] || continue
+            if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>&1; then
+              echo "::error::YAML syntax error in $f"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push or revert
+        if: steps.pre_push_test.outputs.no_changes != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.pre_push_test.outputs.result }}" = "pass" ]; then
+            git push origin HEAD
+          else
+            git reset --hard "${{ steps.base.outputs.sha }}"
+            gh pr comment "${{ github.event.issue.number }}" \
+              --body "🚫 **Auto-fix reverted**: pre-push tests failed (shellcheck/syntax). Changes were NOT pushed." || true
+          fi
 
       - name: Notify of auto-fix changes
         if: always()
@@ -71,7 +124,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          BASE="${{ steps.base.outputs.sha }}"
+          CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || echo "")
           if [ -n "$CHANGED" ]; then
             PR_NUM="${{ github.event.issue.number }}"
             MSG="🤖 CI Auto-Fixer modified PR #${PR_NUM}:
@@ -174,6 +228,11 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         if: steps.pr.outputs.has_suggestions == 'true'
 
+      - name: Capture base SHA
+        if: steps.pr.outputs.has_suggestions == 'true'
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-claude-fix
         if: steps.pr.outputs.has_suggestions == 'true'
         with:
@@ -212,25 +271,80 @@ jobs:
               hardcoded CI passwords, mutable action tags, SSH empty-result handling
             If no findings are worth applying, do nothing — do NOT make changes just to make changes.
             If you do make fixes, commit with message prefix "Auto-fix: PR-Agent review —"
-            followed by a brief description. Then push: git push origin HEAD
+            followed by a brief description. Do NOT push — the pipeline will push after validation.
 
       - name: Revert out-of-scope changes
         if: steps.pr.outputs.has_suggestions == 'true'
         run: |
           set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
           PR_FILES="${{ steps.pr.outputs.pr_files }}"
           if [ -z "$PR_FILES" ]; then
             echo "::warning::No PR file list, skipping scope guard"
             exit 0
           fi
-          ALL_CHANGED=$(git diff --name-only HEAD 2>/dev/null || true)
+          CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || true)
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             if ! echo "$PR_FILES" | grep -qxF "$file"; then
               echo "::warning::Reverting out-of-scope change: $file"
-              git checkout HEAD -- "$file" 2>/dev/null || true
+              git checkout "$BASE" -- "$file" 2>/dev/null || true
+              git add "$file" 2>/dev/null || true
             fi
-          done <<< "$ALL_CHANGED"
+          done <<< "$CHANGED"
+          if ! git diff --cached --quiet 2>/dev/null; then
+            git commit --amend --no-edit 2>/dev/null || true
+          fi
+
+      - name: Test before push
+        if: steps.pr.outputs.has_suggestions == 'true'
+        id: pre_push_test
+        run: |
+          set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
+          if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
+            echo "no_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "no_changes=false" >> "$GITHUB_OUTPUT"
+          failed=0
+          CHANGED_SCRIPTS=$(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
+          for f in $CHANGED_SCRIPTS; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>&1; then
+              echo "::error::Syntax error in $f"
+              failed=1
+            fi
+            if command -v shellcheck >/dev/null 2>&1; then
+              shellcheck -S warning "$f" 2>&1 || failed=1
+            fi
+          done
+          CHANGED_YAML=$(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
+          for f in $CHANGED_YAML; do
+            [ -f "$f" ] || continue
+            if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>&1; then
+              echo "::error::YAML syntax error in $f"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push or revert
+        if: steps.pr.outputs.has_suggestions == 'true' && steps.pre_push_test.outputs.no_changes != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.pre_push_test.outputs.result }}" = "pass" ]; then
+            git push origin HEAD
+          else
+            git reset --hard "${{ steps.base.outputs.sha }}"
+            gh pr comment "${{ steps.pr.outputs.number }}" \
+              --body "🚫 **Auto-fix reverted**: pre-push tests failed (shellcheck/syntax). Changes were NOT pushed." || true
+          fi
 
       - name: Notify of auto-fix changes
         if: always() && steps.pr.outputs.number != ''
@@ -239,7 +353,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          BASE="${{ steps.base.outputs.sha }}"
+          CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || echo "")
           if [ -n "$CHANGED" ]; then
             PR_NUM="${{ steps.pr.outputs.number }}"
             MSG="🤖 CI Auto-Fixer modified PR #${PR_NUM}:
@@ -421,7 +536,7 @@ jobs:
             Consult .github/best_practices.md for known good patterns in this codebase.
 
             If you make fixes, commit with message prefix "Auto-fix: GPT-5.4 review —"
-            followed by a brief description. Then push: git push origin HEAD
+            followed by a brief description. Do NOT push — the pipeline will push after validation.
 
             If no findings are worth fixing (all already addressed, all low severity,
             or all false positives), do nothing — do NOT make changes just to make changes.
@@ -435,19 +550,74 @@ jobs:
         if: steps.pr.outputs.should_fix == 'true'
         run: |
           set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
           PR_FILES="${{ steps.pr.outputs.pr_files }}"
           if [ -z "$PR_FILES" ]; then
             echo "::warning::No PR file list, skipping scope guard"
             exit 0
           fi
-          ALL_CHANGED=$(git diff --name-only HEAD 2>/dev/null || true)
+          CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || true)
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             if ! echo "$PR_FILES" | grep -qxF "$file"; then
               echo "::warning::Reverting out-of-scope change: $file"
-              git checkout HEAD -- "$file" 2>/dev/null || true
+              git checkout "$BASE" -- "$file" 2>/dev/null || true
+              git add "$file" 2>/dev/null || true
             fi
-          done <<< "$ALL_CHANGED"
+          done <<< "$CHANGED"
+          if ! git diff --cached --quiet 2>/dev/null; then
+            git commit --amend --no-edit 2>/dev/null || true
+          fi
+
+      - name: Test before push
+        if: steps.pr.outputs.should_fix == 'true'
+        id: pre_push_test
+        run: |
+          set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
+          if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
+            echo "no_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "no_changes=false" >> "$GITHUB_OUTPUT"
+          failed=0
+          CHANGED_SCRIPTS=$(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
+          for f in $CHANGED_SCRIPTS; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>&1; then
+              echo "::error::Syntax error in $f"
+              failed=1
+            fi
+            if command -v shellcheck >/dev/null 2>&1; then
+              shellcheck -S warning "$f" 2>&1 || failed=1
+            fi
+          done
+          CHANGED_YAML=$(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
+          for f in $CHANGED_YAML; do
+            [ -f "$f" ] || continue
+            if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>&1; then
+              echo "::error::YAML syntax error in $f"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push or revert
+        if: steps.pr.outputs.should_fix == 'true' && steps.pre_push_test.outputs.no_changes != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.pre_push_test.outputs.result }}" = "pass" ]; then
+            git push origin HEAD
+          else
+            git reset --hard "${{ steps.base.outputs.sha }}"
+            gh pr comment "${{ steps.pr.outputs.number }}" \
+              --body "🚫 **Auto-fix reverted**: pre-push tests failed (shellcheck/syntax). Changes were NOT pushed." || true
+          fi
 
       - name: Post GPT-5.4 auto-fix result
         if: always() && steps.pr.outputs.should_fix == 'true'
@@ -576,6 +746,11 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         if: steps.pr.outputs.should_fix == 'true'
 
+      - name: Capture base SHA
+        if: steps.pr.outputs.should_fix == 'true'
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - uses: ./.github/actions/setup-claude-fix
         if: steps.pr.outputs.should_fix == 'true'
         with:
@@ -594,7 +769,7 @@ jobs:
             5. Do NOT refactor, rename, or reorganize anything.
             6. Make the MINIMUM change to make the failing check pass.
             7. Commit with exactly this message: "Auto-fix: resolve ${{ steps.pr.outputs.workflow }} failure"
-            8. Push the commit to the remote: git push origin HEAD
+            Do NOT push — the pipeline will push after validation.
 
             SCOPE GUARD: You may ONLY edit files from this PR's diff:
             ${{ steps.pr.outputs.pr_files }}
@@ -609,19 +784,74 @@ jobs:
         if: steps.pr.outputs.should_fix == 'true'
         run: |
           set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
           PR_FILES="${{ steps.pr.outputs.pr_files }}"
           if [ -z "$PR_FILES" ]; then
             echo "::warning::No PR file list, skipping scope guard"
             exit 0
           fi
-          ALL_CHANGED=$(git diff --name-only HEAD 2>/dev/null || true)
+          CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || true)
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             if ! echo "$PR_FILES" | grep -qxF "$file"; then
               echo "::warning::Reverting out-of-scope change: $file"
-              git checkout HEAD -- "$file" 2>/dev/null || true
+              git checkout "$BASE" -- "$file" 2>/dev/null || true
+              git add "$file" 2>/dev/null || true
             fi
-          done <<< "$ALL_CHANGED"
+          done <<< "$CHANGED"
+          if ! git diff --cached --quiet 2>/dev/null; then
+            git commit --amend --no-edit 2>/dev/null || true
+          fi
+
+      - name: Test before push
+        if: steps.pr.outputs.should_fix == 'true'
+        id: pre_push_test
+        run: |
+          set -euo pipefail
+          BASE="${{ steps.base.outputs.sha }}"
+          if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
+            echo "no_changes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "no_changes=false" >> "$GITHUB_OUTPUT"
+          failed=0
+          CHANGED_SCRIPTS=$(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
+          for f in $CHANGED_SCRIPTS; do
+            [ -f "$f" ] || continue
+            if ! bash -n "$f" 2>&1; then
+              echo "::error::Syntax error in $f"
+              failed=1
+            fi
+            if command -v shellcheck >/dev/null 2>&1; then
+              shellcheck -S warning "$f" 2>&1 || failed=1
+            fi
+          done
+          CHANGED_YAML=$(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
+          for f in $CHANGED_YAML; do
+            [ -f "$f" ] || continue
+            if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>&1; then
+              echo "::error::YAML syntax error in $f"
+              failed=1
+            fi
+          done
+          if [ "$failed" -eq 1 ]; then
+            echo "result=fail" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=pass" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push or revert
+        if: steps.pr.outputs.should_fix == 'true' && steps.pre_push_test.outputs.no_changes != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ steps.pre_push_test.outputs.result }}" = "pass" ]; then
+            git push origin HEAD
+          else
+            git reset --hard "${{ steps.base.outputs.sha }}"
+            gh pr comment "${{ steps.pr.outputs.number }}" \
+              --body "🚫 **Auto-fix reverted**: pre-push tests failed (shellcheck/syntax). Changes were NOT pushed." || true
+          fi
 
       - name: Notify of auto-fix changes
         if: always() && steps.pr.outputs.number != ''
@@ -630,7 +860,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          CHANGED=$(git diff --name-only HEAD~1 2>/dev/null || echo "")
+          BASE="${{ steps.base.outputs.sha }}"
+          CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || echo "")
           if [ -n "$CHANGED" ]; then
             PR_NUM="${{ steps.pr.outputs.number }}"
             MSG="🤖 CI Auto-Fixer modified PR #${PR_NUM}:
