@@ -48,7 +48,7 @@ jobs:
 
           TEXT="📦 *Merged to master*
           \`${SHORT}\` ${TITLE}
-          _by ${COMMIT_AUTHOR} — deploy in ~5min_"
+          _by ${COMMIT_AUTHOR} — deploy in ~2min_"
 
           if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
             curl -sf -X POST \
