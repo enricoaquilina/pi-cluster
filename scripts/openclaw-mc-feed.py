@@ -41,8 +41,10 @@ def main():
         print(f"Cache error: {e}", file=sys.stderr)
         return
 
+    nodes = data.get("nodes", data) if isinstance(data, dict) else data
+
     errors = 0
-    for n in data.get("nodes", []):
+    for n in nodes:
         if not n.get("reachable"):
             continue
 
