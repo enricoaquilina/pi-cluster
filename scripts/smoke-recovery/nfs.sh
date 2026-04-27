@@ -13,20 +13,23 @@ if [[ "$_nfs_server_fails" -ge 3 ]]; then
         send_alert "AUTO-RECOVERY: NFS server not exporting for 15+ min — re-exporting"
         exportfs -ra 2>/dev/null || true
         sleep 3
-        if showmount -e localhost 2>/dev/null | grep -q /mnt/data; then
+        if showmount -e localhost 2>/dev/null | awk '{print $1}' | grep -qx '/mnt/data'; then
             send_alert "AUTO-RECOVERY SUCCESS: NFS exports restored via exportfs -ra"
             echo "0" > "$FAIL_COUNT_DIR/nfs-server.count"
             echo "up" > "$STATE_DIR/nfs-server.status"
         else
             send_alert "AUTO-RECOVERY: exportfs -ra failed — restarting nfs-kernel-server"
-            sudo systemctl restart nfs-kernel-server 2>/dev/null || true
-            sleep 5
-            if showmount -e localhost 2>/dev/null | grep -q /mnt/data; then
-                send_alert "AUTO-RECOVERY SUCCESS: NFS server restored after full restart"
-                echo "0" > "$FAIL_COUNT_DIR/nfs-server.count"
-                echo "up" > "$STATE_DIR/nfs-server.status"
+            if ! sudo systemctl restart nfs-kernel-server 2>/dev/null; then
+                send_alert "AUTO-RECOVERY FAILED: unable to restart nfs-kernel-server"
             else
-                send_alert "AUTO-RECOVERY FAILED: NFS server still not exporting"
+                sleep 5
+                if showmount -e localhost 2>/dev/null | awk '{print $1}' | grep -qx '/mnt/data'; then
+                    send_alert "AUTO-RECOVERY SUCCESS: NFS server restored after full restart"
+                    echo "0" > "$FAIL_COUNT_DIR/nfs-server.count"
+                    echo "up" > "$STATE_DIR/nfs-server.status"
+                else
+                    send_alert "AUTO-RECOVERY FAILED: NFS server still not exporting"
+                fi
             fi
         fi
     fi
@@ -42,7 +45,14 @@ if [[ "$_nfs_mount_fails" -ge 3 ]]; then
             _nfs_ok=$(timed_ssh 5 "$_nfs_node" "mountpoint -q /mnt/external && timeout 3 stat -t /mnt/external >/dev/null 2>&1 && echo ok" 2>/dev/null)
             if [[ "$_nfs_ok" != "ok" ]]; then
                 send_alert "AUTO-RECOVERY: Remounting NFS on ${_nfs_node}"
-                timed_ssh 15 "$_nfs_node" "sudo umount -f -l /mnt/external 2>/dev/null; sudo mount /mnt/external" 2>/dev/null || true
+                if ! timed_ssh 15 "$_nfs_node" \
+                    "sudo umount -f -l /mnt/external 2>/dev/null && sudo mount /mnt/external" \
+                    2>/dev/null; then
+                    send_alert "AUTO-RECOVERY FAILED: remount command failed on ${_nfs_node}"
+                    _nfs_recovered=false
+                    continue
+                fi
+
                 sleep 3
                 _nfs_verify=$(timed_ssh 5 "$_nfs_node" "timeout 3 stat -t /mnt/external >/dev/null 2>&1 && echo ok" 2>/dev/null)
                 if [[ "$_nfs_verify" != "ok" ]]; then
