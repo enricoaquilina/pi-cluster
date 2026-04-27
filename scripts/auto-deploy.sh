@@ -10,10 +10,22 @@ LOG_TAG="auto-deploy"
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
 # shellcheck source=scripts/lib/telegram.sh
 source "$SCRIPT_DIR/lib/telegram.sh" 2>/dev/null || send_telegram() { :; }
+# shellcheck source=scripts/lib/deploy-rollback.sh
+source "$SCRIPT_DIR/lib/deploy-rollback.sh"
 
 log() { logger -t "$LOG_TAG" "$1"; }
 
 cd "$REPO_DIR" || exit 1
+
+# Prevent overlapping runs (2-min timer can overlap long deploys)
+exec 9> /tmp/auto-deploy.lock
+if ! flock -n 9; then
+    log "another deploy in progress; skipping"
+    exit 0
+fi
+
+# Heartbeat for staleness detection (runs even on no-op)
+echo "$(date +%s)" > /tmp/auto-deploy-heartbeat
 
 # Fetch latest from origin
 git fetch origin master --quiet 2>/dev/null || exit 0
@@ -137,7 +149,38 @@ if echo "$mc_result" | grep -q "NODES_REPAIRED"; then
     log "OpenClaw nodes re-paired on heavy"
 fi
 
-log "Deploy complete"
+# Post-deploy smoke check (critical services only, 90s timeout)
+log "Running post-deploy smoke check..."
+SMOKE_OUTPUT=$(timeout 90 bash "$SCRIPT_DIR/deploy-smoke.sh" 2>&1) || true
 
-send_telegram "🚀 *Auto-Deploy*
+if echo "$SMOKE_OUTPUT" | grep -q "DEPLOY_SMOKE_FAIL"; then
+    FAILED_SVCS=$(echo "$SMOKE_OUTPUT" | grep "DEPLOY_SMOKE_FAIL" | cut -d: -f2-)
+    log "ERROR: Post-deploy smoke FAILED:$FAILED_SVCS"
+
+    if deploy_can_rollback; then
+        deploy_rollback
+        RECHECK=$(timeout 90 bash "$SCRIPT_DIR/deploy-smoke.sh" 2>&1) || true
+        if echo "$RECHECK" | grep -q "DEPLOY_SMOKE_OK"; then
+            send_telegram "🔄 *Auto-Deploy ROLLED BACK*
+$COMMITS
+Failed:$FAILED_SVCS
+Rolled back to deploy/stable — services recovered"
+        else
+            send_telegram "🚨 *Auto-Deploy ROLLBACK FAILED*
+$COMMITS
+Failed:$FAILED_SVCS
+Manual intervention needed"
+        fi
+    else
+        send_telegram "🚨 *Auto-Deploy SMOKE FAIL (no rollback tag)*
+$COMMITS
+Failed:$FAILED_SVCS"
+    fi
+else
+    log "Post-deploy smoke passed"
+    deploy_mark_stable
+    send_telegram "🚀 *Auto-Deploy*
 $COMMITS"
+fi
+
+log "Deploy complete"
