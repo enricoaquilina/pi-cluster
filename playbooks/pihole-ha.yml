@@ -5,6 +5,7 @@
   vars_files:
     - ../vars/pihole.yml
     - ../secrets/pihole.yml
+    - ../secrets/monitoring.yml
 
   tasks:
     - name: Deploy keepalived configuration
