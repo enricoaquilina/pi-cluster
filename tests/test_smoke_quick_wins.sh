@@ -438,6 +438,28 @@ slave1 openclaw-node active"
         fail "F8: UP when reloading" "got: ${RESULTS[service-inventory]:-unset}"
 }
 
+# -- F9: OUTAGE REGRESSION — service-inventory must SSH to heavy, not check locally --
+run_f9() {
+    _reset
+    _SERVICE_INVENTORY_DATA=""
+
+    timed_ssh() { shift; local host="$1"; shift; echo "active"; }
+    systemctl() { echo "failed"; }
+
+    _fetch_service_inventory
+
+    local heavy_node_status
+    heavy_node_status=$(echo "$_SERVICE_INVENTORY_DATA" | grep "^heavy openclaw-node " | awk '{print $3}')
+
+    timed_ssh() { :; }
+    unset -f systemctl
+
+    [ "$heavy_node_status" = "active" ] && \
+        pass "F9: service-inventory gets heavy status via SSH" || \
+        fail "F9: service-inventory gets heavy status via SSH" \
+             "got: $heavy_node_status — locality bug: checking local systemctl"
+}
+
 # ═══════════ Check G: Version Consistency ═══════════
 
 run_g1() {
@@ -504,7 +526,7 @@ run_b1; run_b2; run_b3; run_b4
 run_c1; run_c2; run_c3
 run_d1; run_d2; run_d3; run_d4
 run_e1; run_e2; run_e3
-run_f1; run_f2; run_f3; run_f4; run_f5; run_f6; run_f7; run_f8
+run_f1; run_f2; run_f3; run_f4; run_f5; run_f6; run_f7; run_f8; run_f9
 run_g1; run_g2; run_g3; run_g4
 
 test_summary

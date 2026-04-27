@@ -24,6 +24,20 @@ REMOTE=$(git rev-parse origin/master)
 # Nothing to do if up to date
 [ "$LOCAL" = "$REMOTE" ] && exit 0
 
+# Detect and recover from dirty working tree
+if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+    dirty_files=$(git diff --name-only HEAD 2>/dev/null | head -5)
+    log "WARNING: dirty working tree, stashing: $dirty_files"
+    send_telegram "⚠️ *Auto-Deploy*: dirty tree detected, stashing
+\`$dirty_files\`"
+    if ! git stash --include-untracked 2>/dev/null; then
+        log "ERROR: git stash failed"
+        send_telegram "🚨 *Auto-Deploy BLOCKED*: cannot stash dirty tree
+\`$dirty_files\`"
+        exit 1
+    fi
+fi
+
 # Pull (fast-forward only — never create merge commits)
 if ! git pull --ff-only origin master 2>&1 | while read -r line; do log "$line"; done; then
     log "ERROR: pull failed (merge conflict?), skipping deploy"
