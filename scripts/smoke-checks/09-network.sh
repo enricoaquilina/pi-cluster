@@ -19,13 +19,31 @@ check_keepalived() {
     local s0_active s1_active
     s0_active=$(timed_ssh 5 slave0 "systemctl is-active keepalived" 2>/dev/null || echo "inactive")
     s1_active=$(timed_ssh 5 slave1 "systemctl is-active keepalived" 2>/dev/null || echo "inactive")
-    if [[ "$s0_active" == "active" && "$s1_active" == "active" ]]; then
-        check_service "keepalived" "up"
-    elif [[ "$s0_active" == "active" || "$s1_active" == "active" ]]; then
+
+    if [[ "$s0_active" != "active" && "$s1_active" != "active" ]]; then
+        check_service "keepalived" "down" "Both nodes keepalived down"
+        return
+    fi
+
+    if [[ "$s0_active" != "active" || "$s1_active" != "active" ]]; then
         local down_node="slave0"
         [[ "$s0_active" == "active" ]] && down_node="slave1"
         check_service "keepalived" "degraded" "$down_node keepalived not running"
+        return
+    fi
+
+    local s0_has_vip s1_has_vip
+    s0_has_vip=$(timed_ssh 5 slave0 "ip -4 addr show eth0 | grep -c 192.168.0.53" 2>/dev/null || echo "0")
+    s1_has_vip=$(timed_ssh 5 slave1 "ip -4 addr show eth0 | grep -c 192.168.0.53" 2>/dev/null || echo "0")
+
+    if [[ "$s0_has_vip" -gt 0 && "$s1_has_vip" -gt 0 ]]; then
+        check_service "keepalived" "down" "SPLIT-BRAIN: VIP on both nodes"
+        return
+    fi
+
+    if [[ "$s0_has_vip" -gt 0 || "$s1_has_vip" -gt 0 ]]; then
+        check_service "keepalived" "up"
     else
-        check_service "keepalived" "down" "Both nodes keepalived down"
+        check_service "keepalived" "degraded" "VIP 192.168.0.53 not found on either node"
     fi
 }

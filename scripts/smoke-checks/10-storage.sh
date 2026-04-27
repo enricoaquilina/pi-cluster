@@ -1,5 +1,25 @@
 #!/bin/bash
-# Checks: NFS workspace accessibility + NFS backup timer health
+# Checks: NFS mount health + workspace accessibility + backup timer health
+
+check_nfs_mount() {
+    if [ "$(hostname)" = "heavy" ]; then
+        if showmount -e localhost 2>/dev/null | grep -q /mnt/data; then
+            check_service "nfs-server" "up"
+        else
+            check_service "nfs-server" "down" "NFS not exporting /mnt/data"
+        fi
+        return
+    fi
+    if ! mountpoint -q /mnt/external 2>/dev/null; then
+        check_service "nfs-mount" "down" "not mounted on $(hostname)"
+        return
+    fi
+    if ! timeout 5 stat /mnt/external >/dev/null 2>&1; then
+        check_service "nfs-mount" "down" "stale mount on $(hostname)"
+        return
+    fi
+    check_service "nfs-mount" "up"
+}
 
 _NFS_OWNERSHIP_DATA=""
 
