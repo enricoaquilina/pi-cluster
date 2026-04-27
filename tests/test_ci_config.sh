@@ -151,11 +151,11 @@ else
   fail "pr-size-check.yml missing"
 fi
 
-# Test 18: enable-automerge.yml gates feat: PRs
-if grep -q "startsWith.*feat" .github/workflows/enable-automerge.yml; then
-  ok "enable-automerge.yml gates feat: PRs"
+# Test 18: enable-automerge.yml enables auto-merge for all PRs
+if ! grep -q "startsWith.*feat" .github/workflows/enable-automerge.yml; then
+  ok "enable-automerge.yml has no feat: exclusion (full auto-merge)"
 else
-  fail "enable-automerge.yml missing feat: gate"
+  fail "enable-automerge.yml still has feat: gate (should be removed)"
 fi
 
 # Test 19: pre-push hook has push policy
