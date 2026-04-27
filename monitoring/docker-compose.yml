@@ -23,7 +23,7 @@ services:
   grafana:
     image: grafana/grafana-oss:latest
     container_name: grafana
-    mem_limit: 512m
+    mem_limit: 768m
     restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
