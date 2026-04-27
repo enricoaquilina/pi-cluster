@@ -62,7 +62,7 @@
       ansible.builtin.cron:
         name: "heavy-watchdog"
         minute: "*/5"
-        job: "/home/enrico/homelab/scripts/heavy-watchdog.sh >> /var/log/openclaw-heavy-watchdog.log 2>&1"
+        job: "{{ repo_dir }}/scripts/heavy-watchdog.sh >> /var/log/openclaw-heavy-watchdog.log 2>&1"
         user: enrico
 
     - name: Remove old smoke-test cron entry

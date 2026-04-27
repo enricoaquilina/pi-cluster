@@ -12,7 +12,7 @@
     - name: Deploy cluster health check script
       ansible.builtin.copy:
         src: ../scripts/openclaw-health.sh
-        dest: /home/enrico/homelab/scripts/openclaw-health.sh
+        dest: "{{ repo_dir }}/scripts/openclaw-health.sh"
         mode: "0755"
         owner: enrico
         group: enrico
@@ -22,7 +22,7 @@
         name: "openclaw cluster health check"
         minute: "{{ openclaw_health_check_interval }}"
         user: enrico
-        job: "/home/enrico/homelab/scripts/openclaw-health.sh >> /var/log/openclaw-health.log 2>&1"
+        job: "{{ repo_dir }}/scripts/openclaw-health.sh >> /var/log/openclaw-health.log 2>&1"
         cron_file: openclaw-health
 
     - name: Deploy openclaw.json backup cron
@@ -79,13 +79,13 @@
         minute: "0"
         hour: "2"
         user: enrico
-        job: "/home/enrico/homelab/scripts/openclaw-version-check.sh --upgrade >> /var/log/openclaw-version.log 2>&1"
+        job: "{{ repo_dir }}/scripts/openclaw-version-check.sh --upgrade >> /var/log/openclaw-version.log 2>&1"
         cron_file: openclaw-version
 
     - name: Deploy heartbeat runner script
       ansible.builtin.copy:
         src: ../scripts/heartbeat-runner.py
-        dest: /home/enrico/homelab/scripts/heartbeat-runner.py
+        dest: "{{ repo_dir }}/scripts/heartbeat-runner.py"
         mode: "0755"
         owner: enrico
         group: enrico
@@ -125,7 +125,7 @@
         name: "auto-deploy"
         minute: "*/15"
         user: enrico
-        job: "/home/enrico/homelab/scripts/auto-deploy.sh"
+        job: "{{ repo_dir }}/scripts/auto-deploy.sh"
         cron_file: openclaw-auto-deploy
 
     - name: Deploy old backup cleanup cron
@@ -214,7 +214,7 @@
     - name: Deploy cluster watchdog script
       ansible.builtin.copy:
         src: ../scripts/openclaw-watchdog-cluster.sh
-        dest: /home/enrico/homelab/scripts/openclaw-watchdog-cluster.sh
+        dest: "{{ repo_dir }}/scripts/openclaw-watchdog-cluster.sh"
         mode: "0755"
         owner: enrico
         group: enrico
@@ -322,7 +322,7 @@
     - name: Deploy .env.cluster to scripts directory
       ansible.builtin.template:
         src: ../templates/env.cluster.j2
-        dest: /home/enrico/homelab/scripts/.env.cluster
+        dest: "{{ repo_dir }}/scripts/.env.cluster"
         mode: "0600"
         owner: enrico
       no_log: true
@@ -344,7 +344,7 @@
   vars_files:
     - ../secrets/monitoring.yml
   vars:
-    heavy_repo_dir: /home/enrico/pi-cluster
+    heavy_repo_dir: "{{ repo_dir }}"
   tasks:
     # ── SSH Watchdog ──────────────────────────────────────────────────────────
     - name: Deploy SSH watchdog script
