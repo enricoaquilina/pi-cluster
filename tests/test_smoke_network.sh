@@ -1,9 +1,9 @@
 #!/bin/bash
-# Tests for smoke-checks/09-network.sh (keepalived VIP + split-brain)
-# and smoke-checks/10-storage.sh (NFS mount health)
+# Tests for smoke-checks/09-network.sh, 10-storage.sh, 18-gravity-sync.sh
 #
 # H1-H4: Keepalived VIP ownership + split-brain detection
-# N1-N4: NFS mount/server health check
+# N1-N7: NFS mount/server health check (local + remote client)
+# G1-G6: Gravity-sync timer + service health
 
 set -uo pipefail
 
@@ -41,6 +41,7 @@ timed_ssh() {
 
 source "$REPO_DIR/scripts/smoke-checks/09-network.sh"
 source "$REPO_DIR/scripts/smoke-checks/10-storage.sh"
+source "$REPO_DIR/scripts/smoke-checks/18-gravity-sync.sh"
 
 _reset() {
     RESULTS=()
@@ -48,6 +49,7 @@ _reset() {
     ERRORS=()
     _TIMED_SSH_RESPONSES=()
     _NFS_OWNERSHIP_DATA=""
+    _GRAVITY_SYNC_DATA=""
 }
 
 # ═══════════ Check H: Keepalived VIP ═══════════
@@ -123,18 +125,27 @@ run_h4() {
 
 # ═══════════ Check N: NFS Mount Health ═══════════
 
+_NFS_CLIENT_CMD="mountpoint -q /mnt/external && timeout 3 stat -t /mnt/external >/dev/null 2>&1 && echo ok"
+
 run_n1() {
     _reset
-    # Override hostname to heavy — test server check
     hostname() { echo "heavy"; }
     showmount() { echo "/mnt/data 192.168.0.0/24"; }
     export -f hostname showmount
+    _TIMED_SSH_RESPONSES=(
+        ["master:${_NFS_CLIENT_CMD}"]="ok"
+        ["slave0:${_NFS_CLIENT_CMD}"]="ok"
+        ["slave1:${_NFS_CLIENT_CMD}"]="ok"
+    )
 
     check_nfs_mount
 
     [ "${RESULTS[nfs-server]}" = "up" ] && \
         pass "N1: nfs-server UP when exporting /mnt/data" || \
         fail "N1: nfs-server UP" "got: ${RESULTS[nfs-server]:-unset}"
+    [ "${RESULTS[nfs-mount]}" = "up" ] && \
+        pass "N1: nfs-mount UP when all clients healthy" || \
+        fail "N1: nfs-mount UP" "got: ${RESULTS[nfs-mount]:-unset}"
 
     unset -f hostname showmount
 }
@@ -189,7 +200,106 @@ run_n4() {
     unset -f hostname mountpoint
 }
 
+run_n5() {
+    _reset
+    hostname() { echo "heavy"; }
+    showmount() { echo "/mnt/data 192.168.0.0/24"; }
+    export -f hostname showmount
+    _TIMED_SSH_RESPONSES=(
+        ["master:${_NFS_CLIENT_CMD}"]="ok"
+        ["slave0:${_NFS_CLIENT_CMD}"]="ok"
+        ["slave1:${_NFS_CLIENT_CMD}"]=""
+    )
+
+    check_nfs_mount
+
+    [ "${RESULTS[nfs-mount]}" = "degraded" ] && \
+        pass "N5: nfs-mount DEGRADED when one client unhealthy" || \
+        fail "N5: nfs-mount DEGRADED" "got: ${RESULTS[nfs-mount]:-unset}"
+    [[ "${ERRORS[nfs-mount]:-}" == *"slave1"* ]] && \
+        pass "N5: error names unhealthy node" || \
+        fail "N5: error names slave1" "got: ${ERRORS[nfs-mount]:-unset}"
+
+    unset -f hostname showmount
+}
+
+run_n6() {
+    _reset
+    hostname() { echo "heavy"; }
+    showmount() { echo "/mnt/data 192.168.0.0/24"; }
+    export -f hostname showmount
+    _TIMED_SSH_RESPONSES=()
+
+    check_nfs_mount
+
+    [ "${RESULTS[nfs-mount]}" = "degraded" ] && \
+        pass "N6: nfs-mount DEGRADED when all clients unreachable" || \
+        fail "N6: nfs-mount DEGRADED" "got: ${RESULTS[nfs-mount]:-unset}"
+
+    unset -f hostname showmount
+}
+
+# ═══════════ Check G: Gravity Sync ═══════════
+
+run_g1() {
+    _reset
+    _GRAVITY_SYNC_DATA="active active 0 300"
+    check_gravity_sync
+    [ "${RESULTS[gravity-sync]}" = "up" ] && \
+        pass "G1: UP when both timers active, exit 0, age 300s" || \
+        fail "G1: UP" "got: ${RESULTS[gravity-sync]:-unset}"
+}
+
+run_g2() {
+    _reset
+    _GRAVITY_SYNC_DATA="inactive inactive 0 -1"
+    check_gravity_sync
+    [ "${RESULTS[gravity-sync]}" = "down" ] && \
+        pass "G2: DOWN when both timers inactive" || \
+        fail "G2: DOWN" "got: ${RESULTS[gravity-sync]:-unset}"
+}
+
+run_g3() {
+    _reset
+    _GRAVITY_SYNC_DATA="active inactive 0 300"
+    check_gravity_sync
+    [ "${RESULTS[gravity-sync]}" = "degraded" ] && \
+        pass "G3: DEGRADED when one timer down" || \
+        fail "G3: DEGRADED" "got: ${RESULTS[gravity-sync]:-unset}"
+    [[ "${ERRORS[gravity-sync]:-}" == *"slave1"* ]] && \
+        pass "G3: error names downed node" || \
+        fail "G3: error names slave1" "got: ${ERRORS[gravity-sync]:-unset}"
+}
+
+run_g4() {
+    _reset
+    _GRAVITY_SYNC_DATA="active active 1 300"
+    check_gravity_sync
+    [ "${RESULTS[gravity-sync]}" = "degraded" ] && \
+        pass "G4: DEGRADED when last run failed (exit 1)" || \
+        fail "G4: DEGRADED on failure" "got: ${RESULTS[gravity-sync]:-unset}"
+}
+
+run_g5() {
+    _reset
+    _GRAVITY_SYNC_DATA="active active 0 2400"
+    check_gravity_sync
+    [ "${RESULTS[gravity-sync]}" = "degraded" ] && \
+        pass "G5: DEGRADED when last run >1800s ago" || \
+        fail "G5: DEGRADED on stale" "got: ${RESULTS[gravity-sync]:-unset}"
+}
+
+run_g6() {
+    _reset
+    _GRAVITY_SYNC_DATA="active active unknown -1"
+    check_gravity_sync
+    [ "${RESULTS[gravity-sync]}" = "up" ] && \
+        pass "G6: UP when exit unknown and age unknown (never ran but timers active)" || \
+        fail "G6: UP" "got: ${RESULTS[gravity-sync]:-unset}"
+}
+
 run_h1; run_h2; run_h3; run_h4
-run_n1; run_n2; run_n3; run_n4
+run_n1; run_n2; run_n3; run_n4; run_n5; run_n6
+run_g1; run_g2; run_g3; run_g4; run_g5; run_g6
 
 test_summary
