@@ -188,7 +188,15 @@ else
   fail "claude-fix.yml missing 'Do NOT push' in prompts (found $no_push_count, expected 4)"
 fi
 
-# Test 22: No YAML lines > 200 chars (ansible-lint enforces this)
+# Test 22: claude-fix.yml uses test-and-push composite action
+tap_count=$(grep -c 'uses: ./.github/actions/test-and-push' .github/workflows/claude-fix.yml 2>/dev/null || echo "0")
+if [[ "$tap_count" -ge 4 ]] && [[ -f .github/actions/test-and-push/action.yml ]]; then
+  ok "claude-fix.yml uses test-and-push composite action in all 4 jobs"
+else
+  fail "claude-fix.yml missing test-and-push action calls (found $tap_count, expected 4)"
+fi
+
+# Test 23: No YAML lines > 200 chars (ansible-lint enforces this)
 long_lines=$(awk 'length > 200 {print FILENAME":"NR": "length" chars"}' .github/workflows/*.yml 2>/dev/null || true)
 if [[ -z "$long_lines" ]]; then
   ok "No workflow YAML lines exceed 200 chars"
