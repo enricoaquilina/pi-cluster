@@ -13,6 +13,7 @@ GATEWAY_CONTAINER="openclaw-openclaw-gateway-1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [ -f "$SCRIPT_DIR/.env.cluster" ] && source "$SCRIPT_DIR/.env.cluster"
+OPENCLAW_GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-}"
 
 # Update connection status — try gateway CLI first, fall back to healthcheck
 connected_raw=$(docker exec "$GATEWAY_CONTAINER" sh -c "OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN timeout 8 node dist/index.js nodes status 2>&1" | grep "paired.*connected" | grep -v "disconnected" | grep -oP '^\│\s*\K\S+' | tr -d '│ ' 2>/dev/null || echo "")
