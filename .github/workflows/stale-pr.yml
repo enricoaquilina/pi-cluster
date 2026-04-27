@@ -1,0 +1,49 @@
+---
+name: Stale PR Cleanup
+
+on:
+  schedule:
+    - cron: "0 8 * * *"  # daily at 08:00 UTC
+
+permissions:
+  pull-requests: write
+
+jobs:
+  stale:
+    name: Close stale PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label stale and close abandoned PRs
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          NOW=$(date +%s)
+
+          while IFS= read -r pr; do
+            [ -z "$pr" ] && continue
+            PR_NUM=$(echo "$pr" | jq -r '.number')
+            UPDATED=$(echo "$pr" | jq -r '.updatedAt')
+            TITLE=$(echo "$pr" | jq -r '.title')
+            LABELS=$(echo "$pr" | jq -r '[.labels[].name] | join(",")')
+
+            UPDATED_EPOCH=$(date -d "$UPDATED" +%s 2>/dev/null || echo "0")
+            AGE_DAYS=$(( (NOW - UPDATED_EPOCH) / 86400 ))
+
+            if [ "$AGE_DAYS" -ge 14 ]; then
+              echo "Closing PR #${PR_NUM} (${TITLE}) — stale for ${AGE_DAYS} days"
+              gh pr close "$PR_NUM" -R "$REPO" \
+                --comment "Closing: no activity for ${AGE_DAYS} days. Reopen if still needed." \
+                2>/dev/null || true
+            elif [ "$AGE_DAYS" -ge 7 ]; then
+              if ! echo "$LABELS" | grep -q "stale"; then
+                echo "Labeling PR #${PR_NUM} (${TITLE}) as stale — ${AGE_DAYS} days"
+                gh pr edit "$PR_NUM" -R "$REPO" --add-label "stale" 2>/dev/null || true
+                gh pr comment "$PR_NUM" -R "$REPO" \
+                  --body "This PR has had no activity for ${AGE_DAYS} days. It will be auto-closed after 14 days. Push a commit or comment to keep it alive." \
+                  2>/dev/null || true
+              fi
+            fi
+          done < <(gh pr list -R "$REPO" --state open \
+            --json number,updatedAt,title,labels -q '.[]')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
