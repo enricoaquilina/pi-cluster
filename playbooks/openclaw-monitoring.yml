@@ -113,20 +113,34 @@
         job: "/usr/local/bin/maxwell-heartbeat.sh"
         cron_file: openclaw-heartbeat
 
-    - name: Remove old manual auto-deploy cron entry
-      ansible.builtin.lineinfile:
-        path: /etc/cron.d/openclaw-auto-deploy
-        regexp: '^\*/5.*auto-deploy\.sh.*>>'
-        state: absent
-      become: true
-
-    - name: Deploy auto-deploy cron (pull + apply configs)
+    - name: Remove legacy auto-deploy cron entries
       ansible.builtin.cron:
         name: "auto-deploy"
-        minute: "*/15"
-        user: enrico
-        job: "{{ repo_dir }}/scripts/auto-deploy.sh"
+        state: absent
         cron_file: openclaw-auto-deploy
+      become: true
+
+    - name: Deploy auto-deploy systemd service
+      ansible.builtin.template:
+        src: ../templates/auto-deploy.service.j2
+        dest: /etc/systemd/system/auto-deploy.service
+        mode: "0644"
+      become: true
+
+    - name: Deploy auto-deploy systemd timer
+      ansible.builtin.template:
+        src: ../templates/auto-deploy.timer.j2
+        dest: /etc/systemd/system/auto-deploy.timer
+        mode: "0644"
+      become: true
+
+    - name: Enable auto-deploy timer
+      ansible.builtin.systemd:
+        name: auto-deploy.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+      become: true
 
     - name: Deploy old backup cleanup cron
       ansible.builtin.cron:

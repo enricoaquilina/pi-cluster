@@ -1,0 +1,10 @@
+[Unit]
+Description=Run auto-deploy every 2 minutes
+
+[Timer]
+OnBootSec=120
+OnUnitActiveSec=120
+AccuracySec=15
+
+[Install]
+WantedBy=timers.target

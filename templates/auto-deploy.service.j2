@@ -1,0 +1,10 @@
+[Unit]
+Description=Auto-deploy: pull and apply new commits
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=enrico
+ExecStart={{ repo_dir }}/scripts/auto-deploy.sh
+WorkingDirectory={{ repo_dir }}
