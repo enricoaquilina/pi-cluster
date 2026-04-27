@@ -23,10 +23,10 @@ vrrp_instance PIHOLE_VIP {
     priority {{ keepalived_priority }}
     advert_int 1
 
-    unicast_src_ip {{ ansible_host }}
+    unicast_src_ip {{ keepalived_unicast_ip }}
     unicast_peer {
 {% for host in groups['pihole'] | difference([inventory_hostname]) %}
-        {{ hostvars[host].ansible_host }}
+        {{ hostvars[host].keepalived_unicast_ip }}
 {% endfor %}
     }
 
