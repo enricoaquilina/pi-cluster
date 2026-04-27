@@ -86,7 +86,12 @@ _fetch_systemd_layer_data() {
         local output
         local find_cmd="find ~/.config/systemd/user/ -maxdepth 1 -type f -regextype posix-extended -iregex '.*(${LAYER_FORBIDDEN_PATTERNS}).*' ! -iregex '.*(${LAYER_ALLOWED_USER}).*' ! -name '*.disabled' -printf '%f\n' 2>/dev/null"
         if [ "$host" = "heavy" ]; then
-            output=$(eval "$find_cmd")
+            output=$(timed_ssh 5 "$host" "$find_cmd" 2>/dev/null)
+            local rc=$?
+            if [ "$rc" -eq 124 ] || [ "$rc" -eq 255 ]; then
+                result+="${host} ssh_unreachable -"$'\n'
+                continue
+            fi
         else
             output=$(timed_ssh 5 "$host" "$find_cmd" 2>/dev/null)
             local rc=$?
@@ -167,8 +172,12 @@ _fetch_service_inventory() {
         for svc in $expected; do
             local status
             if [ "$host" = "heavy" ]; then
-                status=$(systemctl is-active "$svc" 2>/dev/null) || true
-                [ -z "$status" ] && status="unknown"
+                status=$(timed_ssh 5 "$host" "systemctl is-active $svc 2>/dev/null" 2>/dev/null)
+                local rc=$?
+                if [ "$rc" -eq 124 ] || [ "$rc" -eq 255 ]; then
+                    result+="${host} ${svc} ssh_failed"$'\n'
+                    continue
+                fi
             else
                 status=$(timed_ssh 5 "$host" "systemctl is-active $svc 2>/dev/null" 2>/dev/null)
                 local rc=$?

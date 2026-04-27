@@ -33,7 +33,7 @@ _node_ssh_host() {
         control) echo "master" ;;
         build)   echo "slave0" ;;
         light)   echo "slave1" ;;
-        heavy)   echo "" ;;
+        heavy)   echo "heavy" ;;
     esac
 }
 

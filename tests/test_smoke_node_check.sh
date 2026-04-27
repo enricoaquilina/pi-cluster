@@ -9,6 +9,7 @@
 #   T3: Router API disconnected → DOWN
 #   T4: Router API unreachable → DOWN
 #   T5: SSH timeout (unknown service) → trusts Router API (UP)
+#   H6: OUTAGE REGRESSION — heavy service status must come from SSH, not local systemctl
 
 set -uo pipefail
 
@@ -173,10 +174,45 @@ heavy unknown"
     fi
 }
 
+# -- H6: OUTAGE REGRESSION — heavy must use SSH, not local systemctl --
+# Clears _OPENCLAW_SERVICE_STATUS to force _verify_node_services() to run.
+# Mocks timed_ssh→"failed", systemctl→"active". With the locality bug, heavy
+# uses local systemctl ("active") instead of SSH ("failed") → falsely UP.
+run_h6() {
+    _reset
+    _OPENCLAW_NODE_STATUS="control true
+build true
+light true
+heavy true"
+    _OPENCLAW_SERVICE_STATUS=""
+
+    timed_ssh() { shift; shift; echo "failed"; }
+    systemctl() { echo "active"; }
+
+    _verify_node_services
+
+    local heavy_svc
+    heavy_svc=$(echo "$_OPENCLAW_SERVICE_STATUS" | grep "^heavy " | awk '{print $2}')
+
+    timed_ssh() { :; }
+    unset -f systemctl
+
+    [ "$heavy_svc" = "failed" ] && \
+        pass "H6: heavy service status from SSH (not local systemctl)" || \
+        fail "H6: heavy service status from SSH (not local systemctl)" \
+             "got: $heavy_svc — locality bug: checking smoke-test host, not heavy"
+
+    check_openclaw_heavy
+    [ "${RESULTS[openclaw-heavy]}" = "degraded" ] && \
+        pass "H6: heavy DEGRADED when all services dead (outage scenario)" || \
+        fail "H6: heavy DEGRADED when all services dead" "got: ${RESULTS[openclaw-heavy]:-unset}"
+}
+
 run_t1
 run_t2
 run_t3
 run_t4
 run_t5
+run_h6
 
 test_summary

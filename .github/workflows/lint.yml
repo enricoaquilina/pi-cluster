@@ -200,14 +200,17 @@ jobs:
       - name: Test harness self-test
         run: bash tests/test_harness.sh
 
-      - name: Smoke check unit tests (40 tests)
+      - name: Smoke check unit tests (41 tests)
         run: bash tests/test_smoke_quick_wins.sh
 
       - name: Cluster watchdog tests (12 tests)
         run: bash tests/test_cluster_watchdog.sh
 
-      - name: Node check tests (10 tests)
+      - name: Node check tests (12 tests)
         run: bash tests/test_smoke_node_check.sh
+
+      - name: Auto-deploy resilience tests (7 tests)
+        run: bash tests/test_auto_deploy.sh
 
   gitleaks:
     name: Credential Scan
