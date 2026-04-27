@@ -1,0 +1,78 @@
+---
+name: CI Budget Alert
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  actions: read
+
+jobs:
+  check-usage:
+    name: Check CI minutes usage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Estimate monthly usage
+        id: usage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          PERIOD_START=$(date -u +"%Y-%m-01T00:00:00Z")
+          BUDGET=2000
+          WARN_PCT=80
+
+          TOTAL_SECONDS=0
+          PAGE=1
+          while true; do
+            DATA=$(gh api "repos/${REPO}/actions/runs?created=>=${PERIOD_START}&per_page=100&page=${PAGE}&status=completed" \
+              --jq '.workflow_runs[] | "\(.run_started_at) \(.updated_at)"' 2>/dev/null || echo "")
+            [ -z "$DATA" ] && break
+
+            while IFS=' ' read -r START END; do
+              [ -z "$START" ] || [ -z "$END" ] && continue
+              START_EPOCH=$(date -d "$START" +%s 2>/dev/null || echo "0")
+              END_EPOCH=$(date -d "$END" +%s 2>/dev/null || echo "0")
+              DUR=$((END_EPOCH - START_EPOCH))
+              [ "$DUR" -gt 0 ] && TOTAL_SECONDS=$((TOTAL_SECONDS + DUR))
+            done <<< "$DATA"
+
+            COUNT=$(echo "$DATA" | grep -c . || echo "0")
+            [ "$COUNT" -lt 100 ] && break
+            PAGE=$((PAGE + 1))
+          done
+
+          TOTAL_MINUTES=$((TOTAL_SECONDS / 60))
+          USAGE_PCT=$((TOTAL_MINUTES * 100 / BUDGET))
+
+          echo "total_minutes=${TOTAL_MINUTES}" >> "$GITHUB_OUTPUT"
+          echo "usage_pct=${USAGE_PCT}" >> "$GITHUB_OUTPUT"
+          echo "budget=${BUDGET}" >> "$GITHUB_OUTPUT"
+
+          if [ "$USAGE_PCT" -ge "$WARN_PCT" ]; then
+            echo "alert=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "alert=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "::notice::CI usage: ${TOTAL_MINUTES}/${BUDGET} minutes (${USAGE_PCT}%)"
+
+      - name: Send Telegram alert
+        if: steps.usage.outputs.alert == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          MINS="${{ steps.usage.outputs.total_minutes }}"
+          BUDGET="${{ steps.usage.outputs.budget }}"
+          PCT="${{ steps.usage.outputs.usage_pct }}"
+          MSG="⚠️ *CI Budget Alert*"$'\n'"Usage: ${MINS}/${BUDGET} min (${PCT}%)"$'\n'"Repo: \`${{ github.repository }}\`"
+          curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MSG}" \
+            -d "parse_mode=Markdown" > /dev/null 2>&1 \
+            || echo "::warning::Telegram notification failed"
