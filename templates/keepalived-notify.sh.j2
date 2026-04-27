@@ -6,3 +6,17 @@ STATE=$1
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 echo "[$TIMESTAMP] Keepalived state changed to: $STATE" >> /var/log/keepalived-pihole.log
 logger -t keepalived "Pi-hole VIP state: $STATE"
+
+# Alert via Telegram (backgrounded — notify scripts must return quickly)
+source {{ repo_dir | default('/home/enrico/pi-cluster') }}/scripts/.env.cluster 2>/dev/null || true
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+    curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+        -d "chat_id=${TELEGRAM_CHAT_ID}" \
+        --data-urlencode "text=🔄 Keepalived: $(hostname) → $STATE" \
+        -d "parse_mode=Markdown" > /dev/null 2>&1 &
+fi
+
+# On becoming MASTER: trigger immediate gravity-sync for config consistency
+if [ "$STATE" = "MASTER" ]; then
+    gravity-sync pull >/dev/null 2>&1 &
+fi

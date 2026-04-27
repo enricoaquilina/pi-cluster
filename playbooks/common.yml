@@ -24,3 +24,17 @@
         name: systemd-timesyncd
         enabled: true
         state: started
+
+    - name: Populate SSH known_hosts for cluster nodes
+      known_hosts:
+        name: "{{ item }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -t ed25519 ' + item + ' 2>/dev/null') }}"
+        state: present
+      loop:
+        - 192.168.0.3
+        - 192.168.0.4
+        - 192.168.0.5
+        - 192.168.0.22
+      delegate_to: localhost
+      run_once: true
+      become: false
