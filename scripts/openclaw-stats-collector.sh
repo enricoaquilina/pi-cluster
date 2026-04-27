@@ -50,8 +50,10 @@ for n in nodes:
     n['connected'] = any(name.startswith(c) or c.startswith(name[:4]) for c in connected)
 
 out = {'nodes': nodes} if isinstance(data, dict) else nodes
-with open('$CACHE_FILE', 'w') as f:
+tmp = '$CACHE_FILE' + '.tmp'
+with open(tmp, 'w') as f:
     json.dump(out, f)
+os.replace(tmp, '$CACHE_FILE')
 " 2>/dev/null
 fi
 

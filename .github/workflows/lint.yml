@@ -212,6 +212,9 @@ jobs:
       - name: Auto-deploy resilience tests (7 tests)
         run: bash tests/test_auto_deploy.sh
 
+      - name: Heartbeat canary tests (7 tests)
+        run: bash tests/test_smoke_heartbeat_canary.sh
+
   gitleaks:
     name: Credential Scan
     runs-on: ubuntu-latest

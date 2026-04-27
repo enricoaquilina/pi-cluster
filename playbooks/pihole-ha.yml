@@ -54,6 +54,11 @@
         group: root
         mode: "0644"
 
+    - name: Ensure pihole.toml is readable for gravity-sync
+      file:
+        path: /etc/pihole/pihole.toml
+        mode: "0644"
+
     - name: Ensure Gravity Sync timer is enabled
       systemd:
         name: gravity-sync.timer
