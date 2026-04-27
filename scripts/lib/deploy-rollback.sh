@@ -59,5 +59,13 @@ deploy_rollback() {
         return 1
     }
 
+    log "Verifying heavy containers post-rollback..."
+    local unhealthy
+    unhealthy=$(ssh -o ConnectTimeout=5 -o BatchMode=yes heavy \
+        "docker ps --filter health=unhealthy --format '{{.Names}}'" 2>/dev/null || echo "")
+    if [ -n "$unhealthy" ]; then
+        log "WARNING: unhealthy containers on heavy after rollback: $unhealthy"
+    fi
+
     return 0
 }
