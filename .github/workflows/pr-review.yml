@@ -4,11 +4,6 @@ name: AI PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -20,8 +15,47 @@ permissions:
   issues: write
 
 jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**/*.py'
+              - '**/*.sh'
+              - '**/*.yml'
+              - '**/*.yaml'
+              - '**/*.j2'
+              - '**/*.json'
+              - '**/*.toml'
+              - '**/*.cfg'
+              - '**/*.ini'
+              - '**/*.conf'
+              - '**/*.html'
+              - '**/*.js'
+              - '**/*.css'
+              - 'Dockerfile*'
+              - 'docker-compose*'
+              - 'Makefile'
+              - 'playbooks/**'
+              - 'templates/**'
+              - 'scripts/**'
+              - 'vars/**'
+              - 'inventory/**'
+              - 'files/**'
+              - 'hooks/**'
+              - 'systemd/**'
+
   review:
     name: AI Code Review
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: qodo-ai/pr-agent@v0.32
@@ -29,3 +63,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENROUTER__KEY: ${{ secrets.OPENROUTER_API_KEY }}
           github_action_config.auto_improve: "true"
+
+  review-gate:
+    name: Review Gate
+    if: always()
+    needs: [review]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate review results
+        run: |
+          if [[ "${{ needs.review.result }}" == "failure" ]]; then
+            echo "::error::AI review failed"
+            exit 1
+          fi
+          if [[ "${{ needs.review.result }}" == "cancelled" ]]; then
+            echo "::error::AI review was cancelled"
+            exit 1
+          fi
+          echo "Review passed (or skipped for docs-only PR)"
