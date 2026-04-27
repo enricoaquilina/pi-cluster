@@ -1,0 +1,9 @@
+[Unit]
+Description=Deploy staleness check — alert if master auto-deploy is stale
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=enrico
+ExecStart={{ repo_dir }}/scripts/deploy-staleness-check.sh

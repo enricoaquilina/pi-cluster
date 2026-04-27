@@ -1,0 +1,10 @@
+[Unit]
+Description=Run deploy staleness check every 5 minutes
+
+[Timer]
+OnBootSec=300
+OnUnitActiveSec=300
+AccuracySec=30
+
+[Install]
+WantedBy=timers.target
