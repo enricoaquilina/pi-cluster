@@ -6,9 +6,13 @@ LOG="/tmp/nfs-backup-$(date +%Y%m%d).log"
 # Pre-rsync: dump databases so rsync picks up fresh copies
 mkdir -p /mnt/data/mongodb-dump-latest
 rm -rf /mnt/data/mongodb-dump-latest/*
-docker exec mongodb mongodump --quiet --gzip \
-    --excludeCollection=fs.chunks \
-    --out /data/dump-staging/ 2>/dev/null \
+# Dump instagram_db excluding GridFS binary chunks (9G+), then remaining DBs
+docker exec mongodb sh -c '
+    mongodump --quiet --gzip --db=instagram_db --excludeCollection=fs.chunks --out /data/dump-staging/ &&
+    for db in $(mongosh --quiet --eval "db.adminCommand({listDatabases:1}).databases.map(d=>d.name).filter(n=>n!==\"instagram_db\"&&n!==\"local\"&&n!==\"config\").join(\"\n\")"); do
+        mongodump --quiet --gzip --db="$db" --out /data/dump-staging/
+    done
+' 2>/dev/null \
     && docker cp mongodb:/data/dump-staging/. /mnt/data/mongodb-dump-latest/ 2>/dev/null \
     && docker exec mongodb rm -rf /data/dump-staging/ 2>/dev/null \
     || logger -t nfs-backup "WARN: mongodump failed"
