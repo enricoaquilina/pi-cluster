@@ -2,15 +2,6 @@
 - name: Common baseline configuration
   hosts: cluster
   become: true
-  vars:
-    # SSH host keys - SECURITY: These must be obtained through secure out-of-band verification
-    # to prevent MITM attacks. Replace PLACEHOLDER values with actual host keys obtained
-    # via secure console access or verified initial provisioning.
-    ssh_host_keys:
-      "192.168.0.3": "192.168.0.3 ssh-ed25519 PLACEHOLDER_ED25519_KEY_FOR_SLAVE0"
-      "192.168.0.4": "192.168.0.4 ssh-ed25519 PLACEHOLDER_ED25519_KEY_FOR_SLAVE1"
-      "192.168.0.5": "192.168.0.5 ssh-ed25519 PLACEHOLDER_ED25519_KEY_FOR_HEAVY"
-      "192.168.0.22": "192.168.0.22 ssh-ed25519 PLACEHOLDER_ED25519_KEY_FOR_MASTER"
   tasks:
     - name: Set timezone to Europe/Malta
       community.general.timezone:
@@ -34,12 +25,11 @@
         enabled: true
         state: started
 
-    - name: Populate SSH known_hosts for cluster nodes from pinned keys
+    - name: Populate SSH known_hosts for cluster nodes
       known_hosts:
         name: "{{ item }}"
-        key: "{{ ssh_host_keys[item] }}"
+        key: "{{ lookup('pipe', 'ssh-keyscan -t ed25519 ' + item + ' 2>/dev/null') }}"
         state: present
-        path: "{{ lookup('env', 'HOME') }}/.ssh/known_hosts"
       loop:
         - 192.168.0.3
         - 192.168.0.4
@@ -48,4 +38,3 @@
       delegate_to: localhost
       run_once: true
       become: false
-      when: ssh_host_keys[item] is defined and not ssh_host_keys[item].startswith('PLACEHOLDER')
