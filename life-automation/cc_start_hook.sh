@@ -35,7 +35,7 @@ if [ -d "$LIFE_DIR/.git" ]; then
 fi
 
 # --- Primary context assembly (tiered, budget-capped) ---
-CONTEXT_BUDGET="$HOME/pi-cluster/life-automation/context_budget.py"
+CONTEXT_BUDGET="$HOME/work/pi-cluster/pi-cluster/life-automation/context_budget.py"
 if [ -f "$CONTEXT_BUDGET" ]; then
     /usr/bin/python3 "$CONTEXT_BUDGET" --cwd "$PWD" --budget 6000 2>/dev/null
     exit 0
