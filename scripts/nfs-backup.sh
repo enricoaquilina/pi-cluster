@@ -6,7 +6,9 @@ LOG="/tmp/nfs-backup-$(date +%Y%m%d).log"
 # Pre-rsync: dump databases so rsync picks up fresh copies
 mkdir -p /mnt/data/mongodb-dump-latest
 rm -rf /mnt/data/mongodb-dump-latest/*
-docker exec mongodb mongodump --quiet --gzip --out /data/dump-staging/ 2>/dev/null \
+docker exec mongodb mongodump --quiet --gzip \
+    --excludeCollection=fs.chunks \
+    --out /data/dump-staging/ 2>/dev/null \
     && docker cp mongodb:/data/dump-staging/. /mnt/data/mongodb-dump-latest/ 2>/dev/null \
     && docker exec mongodb rm -rf /data/dump-staging/ 2>/dev/null \
     || logger -t nfs-backup "WARN: mongodump failed"
