@@ -10,6 +10,7 @@ on:
     branches: [master, main]
     paths:
       - 'mission-control/**'
+  merge_group:
 
 jobs:
   test:

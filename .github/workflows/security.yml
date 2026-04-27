@@ -14,9 +14,10 @@ on:
       - '.github/**'
       - '**/*.py'
       - '**/*.sh'
+  merge_group:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.sha }}
   cancel-in-progress: true
 
 permissions:
