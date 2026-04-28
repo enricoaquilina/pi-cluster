@@ -196,7 +196,35 @@ else
   fail "claude-fix.yml missing test-and-push action calls (found $tap_count, expected 4)"
 fi
 
-# Test 23: No YAML lines > 200 chars (ansible-lint enforces this)
+# Test 23: codex-review.yml uses per-commit SHA tracking
+if grep -q 'reviewed-sha' .github/workflows/codex-review.yml; then
+  ok "codex-review.yml tracks reviewed SHA (per-commit cap)"
+else
+  fail "codex-review.yml missing reviewed-sha marker (stuck at 1-per-PR cap)"
+fi
+
+# Test 24: codex-review.yml scopes diff to PR files
+if grep -q 'gh pr diff' .github/workflows/codex-review.yml && grep -q 'name-only' .github/workflows/codex-review.yml; then
+  ok "codex-review.yml scopes diff to PR files only"
+else
+  fail "codex-review.yml reviews full branch diff (out-of-scope files)"
+fi
+
+# Test 25: codex-review.yml posts verdict on PR head SHA
+if grep -q 'headRefOid' .github/workflows/codex-review.yml; then
+  ok "codex-review.yml resolves PR head SHA for verdict"
+else
+  fail "codex-review.yml uses event SHA for verdict (may be merge commit)"
+fi
+
+# Test 26: test-and-push scope guard fails closed
+if grep -q 'reverting ALL changes.*fail-closed' .github/actions/test-and-push/action.yml; then
+  ok "test-and-push scope guard fails closed on empty pr_files"
+else
+  fail "test-and-push scope guard fails open when pr_files empty"
+fi
+
+# Test 27: No YAML lines > 200 chars (ansible-lint enforces this)
 long_lines=$(awk 'length > 200 {print FILENAME":"NR": "length" chars"}' .github/workflows/*.yml 2>/dev/null || true)
 if [[ -z "$long_lines" ]]; then
   ok "No workflow YAML lines exceed 200 chars"

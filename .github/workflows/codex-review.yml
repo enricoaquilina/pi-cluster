@@ -42,19 +42,37 @@ jobs:
           fi
           REVIEW_COUNT=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" --json comments \
             --jq '[.comments[] | select(.author.login == "github-actions") | select(.body | contains("GPT-5.4 Strict Review"))] | length' 2>/dev/null || echo "0")
-          if [ "$REVIEW_COUNT" -ge 1 ]; then
+          if [ "$REVIEW_COUNT" -ge 3 ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "PR already has $REVIEW_COUNT GPT-5.4 reviews, skipping to prevent loop"
+            echo "Hard cap: $REVIEW_COUNT GPT-5.4 reviews on PR #$PR_NUM"
             exit 0
           fi
-          BRANCH=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" --json headRefName -q '.headRefName')
-          BASE=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" --json baseRefName -q '.baseRefName')
-          TITLE=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" --json title -q '.title')
-          BODY_TEXT=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" --json body -q '.body' | head -100)
+          CURRENT_SHA="${{ github.event.workflow_run.head_sha }}"
+          JQ_SHA='[.comments[]
+            | select(.author.login == "github-actions")
+            | select(.body | contains("GPT-5.4 Strict Review"))
+            | .body | capture("<!-- reviewed-sha: (?<sha>[a-f0-9]+) -->")
+            | .sha] | last // empty'
+          LAST_REVIEWED_SHA=$(gh pr view "$PR_NUM" \
+            -R "${{ github.repository }}" --json comments \
+            --jq "$JQ_SHA" 2>/dev/null || echo "")
+          if [ "$LAST_REVIEWED_SHA" = "$CURRENT_SHA" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "SHA $CURRENT_SHA already reviewed, skipping"
+            exit 0
+          fi
+          PR_INFO=$(gh pr view "$PR_NUM" -R "${{ github.repository }}" \
+            --json headRefName,baseRefName,title,body,headRefOid 2>/dev/null || echo "{}")
+          BRANCH=$(echo "$PR_INFO" | jq -r '.headRefName // empty')
+          BASE=$(echo "$PR_INFO" | jq -r '.baseRefName // empty')
+          TITLE=$(echo "$PR_INFO" | jq -r '.title // empty')
+          BODY_TEXT=$(echo "$PR_INFO" | jq -r '.body // empty' | head -100)
+          HEAD_SHA=$(echo "$PR_INFO" | jq -r '.headRefOid // empty')
           echo "pr_num=$PR_NUM" >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "base=$BASE" >> "$GITHUB_OUTPUT"
           echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          echo "head_sha=${HEAD_SHA:-${{ github.event.workflow_run.head_sha }}}" >> "$GITHUB_OUTPUT"
           echo "skip=false" >> "$GITHUB_OUTPUT"
           echo "$TITLE" > /tmp/pr-title.txt
           echo "$BODY_TEXT" > /tmp/pr-body.txt
@@ -73,11 +91,21 @@ jobs:
         if: steps.pr.outputs.skip != 'true'
         id: diff
         run: |
-          DIFF=$(git diff "origin/${{ steps.pr.outputs.base }}..HEAD" -- \
-            ':!*.lock' ':!*.json' ':!*.svg' ':!*.png' | head -8000)
-          echo "$DIFF" > /tmp/pr-diff.txt
+          gh pr diff "${{ steps.pr.outputs.pr_num }}" \
+            -R "${{ github.repository }}" --name-only 2>/dev/null \
+            > /tmp/pr-files.txt || true
+          if [ ! -s /tmp/pr-files.txt ]; then
+            echo "::warning::Could not get PR file list, falling back to full branch diff"
+            echo "." > /tmp/pr-files.txt
+          fi
+          mapfile -t PR_FILES < /tmp/pr-files.txt
+          git diff "origin/${{ steps.pr.outputs.base }}..HEAD" -- \
+            "${PR_FILES[@]}" ':!*.lock' ':!*.json' ':!*.svg' ':!*.png' \
+            | head -8000 > /tmp/pr-diff.txt
           DIFF_LINES=$(wc -l < /tmp/pr-diff.txt)
           echo "lines=$DIFF_LINES" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build review payload
         if: steps.pr.outputs.skip != 'true' && steps.diff.outputs.lines != '0'
@@ -169,15 +197,19 @@ jobs:
       - name: Post review comment
         if: steps.pr.outputs.skip != 'true' && steps.review.outputs.has_review == 'true'
         run: |
-          BODY="## GPT-5.4 Strict Review
-
-          $(cat /tmp/review-result.md)
-
-          ---
-          _Auto-generated via OpenRouter GPT-5.4 — strict focus on security, correctness, reliability_"
-
+          {
+            echo "## GPT-5.4 Strict Review"
+            echo ""
+            cat /tmp/review-result.md
+            echo ""
+            echo "---"
+            echo "_Auto-generated via OpenRouter GPT-5.4_"
+            printf '<!-- reviewed-sha: %s -->\n' \
+              "${{ steps.pr.outputs.head_sha }}"
+          } > /tmp/review-comment.md
           gh pr comment "${{ steps.pr.outputs.pr_num }}" \
-            -R "${{ github.repository }}" --body "$BODY"
+            -R "${{ github.repository }}" \
+            --body-file /tmp/review-comment.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -196,7 +228,7 @@ jobs:
         run: |
           CRITICAL="${{ steps.verdict.outputs.critical_count }}"
           CRITICAL="${CRITICAL:-0}"
-          SHA="${{ github.event.workflow_run.head_sha }}"
+          SHA="${{ steps.pr.outputs.head_sha }}"
           if [ "$CRITICAL" -gt 0 ]; then
             STATE="failure"
             DESC="$CRITICAL critical findings (>=9/10) — must be addressed before merge"
@@ -214,7 +246,7 @@ jobs:
       - name: Post skip verdict
         if: steps.pr.outputs.skip == 'true' || steps.review.outputs.has_review != 'true'
         run: |
-          SHA="${{ github.event.workflow_run.head_sha }}"
+          SHA="${{ steps.pr.outputs.head_sha || github.event.workflow_run.head_sha }}"
           [ -z "$SHA" ] && exit 0
           gh api "repos/${{ github.repository }}/statuses/$SHA" \
             -f state="success" \
