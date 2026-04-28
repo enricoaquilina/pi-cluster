@@ -1,0 +1,104 @@
+---
+name: 'Test and Push'
+description: 'Scope guard, test changed files, push or revert auto-fix changes'
+
+inputs:
+  base_sha:
+    description: 'SHA before Claude made changes'
+    required: true
+  pr_number:
+    description: 'PR number for revert comments'
+    required: true
+  pr_files:
+    description: 'Newline-separated list of in-scope files (empty = skip scope guard)'
+    required: false
+    default: ''
+  github_token:
+    description: 'GitHub token for gh CLI commands'
+    required: true
+
+outputs:
+  no_changes:
+    description: 'true if no commits were made'
+    value: ${{ steps.test.outputs.no_changes }}
+  test_result:
+    description: 'pass or fail'
+    value: ${{ steps.test.outputs.result }}
+  pushed:
+    description: 'true if changes were pushed'
+    value: ${{ steps.push.outputs.pushed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Revert out-of-scope changes
+      if: inputs.pr_files != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        BASE="${{ inputs.base_sha }}"
+        PR_FILES="${{ inputs.pr_files }}"
+        CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || true)
+        while IFS= read -r file; do
+          [ -z "$file" ] && continue
+          if ! echo "$PR_FILES" | grep -qxF "$file"; then
+            echo "::warning::Reverting out-of-scope change: $file"
+            git checkout "$BASE" -- "$file" 2>/dev/null || true
+            git add "$file" 2>/dev/null || true
+          fi
+        done <<< "$CHANGED"
+        if ! git diff --cached --quiet 2>/dev/null; then
+          git commit --amend --no-edit 2>/dev/null || true
+        fi
+
+    - name: Test before push
+      id: test
+      shell: bash
+      run: |
+        set -euo pipefail
+        BASE="${{ inputs.base_sha }}"
+        if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
+          echo "no_changes=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        echo "no_changes=false" >> "$GITHUB_OUTPUT"
+        failed=0
+        while IFS= read -r f; do
+          [ -z "$f" ] || [ ! -f "$f" ] && continue
+          if ! bash -n "$f" 2>&1; then
+            echo "::error::Syntax error in $f"
+            failed=1
+          fi
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -S warning "$f" 2>&1 || failed=1
+          fi
+        done < <(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
+        while IFS= read -r f; do
+          [ -z "$f" ] || [ ! -f "$f" ] && continue
+          if ! python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' "$f" 2>&1; then
+            echo "::error::YAML syntax error in $f"
+            failed=1
+          fi
+        done < <(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
+        if [ "$failed" -eq 1 ]; then
+          echo "result=fail" >> "$GITHUB_OUTPUT"
+        else
+          echo "result=pass" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Push or revert
+      id: push
+      if: steps.test.outputs.no_changes != 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+      run: |
+        if [ "${{ steps.test.outputs.result }}" = "pass" ]; then
+          git push origin HEAD
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+        else
+          git reset --hard "${{ inputs.base_sha }}"
+          gh pr comment "${{ inputs.pr_number }}" \
+            --body "🚫 **Auto-fix reverted**: pre-push tests failed (shellcheck/syntax). Changes were NOT pushed." || true
+          echo "pushed=false" >> "$GITHUB_OUTPUT"
+        fi
