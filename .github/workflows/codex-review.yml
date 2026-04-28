@@ -217,7 +217,8 @@ jobs:
         if: steps.pr.outputs.skip != 'true' && steps.review.outputs.has_review == 'true'
         id: verdict
         run: |
-          CRITICAL=$(grep -cE '^\#\#\# \[(9|10)/10\]' /tmp/review-result.md 2>/dev/null || echo "0")
+          CRITICAL=$(grep -cE '^\#\#\# \[(9|10)/10\]' /tmp/review-result.md 2>/dev/null | tail -1 || echo "0")
+          CRITICAL="${CRITICAL:-0}"
           echo "critical_count=$CRITICAL" >> "$GITHUB_OUTPUT"
           if [ "$CRITICAL" -gt 0 ]; then
             echo "::warning::GPT-5.4 found $CRITICAL critical findings (>=9/10)"
