@@ -481,8 +481,11 @@ jobs:
             } > /tmp/gpt-fix-comment.md
             gh pr comment "$PR_NUM" --body-file /tmp/gpt-fix-comment.md || true
           else
-            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed.
-          <!-- fixed-sha: $CURRENT_SHA -->" || true
+            {
+              printf '🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed.\n'
+              printf '<!-- fixed-sha: %s -->\n' "$CURRENT_SHA"
+            } > /tmp/gpt-fix-comment.md
+            gh pr comment "$PR_NUM" --body-file /tmp/gpt-fix-comment.md || true
           fi
 
       - name: Telegram notification

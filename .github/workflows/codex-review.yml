@@ -91,15 +91,17 @@ jobs:
         if: steps.pr.outputs.skip != 'true'
         id: diff
         run: |
-          PR_FILE_LIST=$(gh pr diff "${{ steps.pr.outputs.pr_num }}" \
-            -R "${{ github.repository }}" --name-only 2>/dev/null || echo "")
-          if [ -z "$PR_FILE_LIST" ]; then
+          gh pr diff "${{ steps.pr.outputs.pr_num }}" \
+            -R "${{ github.repository }}" --name-only 2>/dev/null \
+            > /tmp/pr-files.txt || true
+          if [ ! -s /tmp/pr-files.txt ]; then
             echo "::warning::Could not get PR file list, falling back to full branch diff"
-            PR_FILE_LIST="."
+            echo "." > /tmp/pr-files.txt
           fi
-          DIFF=$(git diff "origin/${{ steps.pr.outputs.base }}..HEAD" -- \
-            $PR_FILE_LIST ':!*.lock' ':!*.json' ':!*.svg' ':!*.png' | head -8000)
-          echo "$DIFF" > /tmp/pr-diff.txt
+          mapfile -t PR_FILES < /tmp/pr-files.txt
+          git diff "origin/${{ steps.pr.outputs.base }}..HEAD" -- \
+            "${PR_FILES[@]}" ':!*.lock' ':!*.json' ':!*.svg' ':!*.png' \
+            | head -8000 > /tmp/pr-diff.txt
           DIFF_LINES=$(wc -l < /tmp/pr-diff.txt)
           echo "lines=$DIFF_LINES" >> "$GITHUB_OUTPUT"
         env:
@@ -195,16 +197,19 @@ jobs:
       - name: Post review comment
         if: steps.pr.outputs.skip != 'true' && steps.review.outputs.has_review == 'true'
         run: |
-          BODY="## GPT-5.4 Strict Review
-
-          $(cat /tmp/review-result.md)
-
-          ---
-          _Auto-generated via OpenRouter GPT-5.4 — strict focus on security, correctness, reliability_
-          <!-- reviewed-sha: ${{ steps.pr.outputs.head_sha }} -->"
-
+          {
+            echo "## GPT-5.4 Strict Review"
+            echo ""
+            cat /tmp/review-result.md
+            echo ""
+            echo "---"
+            echo "_Auto-generated via OpenRouter GPT-5.4_"
+            printf '<!-- reviewed-sha: %s -->\n' \
+              "${{ steps.pr.outputs.head_sha }}"
+          } > /tmp/review-comment.md
           gh pr comment "${{ steps.pr.outputs.pr_num }}" \
-            -R "${{ github.repository }}" --body "$BODY"
+            -R "${{ github.repository }}" \
+            --body-file /tmp/review-comment.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
