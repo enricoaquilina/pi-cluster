@@ -7,7 +7,7 @@
 #   bash scripts/openclaw-version-check.sh          # Check only
 #   bash scripts/openclaw-version-check.sh --upgrade # Check and upgrade if safe
 #
-# Designed to run as a weekly cron job on master. Upgrades all 4 nodes.
+# Designed to run as a daily cron job on master. Upgrades all 4 nodes.
 
 set -uo pipefail
 
