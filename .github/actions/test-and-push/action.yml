@@ -63,9 +63,8 @@ runs:
         fi
         echo "no_changes=false" >> "$GITHUB_OUTPUT"
         failed=0
-        CHANGED_SCRIPTS=$(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
-        for f in $CHANGED_SCRIPTS; do
-          [ -f "$f" ] || continue
+        while IFS= read -r f; do
+          [ -z "$f" ] || [ ! -f "$f" ] && continue
           if ! bash -n "$f" 2>&1; then
             echo "::error::Syntax error in $f"
             failed=1
@@ -73,15 +72,14 @@ runs:
           if command -v shellcheck >/dev/null 2>&1; then
             shellcheck -S warning "$f" 2>&1 || failed=1
           fi
-        done
-        CHANGED_YAML=$(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
-        for f in $CHANGED_YAML; do
-          [ -f "$f" ] || continue
-          if ! python3 -c "import yaml; yaml.safe_load(open('$f'))" 2>&1; then
+        done < <(git diff --name-only "$BASE..HEAD" | grep '\.sh$' || true)
+        while IFS= read -r f; do
+          [ -z "$f" ] || [ ! -f "$f" ] && continue
+          if ! python3 -c 'import sys,yaml; yaml.safe_load(open(sys.argv[1]))' "$f" 2>&1; then
             echo "::error::YAML syntax error in $f"
             failed=1
           fi
-        done
+        done < <(git diff --name-only "$BASE..HEAD" | grep '\.yml$' || true)
         if [ "$failed" -eq 1 ]; then
           echo "result=fail" >> "$GITHUB_OUTPUT"
         else
