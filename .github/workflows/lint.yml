@@ -222,6 +222,9 @@ jobs:
       - name: Network + NFS smoke tests (22 tests)
         run: bash tests/test_smoke_network.sh
 
+      - name: Keepalived recovery tests (12 assertions)
+        run: bash tests/test_smoke_keepalived_recovery.sh
+
   gitleaks:
     name: Credential Scan
     runs-on: ubuntu-latest
