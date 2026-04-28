@@ -337,11 +337,24 @@ jobs:
             echo "$EOF_FILES"
           } >> "$GITHUB_OUTPUT"
 
-          # Loop prevention: max 1 GPT-5.4 auto-fix run per PR (one-shot)
+          # Loop prevention: per-commit cap + hard cap at 3
           FIX_COUNT=$(gh pr view "$PR_NUMBER" -R "$REPO" \
             --json comments --jq '[.comments[] | select(.author.login == "github-actions") | .body | select(contains("GPT-5.4 auto-fix"))] | length' 2>/dev/null || echo "0")
-          if [ "$FIX_COUNT" -ge 1 ]; then
-            echo "::warning::Already $FIX_COUNT GPT-5.4 auto-fix runs on PR #$PR_NUMBER — skipping"
+          if [ "$FIX_COUNT" -ge 3 ]; then
+            echo "::warning::Hard cap: $FIX_COUNT GPT-5.4 auto-fix runs on PR #$PR_NUMBER"
+            echo "should_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          CURRENT_SHA=$(gh pr view "$PR_NUMBER" -R "$REPO" --json headRefOid -q '.headRefOid' 2>/dev/null || echo "")
+          JQ_FIXED='[.comments[]
+            | select(.author.login == "github-actions")
+            | select(.body | contains("GPT-5.4 auto-fix"))
+            | .body | capture("<!-- fixed-sha: (?<sha>[a-f0-9]+) -->")
+            | .sha] | last // empty'
+          LAST_FIXED_SHA=$(gh pr view "$PR_NUMBER" -R "$REPO" \
+            --json comments --jq "$JQ_FIXED" 2>/dev/null || echo "")
+          if [ -n "$LAST_FIXED_SHA" ] && [ "$LAST_FIXED_SHA" = "$CURRENT_SHA" ]; then
+            echo "::warning::SHA $CURRENT_SHA already auto-fixed — skipping"
             echo "should_fix=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -457,16 +470,19 @@ jobs:
           set -euo pipefail
           PR_NUM="${{ steps.pr.outputs.number }}"
           CHANGED=$(git diff --name-only "${{ steps.base.outputs.sha }}..HEAD" 2>/dev/null || echo "")
+          CURRENT_SHA=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
           if [ -n "$CHANGED" ]; then
             {
               printf '🤖 **GPT-5.4 auto-fix modified files:**\n'
               while IFS= read -r file; do
                 printf -- '- `%s`\n' "$file"
               done <<< "$CHANGED"
+              printf '\n<!-- fixed-sha: %s -->\n' "$CURRENT_SHA"
             } > /tmp/gpt-fix-comment.md
             gh pr comment "$PR_NUM" --body-file /tmp/gpt-fix-comment.md || true
           else
-            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed." || true
+            gh pr comment "$PR_NUM" --body "🤖 **GPT-5.4 auto-fix:** findings reviewed, no changes needed.
+          <!-- fixed-sha: $CURRENT_SHA -->" || true
           fi
 
       - name: Telegram notification

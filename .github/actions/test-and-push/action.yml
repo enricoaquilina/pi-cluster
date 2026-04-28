@@ -32,12 +32,19 @@ runs:
   using: 'composite'
   steps:
     - name: Revert out-of-scope changes
-      if: inputs.pr_files != ''
       shell: bash
       run: |
         set -euo pipefail
         BASE="${{ inputs.base_sha }}"
+        if [ "$(git rev-parse HEAD)" = "$BASE" ]; then
+          exit 0
+        fi
         PR_FILES="${{ inputs.pr_files }}"
+        if [ -z "$PR_FILES" ]; then
+          echo "::warning::No PR file list available — reverting ALL changes (fail-closed)"
+          git reset --hard "$BASE"
+          exit 0
+        fi
         CHANGED=$(git diff --name-only "$BASE..HEAD" 2>/dev/null || true)
         while IFS= read -r file; do
           [ -z "$file" ] && continue
