@@ -73,6 +73,16 @@
         job: "curl -sf {{ cluster_api_url }}/budget/digest >> /var/log/openclaw-budget.log 2>&1"
         cron_file: openclaw-budget
 
+    - name: Remove legacy openclaw-daily-update cron (master-only updater caused version drift)
+      ansible.builtin.cron:
+        name: "Daily OpenClaw update at 4:00 AM"
+        state: absent
+
+    - name: Remove legacy openclaw-daily-update script
+      ansible.builtin.file:
+        path: /home/enrico/.local/bin/openclaw-daily-update.sh
+        state: absent
+
     - name: Deploy openclaw version check cron (nightly)
       ansible.builtin.cron:
         name: "openclaw version check"

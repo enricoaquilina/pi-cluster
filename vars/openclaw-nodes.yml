@@ -1,8 +1,8 @@
 # OpenClaw distributed agent cluster variables
 
-# OpenClaw version pin (upgraded 2026-04-26, all 4 nodes at 2026.4.24)
+# OpenClaw version pin (upgraded 2026-04-28, all 4 nodes at 2026.4.26)
 # Note: CLI binary still broken (use node dist/index.js), Python on control needs bash -c wrapper
-openclaw_version: "2026.4.24"
+openclaw_version: "2026.4.26"
 
 # Gateway configuration (gateway runs on heavy since Phase 9)
 # Per-node host overrides in inventory/hosts.yml
