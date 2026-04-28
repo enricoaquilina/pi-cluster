@@ -1,4 +1,5 @@
 ---
+# Weekly CI budget usage estimation and Telegram alert
 name: CI Budget Alert
 
 on:
@@ -29,7 +30,10 @@ jobs:
           PAGE=1
           while true; do
             DATA=$(gh api "repos/${REPO}/actions/runs?created=>=${PERIOD_START}&per_page=100&page=${PAGE}&status=completed" \
-              --jq '.workflow_runs[] | "\(.run_started_at) \(.updated_at)"' 2>/dev/null || echo "")
+              --jq '.workflow_runs[] | "\(.run_started_at) \(.updated_at)"' 2>&1) || {
+              echo "::error::GitHub API call failed (page $PAGE): $DATA"
+              exit 1
+            }
             [ -z "$DATA" ] && break
 
             while IFS=' ' read -r START END; do
@@ -71,8 +75,8 @@ jobs:
           BUDGET="${{ steps.usage.outputs.budget }}"
           PCT="${{ steps.usage.outputs.usage_pct }}"
           MSG="⚠️ *CI Budget Alert*"$'\n'"Usage: ${MINS}/${BUDGET} min (${PCT}%)"$'\n'"Repo: \`${{ github.repository }}\`"
-          curl -sf -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+          curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
             --data-urlencode "text=${MSG}" \
-            -d "parse_mode=Markdown" > /dev/null 2>&1 \
-            || echo "::warning::Telegram notification failed"
+            --data-urlencode "parse_mode=Markdown" \
+            > /dev/null
