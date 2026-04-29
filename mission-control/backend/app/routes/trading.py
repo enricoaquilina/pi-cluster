@@ -159,6 +159,16 @@ def scalper_positions():
     return positions if positions else []
 
 
+@router.get("/api/trading/copybot/live")
+def copybot_live():
+    """Live bot state from dashboard_state.json (written by bot every 30s)."""
+    state = _read_json_cached("dashboard_state.json")
+    if state is None:
+        return {"available": False}
+    state["available"] = True
+    return state
+
+
 @router.get("/api/trading/backtest")
 def trading_backtest():
     report = _read_json_cached("backtest_report.json", subdir="backtest")

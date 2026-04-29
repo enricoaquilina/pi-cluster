@@ -24,6 +24,7 @@ export const API = {
   copybotPositions: () => fetchApi('/api/trading/copybot/positions'),
   copybotTrades: (limit = 50, offset = 0) => fetchApi(`/api/trading/copybot/trades?limit=${limit}&offset=${offset}`),
   copybotTraders: () => fetchApi('/api/trading/copybot/traders'),
+  copybotLive: () => fetchApi('/api/trading/copybot/live'),
   spreadbotSummary: () => fetchApi('/api/trading/spreadbot/summary'),
   spreadbotPairs: (state = '', limit = 50, offset = 0) => fetchApi(`/api/trading/spreadbot/pairs?state=${state}&limit=${limit}&offset=${offset}`),
   scalperSummary: () => fetchApi('/api/trading/scalper/summary'),
