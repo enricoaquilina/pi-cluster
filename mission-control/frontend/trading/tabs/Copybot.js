@@ -18,14 +18,14 @@ export function Copybot() {
 
   const load = async () => {
     try {
-      const [s, p, tr, td, lv] = await Promise.all([
+      const [s, p, tr, td] = await Promise.all([
         API.copybotSummary(),
         API.copybotPositions(),
         API.copybotTraders(),
         API.copybotTrades(TRADE_LIMIT, tradeOffset),
-        API.copybotLive(),
       ]);
-      setSummary(s); setPositions(p); setTraders(tr); setTrades(td); setLive(lv);
+      setSummary(s); setPositions(p); setTraders(tr); setTrades(td);
+      try { setLive(await API.copybotLive()); } catch (_) {}
     } catch (e) { console.error('Copybot load error:', e); }
   };
 
