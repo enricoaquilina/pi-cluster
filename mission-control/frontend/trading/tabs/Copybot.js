@@ -11,19 +11,21 @@ export function Copybot() {
   const [positions, setPositions] = useState(null);
   const [traders, setTraders] = useState(null);
   const [trades, setTrades] = useState(null);
+  const [live, setLive] = useState(null);
   const [tradeOffset, setTradeOffset] = useState(0);
   const [filterTrader, setFilterTrader] = useState('');
   const TRADE_LIMIT = 30;
 
   const load = async () => {
     try {
-      const [s, p, tr, td] = await Promise.all([
+      const [s, p, tr, td, lv] = await Promise.all([
         API.copybotSummary(),
         API.copybotPositions(),
         API.copybotTraders(),
         API.copybotTrades(TRADE_LIMIT, tradeOffset),
+        API.copybotLive(),
       ]);
-      setSummary(s); setPositions(p); setTraders(tr); setTrades(td);
+      setSummary(s); setPositions(p); setTraders(tr); setTrades(td); setLive(lv);
     } catch (e) { console.error('Copybot load error:', e); }
   };
 
@@ -81,6 +83,47 @@ export function Copybot() {
       <${MetricCard} label="Win Rate" value=${formatPct(summary.win_rate)} sub=${`${summary.wins}W / ${summary.losses}L of ${summary.resolved_trades} resolved`} />
       <${MetricCard} label="Order Size" value=${`$${summary.order_size_usd.toFixed(2)}`} sub="per trade (drawdown adjusted)" />
     </div>
+
+    ${live?.available && html`
+      <div class="metric-grid" style="margin-top: 0.5rem;">
+        <${MetricCard} label="Bot Uptime" value=${live.uptime_seconds > 3600 ? Math.floor(live.uptime_seconds/3600) + 'h' : Math.floor(live.uptime_seconds/60) + 'm'} sub=${`Updated: ${live.updated_at?.slice(11,19) || '?'}`} />
+        <${MetricCard} label="Chain Monitor" value=${live.chain_monitor?.active ? 'ACTIVE' : 'OFF'} colorClass=${live.chain_monitor?.active ? 'text-green' : 'text-red'} sub=${live.chain_monitor?.active ? `${live.chain_monitor.uptime_pct}% uptime · ${live.chain_monitor.signals_today} signals today` : 'Not running'} />
+        <${MetricCard} label="Today" value=${`${live.executed_today}/${live.rejected_today}`} sub=${`Executed/Rejected · ${live.wins_today}W ${live.losses_today}L`} />
+        <${MetricCard} label="Balance" value=${formatUsd(live.balance)} sub=${`Portfolio: ${formatUsd(live.portfolio_value)}`} />
+      </div>
+    `}
+
+    ${live?.available && live.gates && html`
+      <div class="section-title">Gate Rejections</div>
+      <div class="gate-stats" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem;">
+        ${Object.entries(live.gates.rejected_by_gate || {}).sort((a,b) => b[1]-a[1]).map(([gate, count]) =>
+          html`<span class="badge" style="background:var(--surface);padding:0.25rem 0.5rem;border-radius:4px;font-size:0.85rem;">${gate}: <strong>${count}</strong></span>`
+        )}
+        ${Object.keys(live.gates.rejected_by_gate || {}).length === 0 && html`<span class="text-muted">No rejections today</span>`}
+      </div>
+    `}
+
+    ${live?.available && live.market_types && html`
+      <div class="section-title">Market Types</div>
+      <div style="overflow-x:auto;margin-bottom:1rem;">
+        <table class="data-table">
+          <thead><tr><th>Type</th><th class="num">Open</th><th class="num">Resolved</th><th class="num">W/L</th><th class="num">Win Rate</th><th class="num">Realized</th><th class="num">Unrealized</th></tr></thead>
+          <tbody>
+            ${Object.entries(live.market_types).map(([type, s]) => html`
+              <tr>
+                <td>${type}</td>
+                <td class="num">${s.open}</td>
+                <td class="num">${s.resolved}</td>
+                <td class="num"><span class="text-green">${s.wins}</span>/<span class="text-red">${s.losses}</span></td>
+                <td class="num">${s.win_rate != null ? formatPct(s.win_rate * 100) : '-'}</td>
+                <td class="num"><span class=${pnlClass(s.realized_pnl)}>${formatUsd(s.realized_pnl)}</span></td>
+                <td class="num"><span class=${pnlClass(s.unrealized_pnl)}>${formatUsd(s.unrealized_pnl)}</span></td>
+              </tr>
+            `)}
+          </tbody>
+        </table>
+      </div>
+    `}
 
     <div class="section-title">Trader Performance</div>
     <${SortableTable} columns=${traderColumns} data=${traders} emptyText="No trader data" />
