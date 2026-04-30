@@ -88,7 +88,11 @@ def _copybot_summary():
 
     live = _helpers._read_json_cached("dashboard_state.json") or {}
     live_unrealized = live.get("unrealized_pnl")
-    if isinstance(live_unrealized, (int, float)) and math.isfinite(live_unrealized):
+    if (
+        isinstance(live_unrealized, (int, float))
+        and not isinstance(live_unrealized, bool)
+        and math.isfinite(live_unrealized)
+    ):
         stats["unrealized_pnl"] = round(live_unrealized, 2)
         stats["total_pnl"] = round(stats["realized_pnl"] + live_unrealized, 2)
 
@@ -268,6 +272,16 @@ class TestPnlOscillation:
         _write_fixture("positions.json", positions)
         _write_fixture("paper_trades.json", [])
         _write_fixture("dashboard_state.json", {"unrealized_pnl": float("inf")})
+
+        stats = _copybot_summary()
+        assert stats["unrealized_pnl"] == 5.0
+
+    def test_ignores_bool_unrealized(self):
+        positions = [_pos(0.50, 0.55, 100)]
+        _write_fixture("control.json", MINIMAL_CONTROL)
+        _write_fixture("positions.json", positions)
+        _write_fixture("paper_trades.json", [])
+        _write_fixture("dashboard_state.json", {"unrealized_pnl": True})
 
         stats = _copybot_summary()
         assert stats["unrealized_pnl"] == 5.0
