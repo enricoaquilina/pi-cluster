@@ -67,10 +67,11 @@ def copybot_summary():
     trades = _read_json_cached("paper_trades.json")
     stats = _compute_copybot_stats(control, positions, trades)
 
-    live = _read_json_cached("dashboard_state.json")
-    if live and "unrealized_pnl" in live:
-        stats["unrealized_pnl"] = live["unrealized_pnl"]
-        stats["total_pnl"] = round(stats["realized_pnl"] + live["unrealized_pnl"], 2)
+    live = _read_json_cached("dashboard_state.json") or {}
+    live_unrealized = live.get("unrealized_pnl")
+    if isinstance(live_unrealized, (int, float)) and live_unrealized == live_unrealized:
+        stats["unrealized_pnl"] = round(live_unrealized, 2)
+        stats["total_pnl"] = round(stats["realized_pnl"] + live_unrealized, 2)
 
     return stats
 

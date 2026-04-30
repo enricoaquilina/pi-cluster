@@ -85,10 +85,11 @@ def _copybot_summary():
     trades = _helpers._read_json_cached("paper_trades.json")
     stats = _helpers._compute_copybot_stats(control, positions, trades)
 
-    live = _helpers._read_json_cached("dashboard_state.json")
-    if live and "unrealized_pnl" in live:
-        stats["unrealized_pnl"] = live["unrealized_pnl"]
-        stats["total_pnl"] = round(stats["realized_pnl"] + live["unrealized_pnl"], 2)
+    live = _helpers._read_json_cached("dashboard_state.json") or {}
+    live_unrealized = live.get("unrealized_pnl")
+    if isinstance(live_unrealized, (int, float)) and live_unrealized == live_unrealized:
+        stats["unrealized_pnl"] = round(live_unrealized, 2)
+        stats["total_pnl"] = round(stats["realized_pnl"] + live_unrealized, 2)
 
     return stats
 
@@ -229,6 +230,36 @@ class TestPnlOscillation:
             results.add(stats["unrealized_pnl"])
 
         assert results == {8.05}, f"PnL oscillated across calls: {results}"
+
+    def test_ignores_nan_unrealized(self):
+        positions = [_pos(0.50, 0.55, 100)]
+        _write_fixture("control.json", MINIMAL_CONTROL)
+        _write_fixture("positions.json", positions)
+        _write_fixture("paper_trades.json", [])
+        _write_fixture("dashboard_state.json", {"unrealized_pnl": float("nan")})
+
+        stats = _copybot_summary()
+        assert stats["unrealized_pnl"] == 5.0  # falls back to positions.json calc
+
+    def test_ignores_string_unrealized(self):
+        positions = [_pos(0.50, 0.55, 100)]
+        _write_fixture("control.json", MINIMAL_CONTROL)
+        _write_fixture("positions.json", positions)
+        _write_fixture("paper_trades.json", [])
+        _write_fixture("dashboard_state.json", {"unrealized_pnl": "bad"})
+
+        stats = _copybot_summary()
+        assert stats["unrealized_pnl"] == 5.0
+
+    def test_ignores_null_unrealized(self):
+        positions = [_pos(0.50, 0.55, 100)]
+        _write_fixture("control.json", MINIMAL_CONTROL)
+        _write_fixture("positions.json", positions)
+        _write_fixture("paper_trades.json", [])
+        _write_fixture("dashboard_state.json", {"unrealized_pnl": None})
+
+        stats = _copybot_summary()
+        assert stats["unrealized_pnl"] == 5.0
 
     def test_original_behavior_shows_stale_value(self):
         """Verify the unfixed behavior returns the stale positions.json value,
