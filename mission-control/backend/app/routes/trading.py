@@ -65,7 +65,14 @@ def copybot_summary():
     control = _read_json_cached("control.json")
     positions = _read_json_cached("positions.json")
     trades = _read_json_cached("paper_trades.json")
-    return _compute_copybot_stats(control, positions, trades)
+    stats = _compute_copybot_stats(control, positions, trades)
+
+    live = _read_json_cached("dashboard_state.json")
+    if live and "unrealized_pnl" in live:
+        stats["unrealized_pnl"] = live["unrealized_pnl"]
+        stats["total_pnl"] = round(stats["realized_pnl"] + live["unrealized_pnl"], 2)
+
+    return stats
 
 
 @router.get("/api/trading/copybot/positions")
