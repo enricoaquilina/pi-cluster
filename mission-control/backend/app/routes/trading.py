@@ -1,5 +1,6 @@
 """Trading dashboard endpoints."""
 
+import math
 from typing import Optional
 
 from fastapi import APIRouter, Query
@@ -69,7 +70,7 @@ def copybot_summary():
 
     live = _read_json_cached("dashboard_state.json") or {}
     live_unrealized = live.get("unrealized_pnl")
-    if isinstance(live_unrealized, (int, float)) and live_unrealized == live_unrealized:
+    if isinstance(live_unrealized, (int, float)) and math.isfinite(live_unrealized):
         stats["unrealized_pnl"] = round(live_unrealized, 2)
         stats["total_pnl"] = round(stats["realized_pnl"] + live_unrealized, 2)
 
